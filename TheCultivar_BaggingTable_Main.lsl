@@ -47,7 +47,6 @@ integer DCHAN_STRAIN  = -66002;
 integer DCHAN_SIZE    = -66003;
 integer DCHAN_CONFIRM = -66004;
 
-integer g_listenPing;
 integer g_listenRegister;
 integer g_listenMain;
 integer g_listenStrain;
@@ -365,9 +364,9 @@ default
 {
     state_entry()
     {
-        // Listen on ping channel for any touch
-        g_listenPing = llListen(TC_OBJECT_PING_CHAN, "", NULL_KEY, "");
-        // Listen on channel 0 for HUD registration
+        // Listen on channel 0 for HUD registration (TC_REGISTER response)
+        // The table pings on TC_OBJECT_PING_CHAN when touched (via pingHUD),
+        // it does not listen on that channel — no g_listenPing needed here.
         g_listenRegister = llListen(0, "", NULL_KEY, "");
         updateHoverText();
     }

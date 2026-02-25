@@ -1,5 +1,14 @@
 // ================================================================
 // THE CULTIVAR — Plant Grow Script
+// Version: 1.0  *** DEPRECATED — use TheCultivar_Plant_Grow_v1.1.lsl ***
+//
+// v1.1 adds grow-light bonus support (GROW_LIGHT_CHAN listener,
+// g_lightBonusApplied flag, once-per-stage time reduction).
+// This v1.0 file is kept for reference only. Do NOT use in production.
+// ================================================================
+//
+// ================================================================
+// THE CULTIVAR — Plant Grow Script
 // Version: 1.0
 // Handles: Growth timer, stage progression, strain data,
 //          yield and quality calculation, visual stage updates

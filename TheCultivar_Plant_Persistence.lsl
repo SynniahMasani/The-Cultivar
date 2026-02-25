@@ -189,10 +189,12 @@ default
         // Grow script wants to save current state
         if (cmd == "SAVE_STATE")
         {
-            // Grow script will follow this with the state data on PCHAN_GROW
-            // It sends SAVE_STATE as a trigger, then immediately sends a STATUS message
-            // We request the status to get fresh data to save
+            // Ask grow script for its current state, then switch to 'saving' state
+            // to intercept the STATUS response and persist it.
+            // Without the state transition the STATUS reply arrives in 'default'
+            // which has no STATUS handler — nothing would ever get saved.
             llMessageLinked(LINK_SET, PCHAN_GROW, "REQUEST_STATUS", NULL_KEY);
+            state saving;
         }
 
         // Grow script sends current status — we save it

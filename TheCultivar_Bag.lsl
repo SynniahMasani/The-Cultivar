@@ -237,6 +237,9 @@ default
         g_ownerName = llKey2Name(g_ownerKey);
         parseDescription();
         updateHoverText();
+        // Restore for-sale state so the SL Buy flow works after a re-rez
+        if (g_forSale && g_price > 0)
+            llSetForSale(SALE_ORIGINAL, g_price);
         if (g_listenRegister) llListenRemove(g_listenRegister);
         g_listenRegister = llListen(0, "", NULL_KEY, "");
     }
@@ -312,10 +315,11 @@ default
         // Pay the seller
         llGiveMoney(g_ownerKey, g_price);
 
-        // Give the bag to the buyer
-        llGiveInventory(buyer, llGetInventoryName(INVENTORY_SCRIPT, 0));
-        // Actually give the entire object — handled by transfer
-        // In practice, the bag should be set to transfer permissions
+        // The bag object itself transfers via llSetForSale(SALE_ORIGINAL, ...)
+        // which is set when the price is configured. The SL Buy flow handles
+        // the actual object transfer — we cannot give the bag via llGiveInventory
+        // since an object cannot give itself. Calling llDie() below cleans up
+        // if the buyer used Pay instead of Buy (edge case).
 
         // Notify both parties
         llRegionSayTo(buyer, 0,
@@ -380,8 +384,19 @@ default
             }
             else if (msg == "Take Back")
             {
-                // Give back to owner as inventory item and remove from world
-                llGiveInventory(g_ownerKey, llGetScriptName());
+                // Return bag data to owner's HUD inventory, then remove from world.
+                // A rezzed object cannot give itself via llGiveInventory, so we
+                // send TC_ADD_ITEM to the HUD which records it in virtual inventory.
+                string sizeName = "dime";
+                if      (g_weight >= 28) sizeName = "oz";
+                else if (g_weight >= 14) sizeName = "half";
+                else if (g_weight >= 7)  sizeName = "quarter";
+                else if (g_weight >= 4)  sizeName = "eighth";
+
+                integer ownerHUDChan = deriveHUDChannel(g_ownerKey);
+                llRegionSayTo(g_ownerKey, ownerHUDChan,
+                    "TC_ADD_ITEM|bag_" + sizeName + "|" +
+                    g_strain + "|" + g_quality + "|1|" + g_packager);
                 llRegionSayTo(g_ownerKey, 0,
                     "Bag returned to your inventory.");
                 llDie();
@@ -402,6 +417,8 @@ default
             g_forSale = TRUE;
             saveDescription();
             updateHoverText();
+            // Set the object for sale so SL's Buy flow transfers it to buyers
+            llSetForSale(SALE_ORIGINAL, g_price);
             llRegionSayTo(g_ownerKey, 0,
                 "✓ " + g_strain + " is now for sale at L$" + (string)g_price + ".");
         }
