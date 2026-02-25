@@ -1,0 +1,432 @@
+// ================================================================
+// THE CULTIVAR — Plant Interaction Script
+// Version: 1.0
+// Handles: All touch input, dialog menus, action validation,
+//          and communicating player choices to the grow script.
+//
+// This script is the face of the plant — it's what players
+// actually interact with. It validates actions before passing
+// them to the grow script, and handles access control so
+// random strangers can't harvest your crop.
+// ================================================================
+
+integer PCHAN_GROW    = 1000;
+integer PCHAN_PERSIST = 1100;
+
+// Dialog channels
+integer DCHAN_MAIN    = -33001;
+integer DCHAN_PLANT   = -33002;
+integer DCHAN_STRAIN  = -33003;
+integer DCHAN_CONFIRM = -33004;
+
+integer g_listenMain;
+integer g_listenPlant;
+integer g_listenStrain;
+integer g_listenConfirm;
+
+key     g_ownerKey;
+string  g_ownerName;
+key     g_toucher = NULL_KEY;
+
+// Cached status from grow script
+string  g_strainName    = "";
+integer g_qualityTier   = 0;
+integer g_stage         = 0;
+integer g_isWatered     = FALSE;
+integer g_fertApplied   = FALSE;
+integer g_potType_basic = TRUE;
+integer g_potUsesLeft   = 5;
+integer g_potSpent      = FALSE;
+
+// Pending action waiting for confirmation
+string g_pendingAction = "";
+
+// ----------------------------------------------------------------
+// Close all open listens
+// ----------------------------------------------------------------
+closeAllListens()
+{
+    if (g_listenMain)    { llListenRemove(g_listenMain);    g_listenMain    = 0; }
+    if (g_listenPlant)   { llListenRemove(g_listenPlant);   g_listenPlant   = 0; }
+    if (g_listenStrain)  { llListenRemove(g_listenStrain);  g_listenStrain  = 0; }
+    if (g_listenConfirm) { llListenRemove(g_listenConfirm); g_listenConfirm = 0; }
+}
+
+// ----------------------------------------------------------------
+// Access check — owner only for most actions
+// Visitors can view status but not interact
+// ----------------------------------------------------------------
+integer isOwner(key who)
+{
+    return (who == g_ownerKey);
+}
+
+// ----------------------------------------------------------------
+// Build the status string shown in menus
+// ----------------------------------------------------------------
+string buildStatusString()
+{
+    if (g_potSpent)
+        return "⚠ This pot is cracked and spent.\nReplace it with a new pot.";
+
+    if (g_stage == 0)
+        return "Pot is empty.\nPlant a seed to begin growing.";
+
+    list stageNames  = ["", "Seedling 🌱", "Vegetative 🌿", "Flowering 🌸", "✨ READY ✨"];
+    list qualNames   = ["Reggie", "Mids", "Loud", "Exotic"];
+    string stageName = llList2String(stageNames, g_stage);
+    string qualName  = llList2String(qualNames, g_qualityTier);
+
+    string status = g_strainName + " [" + qualName + "]\n";
+    status += "Stage: " + stageName + "\n";
+
+    if (g_stage < 4)
+    {
+        if (g_isWatered)  status += "✓ Watered\n";
+        else              status += "⚠ Needs water\n";
+        if (g_fertApplied) status += "✓ Fertilized\n";
+    }
+
+    string potLabel = g_potType_basic ? "Basic pot" : "Premium pot";
+    if (g_potType_basic)
+        potLabel += " (" + (string)g_potUsesLeft + " uses left)";
+    status += potLabel;
+
+    return status;
+}
+
+// ----------------------------------------------------------------
+// MAIN MENU — shown to owner on touch
+// ----------------------------------------------------------------
+showMainMenu()
+{
+    closeAllListens();
+    string statusStr = buildStatusString();
+    list buttons;
+
+    if (g_potSpent)
+    {
+        buttons = ["Replace Pot", "Close"];
+    }
+    else if (g_stage == 0)
+    {
+        buttons = ["Plant Seed", "Close"];
+    }
+    else if (g_stage == 4)
+    {
+        buttons = ["Harvest!", "Check Status", "Close"];
+    }
+    else
+    {
+        buttons = ["Water", "Fertilize", "Check Status", "Close"];
+        // Only show fertilize during veg stage and if not already applied
+        if (g_stage != 2 || g_fertApplied)
+            buttons = llDeleteSubList(buttons, llListFindList(buttons, ["Fertilize"]),
+                                     llListFindList(buttons, ["Fertilize"]));
+    }
+
+    g_listenMain = llListen(DCHAN_MAIN, "", g_toucher, "");
+    llDialog(g_toucher,
+        "=== YOUR PLANT ===\n" + statusStr,
+        buttons, DCHAN_MAIN);
+    llSetTimerEvent(30.0);
+}
+
+// ----------------------------------------------------------------
+// VISITOR MENU — limited view for non-owners
+// ----------------------------------------------------------------
+showVisitorMenu()
+{
+    string statusStr = buildStatusString();
+    llDialog(g_toucher,
+        "=== PLANT (Owner: " + g_ownerName + ") ===\n" + statusStr,
+        ["Close"], -44001);
+    // One-shot listen for the close button
+    llListen(-44001, "", g_toucher, "Close");
+}
+
+// ----------------------------------------------------------------
+// STRAIN SELECTION MENU — shown when planting
+// ----------------------------------------------------------------
+showStrainMenu(integer qualityTier)
+{
+    closeAllListens();
+
+    // Build strain list for chosen tier
+    list STRAIN_DATA = [
+        "Schwag",0,"Ditch Weed",0,"Brown Frown",0,
+        "Blue Dream",1,"Green Crack",1,"Gorilla Glue",1,"Sour Diesel",1,
+        "OG Kush",2,"Wedding Cake",2,"Zkittlez",2,"Gelato",2,
+        "Runtz",3,"Biscotti",3,"Jealousy",3,"Lemon Cherry Gelato",3
+    ];
+    integer SSTRIDE = 2;
+    list buttons;
+    integer i;
+    for (i = 0; i < llGetListLength(STRAIN_DATA); i += SSTRIDE)
+    {
+        if (llList2Integer(STRAIN_DATA, i+1) == qualityTier)
+            buttons += [llList2String(STRAIN_DATA, i)];
+    }
+    buttons += ["Back"];
+
+    list qualNames = ["Reggie", "Mids", "Loud", "Exotic"];
+    g_listenStrain = llListen(DCHAN_STRAIN, "", g_toucher, "");
+    llDialog(g_toucher,
+        "=== CHOOSE STRAIN ===\n" +
+        llList2String(qualNames, qualityTier) + " tier. Select a strain:",
+        buttons, DCHAN_STRAIN);
+}
+
+// ----------------------------------------------------------------
+// POT TYPE MENU — shown when planting (determines pot to use)
+// ----------------------------------------------------------------
+showPotMenu()
+{
+    closeAllListens();
+    string usesStr = (string)g_potUsesLeft + " uses left";
+    g_listenPlant = llListen(DCHAN_PLANT, "", g_toucher, "");
+    llDialog(g_toucher,
+        "=== SELECT SEED TIER ===\nWhat are you planting?",
+        ["Reggie Seed", "Mids Seed", "Loud Seed", "Exotic Seed", "Back"],
+        DCHAN_PLANT);
+}
+
+// ----------------------------------------------------------------
+// CONFIRM HARVEST — safety check before taking the goods
+// ----------------------------------------------------------------
+showHarvestConfirm()
+{
+    closeAllListens();
+    g_listenConfirm = llListen(DCHAN_CONFIRM, "", g_toucher, "");
+    llDialog(g_toucher,
+        "=== HARVEST ===\nReady to harvest your " + g_strainName + "?\n" +
+        "The plant will reset after harvest.",
+        ["Harvest Now!", "Cancel"], DCHAN_CONFIRM);
+}
+
+// ----------------------------------------------------------------
+// WATER ACTION — check inventory via HUD, apply if available
+// ----------------------------------------------------------------
+doWater()
+{
+    if (g_isWatered)
+    {
+        llRegionSayTo(g_toucher, 0, "Already watered this stage.");
+        return;
+    }
+    // Signal grow script — inventory check happens via HUD
+    // (Water can is a consumable tracked on the HUD)
+    // We message the grow script directly since it trusts the interaction script
+    // The full inventory-check flow would be:
+    // 1. Send CHECK_QTY to HUD inventory via comms channel
+    // 2. Wait for QTY_RESULT
+    // 3. If sufficient, send WATER_APPLIED to grow script
+    // For v1.0 we do a simplified trust-based approach and
+    // let the HUD's water can tracking handle the rest via a separate listen
+    llMessageLinked(LINK_SET, PCHAN_GROW, "WATER_APPLIED", NULL_KEY);
+}
+
+// ----------------------------------------------------------------
+// FERTILIZE ACTION — validate stage and apply
+// ----------------------------------------------------------------
+doFertilize(integer fertTier)
+{
+    if (g_fertApplied)
+    {
+        llRegionSayTo(g_toucher, 0, "Already fertilized this cycle.");
+        return;
+    }
+    if (g_stage != 2)
+    {
+        llRegionSayTo(g_toucher, 0,
+            "Fertilizer can only be used during the vegetative stage.");
+        return;
+    }
+    llMessageLinked(LINK_SET, PCHAN_GROW,
+        "FERT_APPLIED|" + (string)fertTier, NULL_KEY);
+}
+
+// ================================================================
+default
+{
+    state_entry()
+    {
+        g_ownerKey  = llGetOwner();
+        g_ownerName = llKey2Name(g_ownerKey);
+        llMessageLinked(LINK_SET, PCHAN_GROW, "REQUEST_STATUS", NULL_KEY);
+
+        // Listen for the HUD registration ping
+        llListen(0, "", NULL_KEY, "TC_REGISTER");
+    }
+
+    on_rez(integer start_param)
+    {
+        g_ownerKey  = llGetOwner();
+        g_ownerName = llKey2Name(g_ownerKey);
+        llMessageLinked(LINK_SET, PCHAN_GROW, "REQUEST_STATUS", NULL_KEY);
+    }
+
+    changed(integer change)
+    {
+        if (change & CHANGED_OWNER)
+        {
+            // Plant stays with the land — if it's transferred, reset
+            llMessageLinked(LINK_SET, PCHAN_GROW, "DO_RESET", NULL_KEY);
+            llResetScript();
+        }
+    }
+
+    timer()
+    {
+        closeAllListens();
+        llSetTimerEvent(0.0);
+    }
+
+    touch_start(integer nd)
+    {
+        g_toucher = llDetectedKey(0);
+        closeAllListens();
+        llSetTimerEvent(0.0);
+
+        // Request fresh status before showing menu
+        llMessageLinked(LINK_SET, PCHAN_GROW, "REQUEST_STATUS", NULL_KEY);
+        // Small delay to let the status come back before menu shows
+        llSleep(0.2);
+
+        if (isOwner(g_toucher))
+            showMainMenu();
+        else
+            showVisitorMenu();
+    }
+
+    listen(integer channel, string name, key id, string msg)
+    {
+        // TC_REGISTER from HUD (on open channel 0)
+        // We don't need to do anything here — grow script derives channel directly
+        if (channel == 0 && llSubStringIndex(msg, "TC_REGISTER") == 0) return;
+
+        if (id != g_toucher) return;
+        closeAllListens();
+        llSetTimerEvent(0.0);
+
+        // MAIN MENU response
+        if (channel == DCHAN_MAIN)
+        {
+            if (msg == "Close") return;
+
+            else if (msg == "Plant Seed")
+                showPotMenu();
+
+            else if (msg == "Water")
+                doWater();
+
+            else if (msg == "Fertilize")
+            {
+                // Quick fertilizer tier menu
+                integer fc = -55001;
+                llListen(fc, "", g_toucher, "");
+                llDialog(g_toucher,
+                    "=== FERTILIZE ===\nChoose fertilizer type:\n" +
+                    "(Only usable during vegetative stage, once per cycle)",
+                    ["Basic Fert", "Premium Fert", "Exotic Fert", "Back"], fc);
+            }
+
+            else if (msg == "Harvest!")
+                showHarvestConfirm();
+
+            else if (msg == "Check Status")
+            {
+                llRegionSayTo(g_toucher, 0, buildStatusString());
+            }
+
+            else if (msg == "Replace Pot")
+            {
+                // Tell player to drop a new pot object on the land
+                llRegionSayTo(g_toucher, 0,
+                    "Rez a new pot from your inventory to replace this one.");
+            }
+        }
+
+        // SEED TIER SELECTION (reusing plant menu listen)
+        else if (channel == DCHAN_PLANT)
+        {
+            if (msg == "Back") { showMainMenu(); return; }
+            integer tier = 0;
+            if (msg == "Reggie Seed") tier = 0;
+            else if (msg == "Mids Seed")  tier = 1;
+            else if (msg == "Loud Seed")  tier = 2;
+            else if (msg == "Exotic Seed") tier = 3;
+            showStrainMenu(tier);
+        }
+
+        // STRAIN SELECTION
+        else if (channel == DCHAN_STRAIN)
+        {
+            if (msg == "Back") { showPotMenu(); return; }
+            // msg is the chosen strain name
+            string potType   = g_potType_basic ? "basic" : "premium";
+            integer usesLeft = g_potUsesLeft;
+            llMessageLinked(LINK_SET, PCHAN_GROW,
+                "PLANT_SEED|" + msg + "|" + potType + "|" + (string)usesLeft,
+                NULL_KEY);
+        }
+
+        // HARVEST CONFIRM
+        else if (channel == DCHAN_CONFIRM)
+        {
+            if (msg == "Harvest Now!")
+                llMessageLinked(LINK_SET, PCHAN_GROW, "DO_HARVEST", NULL_KEY);
+            // Cancel just closes
+        }
+
+        // FERTILIZER TIER
+        else if (channel == -55001)
+        {
+            if (msg == "Back")       { showMainMenu(); return; }
+            integer ft = 0;
+            if (msg == "Basic Fert")   ft = 0;
+            else if (msg == "Premium Fert") ft = 1;
+            else if (msg == "Exotic Fert")  ft = 2;
+            doFertilize(ft);
+        }
+    }
+
+    link_message(integer sender_num, integer num, string msg, key id)
+    {
+        if (num != PCHAN_GROW) return;
+
+        list   parts = llParseString2List(msg, ["|"], []);
+        string cmd   = llList2String(parts, 0);
+
+        // Grow script sent back current status
+        if (cmd == "STATUS")
+        {
+            g_strainName  = llList2String(parts, 1);
+            g_qualityTier = (integer)llList2String(parts, 2);
+            g_stage       = (integer)llList2String(parts, 3);
+            // parts 4 and 5 are timing, skip for display
+            g_isWatered   = (integer)llList2String(parts, 6);
+            g_fertApplied = (integer)llList2String(parts, 7);
+            // parts 8 is fert tier
+            string potType    = llList2String(parts, 9);
+            g_potType_basic   = (potType == "basic");
+            g_potUsesLeft     = (integer)llList2String(parts, 10);
+        }
+
+        // Grow script says pot is spent
+        else if (cmd == "POT_SPENT")
+        {
+            g_potSpent = TRUE;
+        }
+
+        // Grow script confirms plant was reset
+        else if (cmd == "PLANT_RESET")
+        {
+            g_strainName  = "";
+            g_stage       = 0;
+            g_isWatered   = FALSE;
+            g_fertApplied = FALSE;
+            g_potSpent    = FALSE;
+        }
+    }
+}
