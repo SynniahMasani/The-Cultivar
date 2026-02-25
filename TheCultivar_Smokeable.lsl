@@ -190,12 +190,11 @@ default
             }
             else
             {
-                // Smoker is someone else — we need to give them the object
-                // which they then wear themselves.
-                // Temp-attach across owners isn't directly possible in LSL.
-                // Best approach: give the object to the smoker's inventory
-                // with a note that they should wear it.
-                llGiveInventory(g_targetAvatar, llGetScriptName());
+                // Smoker is someone else — temp-attach across owners isn't
+                // possible in LSL. WeedJar_Attach should have caught this
+                // case and called giveToInventory() before ever rezzing us,
+                // but as a safety fallback we give the object by name.
+                llGiveInventory(g_targetAvatar, llGetObjectName());
                 llRegionSayTo(g_targetAvatar, 0,
                     "✓ Smokeable in your inventory — wear it to light up!");
                 llDie();

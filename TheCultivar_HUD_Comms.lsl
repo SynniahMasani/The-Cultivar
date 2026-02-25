@@ -425,14 +425,15 @@ default
             // Another player's session object is inviting nearby avatars
             if (cmd == "TC_SESSION_INVITE")
             {
-                // TC_SESSION_INVITE|hostName|sessionObjectKey|strain|quality
+                // TC_SESSION_INVITE|hostName|hostKey|sessionObjectKey|strain|quality|sessionChannel
                 string hostName  = llList2String(parts, 1);
-                key    sessKey   = (key)llList2String(parts, 2);
-                string strain    = llList2String(parts, 3);
-                string quality   = llList2String(parts, 4);
+                key    hostKey   = (key)llList2String(parts, 2);
+                key    sessKey   = (key)llList2String(parts, 3);
+                string strain    = llList2String(parts, 4);
+                string quality   = llList2String(parts, 5);
 
-                // Don't invite ourselves
-                if (hostName == g_ownerName) return;
+                // Don't invite ourselves — compare by key, not name (names aren't unique)
+                if (hostKey == g_ownerKey) return;
                 // Don't invite if already in a session
                 if (g_inSession) return;
 

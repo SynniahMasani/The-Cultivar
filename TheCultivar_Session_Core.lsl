@@ -186,11 +186,14 @@ syncAnimations()
 
 // ----------------------------------------------------------------
 // Broadcast session invite to nearby avatars
+// Format: TC_SESSION_INVITE|hostName|hostKey|sessionObjectKey|strain|quality|sessionChannel
+// hostKey is included so receiving HUDs can do an exact-key self-check
 // ----------------------------------------------------------------
 broadcastInvite()
 {
     llRegionSay(PUBLIC_SESSION_CHAN,
         "TC_SESSION_INVITE|" + g_hostName + "|" +
+        (string)g_hostKey + "|" +
         (string)llGetKey() + "|" + g_strain + "|" + g_quality + "|" +
         (string)g_sessionChannel);
 }
@@ -454,16 +457,15 @@ default
             llSetTimerEvent(30.0);
         }
 
-        // ---- Public channel: Participant wants to join ----
-        else if (channel == PUBLIC_SESSION_CHAN && cmd == "TC_SESSION_JOIN")
+        // ---- Channel 0: Participant HUD sending join request (directed to this object) ----
+        // HUD_Comms sends: TC_SESSION_JOIN|avatarKey|hudChannel|avatarName
+        // via llRegionSayTo(sessionObjectKey, 0, ...) — already targeted to us
+        else if (channel == 0 && cmd == "TC_SESSION_JOIN")
         {
-            // TC_SESSION_JOIN|avatarKey|avatarName|sessionObjectKey
             key    joinerKey  = (key)llList2String(parts, 1);
-            string joinerName = llList2String(parts, 2);
-            key    targetSess = (key)llList2String(parts, 3);
+            // parts[2] is hudChannel — addParticipant derives it internally, skip
+            string joinerName = llList2String(parts, 3);
 
-            // Make sure they're joining THIS session
-            if (targetSess != llGetKey()) return;
             if (!g_sessionActive) return;
 
             if (addParticipant(joinerKey, joinerName))

@@ -23,6 +23,8 @@ integer g_listenMain;
 integer g_listenPlant;
 integer g_listenStrain;
 integer g_listenConfirm;
+integer g_listenFert;    // fertilizer tier sub-menu
+integer g_listenVisitor; // visitor "Close" dialog
 
 key     g_ownerKey;
 string  g_ownerName;
@@ -50,6 +52,8 @@ closeAllListens()
     if (g_listenPlant)   { llListenRemove(g_listenPlant);   g_listenPlant   = 0; }
     if (g_listenStrain)  { llListenRemove(g_listenStrain);  g_listenStrain  = 0; }
     if (g_listenConfirm) { llListenRemove(g_listenConfirm); g_listenConfirm = 0; }
+    if (g_listenFert)    { llListenRemove(g_listenFert);    g_listenFert    = 0; }
+    if (g_listenVisitor) { llListenRemove(g_listenVisitor); g_listenVisitor = 0; }
 }
 
 // ----------------------------------------------------------------
@@ -138,11 +142,12 @@ showMainMenu()
 showVisitorMenu()
 {
     string statusStr = buildStatusString();
+    if (g_listenVisitor) llListenRemove(g_listenVisitor);
+    g_listenVisitor = llListen(-44001, "", g_toucher, "Close");
     llDialog(g_toucher,
         "=== PLANT (Owner: " + g_ownerName + ") ===\n" + statusStr,
         ["Close"], -44001);
-    // One-shot listen for the close button
-    llListen(-44001, "", g_toucher, "Close");
+    llSetTimerEvent(30.0);
 }
 
 // ----------------------------------------------------------------
@@ -254,9 +259,8 @@ default
         g_ownerKey  = llGetOwner();
         g_ownerName = llKey2Name(g_ownerKey);
         llMessageLinked(LINK_SET, PCHAN_GROW, "REQUEST_STATUS", NULL_KEY);
-
-        // Listen for the HUD registration ping
-        llListen(0, "", NULL_KEY, "TC_REGISTER");
+        // No channel-0 listener needed here: the grow script derives the HUD
+        // channel directly from the owner key and handles TC_REGISTER itself.
     }
 
     on_rez(integer start_param)
@@ -288,10 +292,12 @@ default
         closeAllListens();
         llSetTimerEvent(0.0);
 
-        // Request fresh status before showing menu
+        // Request fresh status before showing menu.
+        // Note: llSleep() is not used here — it would block the event queue
+        // and prevent the STATUS link_message from arriving anyway.
+        // The menu builds from cached status values which are updated whenever
+        // the grow script sends a STATUS reply (including after each action).
         llMessageLinked(LINK_SET, PCHAN_GROW, "REQUEST_STATUS", NULL_KEY);
-        // Small delay to let the status come back before menu shows
-        llSleep(0.2);
 
         if (isOwner(g_toucher))
             showMainMenu();
@@ -301,10 +307,6 @@ default
 
     listen(integer channel, string name, key id, string msg)
     {
-        // TC_REGISTER from HUD (on open channel 0)
-        // We don't need to do anything here — grow script derives channel directly
-        if (channel == 0 && llSubStringIndex(msg, "TC_REGISTER") == 0) return;
-
         if (id != g_toucher) return;
         closeAllListens();
         llSetTimerEvent(0.0);
@@ -324,11 +326,13 @@ default
             {
                 // Quick fertilizer tier menu
                 integer fc = -55001;
-                llListen(fc, "", g_toucher, "");
+                if (g_listenFert) llListenRemove(g_listenFert);
+                g_listenFert = llListen(fc, "", g_toucher, "");
                 llDialog(g_toucher,
                     "=== FERTILIZE ===\nChoose fertilizer type:\n" +
                     "(Only usable during vegetative stage, once per cycle)",
                     ["Basic Fert", "Premium Fert", "Exotic Fert", "Back"], fc);
+                llSetTimerEvent(30.0);
             }
 
             else if (msg == "Harvest!")

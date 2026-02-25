@@ -37,10 +37,10 @@ integer ATTACH_DURATION = 120;
 // Default smokeable type (can be expanded to blunts, pipes etc.)
 string  g_smokeType = "Joint"; // Joint | Blunt
 
-// Track active attachments: [smokerKey, rezzedObjectKey, expireTime, ...]
-// Stride 3
+// Track active attachments: [smokerKey, tempChan, listenHandle, expireTime, ...]
+// Stride 4 — listenHandle stored so it can be removed on confirmation or expiry
 list    g_attachments;
-integer ATTACH_STRIDE = 3;
+integer ATTACH_STRIDE = 4;
 
 // Cleanup timer interval
 float   CLEANUP_INTERVAL = 15.0;
@@ -54,20 +54,6 @@ string buildAssetName(string smokeType, string quality)
     string q = llToUpper(llGetSubString(quality, 0, 0)) +
                llGetSubString(quality, 1, -1);
     return "TC_Smoke_" + smokeType + "_" + q;
-}
-
-// ----------------------------------------------------------------
-// Check if we're in a no-rez zone
-// ----------------------------------------------------------------
-integer canRez()
-{
-    return (llGetAgentInfo(llGetOwner()) & AGENT_IN_MOUSELOOK) == 0
-        && (integer)llList2String(llGetParcelDetails(llGetPos(),
-           [PARCEL_DETAILS_FLAGS]), 0) & PARCEL_FLAG_ALLOW_LAND_MARK;
-    // Note: true no-rez detection in LSL is imperfect.
-    // Best approach: try to rez and catch failure, or use
-    // CHANGED_REGION on the rezzed object.
-    // For v1.0 we attempt rez and fall back gracefully.
 }
 
 // ----------------------------------------------------------------
@@ -108,8 +94,8 @@ rezSmokeable(key smoker, string strain, string quality)
 
     // Encode smoker key and duration in start_param
     // We can only pass an integer — use a temp listener channel instead
-    integer tempChan = (integer)(llFrand(2000000.0) + 1000000.0) * -1;
-    llListen(tempChan, "", NULL_KEY, "");
+    integer tempChan   = (integer)(llFrand(2000000.0) + 1000000.0) * -1;
+    integer tempListen = llListen(tempChan, "", NULL_KEY, "");
 
     // Rez the smokeable — its script will listen for attach instructions
     llRezObject(assetName, rezPos, ZERO_VECTOR, ZERO_ROTATION, tempChan);
@@ -120,9 +106,9 @@ rezSmokeable(key smoker, string strain, string quality)
         "TC_ATTACH_TO|" + (string)smoker + "|" +
         (string)ATTACH_DURATION + "|" + strain + "|" + quality);
 
-    // Track this attachment
+    // Track this attachment — store listen handle so we can remove it later
     integer expireTime = llGetUnixTime() + ATTACH_DURATION + 5;
-    g_attachments += [smoker, tempChan, expireTime];
+    g_attachments += [smoker, tempChan, tempListen, expireTime];
 }
 
 // ----------------------------------------------------------------
@@ -146,6 +132,7 @@ giveToInventory(key smoker, string quality)
 
 // ----------------------------------------------------------------
 // Clean up expired attachment tracking entries
+// Also removes their listen handles so we don't leak listeners
 // ----------------------------------------------------------------
 cleanupExpired()
 {
@@ -154,9 +141,11 @@ cleanupExpired()
     integer i;
     for (i = 0; i < llGetListLength(g_attachments); i += ATTACH_STRIDE)
     {
-        integer expireTime = llList2Integer(g_attachments, i + 2);
+        integer expireTime = llList2Integer(g_attachments, i + 3);
         if (now < expireTime)
             fresh += llList2List(g_attachments, i, i + ATTACH_STRIDE - 1);
+        else
+            llListenRemove(llList2Integer(g_attachments, i + 2)); // remove expired listen
     }
     g_attachments = fresh;
 }
@@ -187,7 +176,15 @@ default
             key    smoker  = (key)llList2String(parts, 1);
             string strain  = llList2String(parts, 2);
             string quality = llList2String(parts, 3);
-            rezSmokeable(smoker, strain, quality);
+
+            // llAttachToAvatarTemp only works when the object is owned by the
+            // smoker. Since the jar is owned by its owner, only the jar owner
+            // can use the temp-attach path. For anyone else, give the asset
+            // directly from the jar's inventory — no rez needed.
+            if (smoker != llGetOwner())
+                giveToInventory(smoker, quality);
+            else
+                rezSmokeable(smoker, strain, quality);
         }
 
         // Main script can change the default smokeable type
@@ -206,7 +203,17 @@ default
 
         if (cmd == "TC_ATTACH_CONFIRMED")
         {
-            llListenRemove(channel);
+            // Find the stored listen handle for this channel and remove it
+            integer i;
+            for (i = 0; i < llGetListLength(g_attachments); i += ATTACH_STRIDE)
+            {
+                if (llList2Integer(g_attachments, i + 1) == channel)
+                {
+                    llListenRemove(llList2Integer(g_attachments, i + 2));
+                    g_attachments = llDeleteSubList(g_attachments, i, i + ATTACH_STRIDE - 1);
+                    return;
+                }
+            }
         }
     }
 }

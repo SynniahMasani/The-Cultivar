@@ -545,9 +545,6 @@ default
         if (llDetectedKey(0) != g_ownerKey) return;
         string primName = llGetLinkName(llDetectedLinkNumber(0));
 
-        // DEBUG — remove this line once all buttons are confirmed working
-        llOwnerSay("[HUD] Button touched: '" + primName + "'");
-
         if      (primName == "btn_smoke")     showSmokeTypeMenu();
         else if (primName == "btn_inventory") showInventoryMenu();
         else if (primName == "btn_grow")
