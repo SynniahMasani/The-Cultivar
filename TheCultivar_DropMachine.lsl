@@ -291,12 +291,13 @@ default
         // Claim request timed out
         if (g_claimRequest != NULL_KEY)
         {
-            g_claimRequest   = NULL_KEY;
+            g_claimRequest = NULL_KEY;
+            // Notify BEFORE clearing — once cleared, the key is lost
+            llRegionSayTo(g_claimingAvatar, 0,
+                "Claim timed out — server didn't respond. Try again.");
             g_claimingAvatar = NULL_KEY;
             g_claimingName   = "";
             g_busy           = FALSE;
-            llRegionSayTo(g_claimingAvatar, 0,
-                "Claim timed out — server didn't respond. Try again.");
         }
 
         // Poll for drop status
