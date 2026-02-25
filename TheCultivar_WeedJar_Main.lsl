@@ -1,9 +1,13 @@
 // ================================================================
 // THE CULTIVAR — Weed Jar Main Script
-// Version: 1.0
-// Handles: Strain data storage, fill level tracking and visuals,
-//          HUD registration, smoke events, loading from bags/flower,
-//          session integration, access control
+// Version: 1.1
+// Handles: Touch menus, HUD registration, smoke events, loading,
+//          session integration, access control, visuals
+//
+// STORAGE: All jar content data (strain, quality, grams, etc.) is
+// owned by TheCultivar_WeedJar_Storage.lsl which persists via
+// llLinksetData. This script caches the data locally for menus
+// and hover text, and delegates mutations via link_message.
 //
 // PRIM LINK STRUCTURE:
 //   Link 1 (root)  : Jar body mesh
@@ -26,10 +30,6 @@
 //   0 = Owner only
 //   1 = Group (same group as object)
 //   2 = Open (anyone can take from it)
-//
-// STRAIN DATA stored in llLinksetData for persistence:
-//   jar_strain, jar_quality, jar_packager, jar_grams, jar_capacity,
-//   jar_access, jar_type (standard/premium)
 // ================================================================
 
 integer TC_OBJECT_PING_CHAN = -111222333;
@@ -37,6 +37,7 @@ integer TC_OBJECT_PING_CHAN = -111222333;
 // Internal channels between jar scripts
 integer JCHAN_MAIN    = 2000;
 integer JCHAN_ATTACH  = 2100;
+integer JCHAN_STORAGE = 2200;
 
 // Dialog channels
 integer DCHAN_OWNER   = -88001;
@@ -51,13 +52,13 @@ integer g_listenLoad;
 integer g_listenAccess;
 integer g_listenVisitor;
 
-// Jar identity
+// Local cache of jar contents (authoritative copy lives in Storage)
 string  g_strain     = "";
 string  g_quality    = "";
 string  g_packager   = "";
 integer g_grams      = 0;
-integer g_capacity   = 28;   // standard jar = 28g, premium = 56g
-integer g_accessMode = 0;    // 0=owner 1=group 2=open
+integer g_capacity   = 28;
+integer g_accessMode = 0;
 string  g_jarType    = "standard";
 
 // HUD connection
@@ -72,44 +73,17 @@ key     g_sessionKey = NULL_KEY;
 
 // Cooldown to prevent spam-clicking
 integer g_lastSmoke  = 0;
-integer SMOKE_COOLDOWN = 8; // seconds between takes
+integer SMOKE_COOLDOWN = 8;
 
-// ----------------------------------------------------------------
-// Persist jar state to linkset data
-// ----------------------------------------------------------------
-saveState()
-{
-    llLinksetDataWrite("jar_strain",   g_strain);
-    llLinksetDataWrite("jar_quality",  g_quality);
-    llLinksetDataWrite("jar_packager", g_packager);
-    llLinksetDataWrite("jar_grams",    (string)g_grams);
-    llLinksetDataWrite("jar_capacity", (string)g_capacity);
-    llLinksetDataWrite("jar_access",   (string)g_accessMode);
-    llLinksetDataWrite("jar_type",     g_jarType);
-}
+// Pending async operations
+key     g_pendingSmoker       = NULL_KEY;
+string  g_pendingLoadStrain   = "";
+string  g_pendingLoadQuality  = "";
+integer g_pendingLoadGrams    = 0;
+string  g_pendingLoadPackager = "";
 
-// ----------------------------------------------------------------
-// Load jar state from linkset data
-// ----------------------------------------------------------------
-loadState()
-{
-    string test = llLinksetDataRead("jar_strain");
-    if (test != "")
-    {
-        g_strain     = llLinksetDataRead("jar_strain");
-        g_quality    = llLinksetDataRead("jar_quality");
-        g_packager   = llLinksetDataRead("jar_packager");
-        g_grams      = (integer)llLinksetDataRead("jar_grams");
-        g_capacity   = (integer)llLinksetDataRead("jar_capacity");
-        g_accessMode = (integer)llLinksetDataRead("jar_access");
-        g_jarType    = llLinksetDataRead("jar_type");
-    }
-    else
-    {
-        // Fresh jar defaults
-        g_capacity = (g_jarType == "premium") ? 56 : 28;
-    }
-}
+// Smoke burst particle tracking
+integer g_burstUntil = 0;
 
 // ----------------------------------------------------------------
 // Derive HUD channel from owner UUID
@@ -144,17 +118,15 @@ float fillPct()
 }
 
 // ----------------------------------------------------------------
-// Update all visual elements based on current state
+// Update all visual elements based on cached state
 // ----------------------------------------------------------------
 updateVisuals()
 {
     float pct = fillPct();
 
     // --- Fill level mesh (link 2) ---
-    // Scale the Z axis of the fill mesh proportionally
-    // Base full height ~0.08 (adjust to match your mesh)
     float fillHeight = 0.08 * pct;
-    if (fillHeight < 0.001) fillHeight = 0.001; // never fully invisible
+    if (fillHeight < 0.001) fillHeight = 0.001;
     llSetLinkPrimitiveParamsFast(2, [
         PRIM_SIZE, <0.065, 0.065, fillHeight>,
         PRIM_COLOR, ALL_SIDES, qualityColor(), 1.0
@@ -162,7 +134,7 @@ updateVisuals()
 
     // --- Quality glow ring (link 5) ---
     float glowVal = 0.0;
-    if (g_grams > 0) glowVal = 0.06 + (pct * 0.04); // subtle, brighter when full
+    if (g_grams > 0) glowVal = 0.06 + (pct * 0.04);
     llSetLinkPrimitiveParamsFast(5, [
         PRIM_COLOR, ALL_SIDES, qualityColor(), 1.0,
         PRIM_GLOW,  ALL_SIDES, glowVal
@@ -172,7 +144,7 @@ updateVisuals()
     if (g_grams > 0)
         startIdleParticles();
     else
-        llLinkParticleSystem(4, []); // clear particles when empty
+        llLinkParticleSystem(4, []);
 
     // --- Hover text ---
     updateHoverText();
@@ -183,17 +155,20 @@ updateVisuals()
 // ----------------------------------------------------------------
 vector qualityColor()
 {
-    if (g_quality == "mids")   return <1.0, 0.85, 0.2>;  // amber
-    if (g_quality == "loud")   return <0.2, 0.85, 0.3>;  // green
-    if (g_quality == "exotic") return <0.7, 0.3,  1.0>;  // purple
-    return <0.55, 0.45, 0.3>; // reggie — earthy brown
+    if (g_quality == "mids")   return <1.0, 0.85, 0.2>;
+    if (g_quality == "loud")   return <0.2, 0.85, 0.3>;
+    if (g_quality == "exotic") return <0.7, 0.3,  1.0>;
+    return <0.55, 0.45, 0.3>; // reggie
 }
 
 // ----------------------------------------------------------------
-// Idle ambient wisp particles — subtle, quality-tinted
+// Idle ambient wisp particles
 // ----------------------------------------------------------------
 startIdleParticles()
 {
+    // Don't override an active smoke burst
+    if (llGetUnixTime() < g_burstUntil) return;
+
     vector col = qualityColor();
     llLinkParticleSystem(4, [
         PSYS_PART_FLAGS,           PSYS_PART_INTERP_COLOR_MASK |
@@ -217,7 +192,9 @@ startIdleParticles()
 }
 
 // ----------------------------------------------------------------
-// Burst smoke particles when someone takes a hit
+// Burst smoke particles when someone takes a hit.
+// Uses PSYS_SRC_MAX_AGE so the burst stops on its own after 1.5s.
+// A timer restores idle particles after 2s.
 // ----------------------------------------------------------------
 burstSmokeParticles()
 {
@@ -242,10 +219,8 @@ burstSmokeParticles()
         PSYS_SRC_ANGLE_BEGIN,      0.0,
         PSYS_SRC_ANGLE_END,        0.4
     ]);
-    // Return to idle after burst
-    llSleep(2.0);
-    if (g_grams > 0) startIdleParticles();
-    else llLinkParticleSystem(4, []);
+    g_burstUntil = llGetUnixTime() + 2;
+    llSetTimerEvent(2.5); // restore idle particles after burst
 }
 
 // ----------------------------------------------------------------
@@ -262,26 +237,26 @@ updateHoverText()
 
     float  pct      = fillPct();
     string fillStr;
-    if      (pct >= 0.75) fillStr = "████████ Full";
-    else if (pct >= 0.50) fillStr = "██████░░ Half";
-    else if (pct >= 0.25) fillStr = "████░░░░ Low";
-    else if (pct >= 0.10) fillStr = "██░░░░░░ Almost Gone";
-    else                  fillStr = "░░░░░░░░ Last Bit";
+    if      (pct >= 0.75) fillStr = "Full";
+    else if (pct >= 0.50) fillStr = "Half";
+    else if (pct >= 0.25) fillStr = "Low";
+    else if (pct >= 0.10) fillStr = "Almost Gone";
+    else                  fillStr = "Last Bit";
 
     list   accessLabels = ["Owner Only", "Group", "Open"];
     string accessStr    = llList2String(accessLabels, g_accessMode);
 
     string qualLabel;
     if      (g_quality == "reggie") qualLabel = "Reggie";
-    else if (g_quality == "mids")   qualLabel = "Mids ★";
-    else if (g_quality == "loud")   qualLabel = "Loud ★★";
-    else if (g_quality == "exotic") qualLabel = "Exotic ✨";
+    else if (g_quality == "mids")   qualLabel = "Mids";
+    else if (g_quality == "loud")   qualLabel = "Loud";
+    else if (g_quality == "exotic") qualLabel = "Exotic";
     else qualLabel = g_quality;
 
     llSetText(
         "THE CULTIVAR\n" +
         g_strain + "  [" + qualLabel + "]\n" +
-        fillStr + "  " + (string)g_grams + "g\n" +
+        fillStr + "  " + (string)g_grams + "g / " + (string)g_capacity + "g\n" +
         "Packed by " + g_packager + "  •  " + accessStr,
         qualityColor(), 1.0);
 }
@@ -291,17 +266,17 @@ updateHoverText()
 // ----------------------------------------------------------------
 integer hasAccess(key who)
 {
-    if (who == g_ownerKey)  return TRUE;  // owner always has access
-    if (g_accessMode == 2)  return TRUE;  // open
-    if (g_accessMode == 1)
-        return llSameGroup(who);          // group check
+    if (who == g_ownerKey)  return TRUE;
+    if (g_accessMode == 2)  return TRUE;
+    if (g_accessMode == 1)  return llSameGroup(who);
     return FALSE;
 }
 
 // ----------------------------------------------------------------
-// Consume 1g from the jar and trigger smoke event
+// Request a smoke — sends TAKE_FROM_JAR to Storage.
+// The actual effects happen when TAKE_OK arrives via link_message.
 // ----------------------------------------------------------------
-doSmoke(key smoker)
+requestSmoke(key smoker)
 {
     integer now = llGetUnixTime();
     if (now - g_lastSmoke < SMOKE_COOLDOWN)
@@ -318,107 +293,8 @@ doSmoke(key smoker)
         return;
     }
 
-    g_grams--;
-    g_lastSmoke = now;
-    saveState();
-
-    // Tell smoker's HUD about the smoke event
-    integer smokerHUDChan = deriveHUDChannel(smoker);
-    llRegionSayTo(smoker, smokerHUDChan,
-        "TC_SMOKED|" + g_strain + "|" + g_quality);
-
-    // Tell attach script to auto-attach a smokeable to their hand
-    llMessageLinked(LINK_SET, JCHAN_ATTACH,
-        "ATTACH|" + (string)smoker + "|" + g_strain + "|" + g_quality, NULL_KEY);
-
-    // Burst particles and play sound
-    burstSmokeParticles();
-    llPlaySound("jar_open", 0.5);
-
-    // Feedback
-    if (smoker == g_ownerKey)
-        llOwnerSay("You reached in for some " + g_quality + " " + g_strain +
-                   ". " + (string)g_grams + "g left.");
-    else
-        llRegionSayTo(smoker, 0,
-            "You grabbed some " + g_quality + " " + g_strain + " from the jar.");
-
-    // Low jar warning to owner
-    if (g_grams == 5)
-        llRegionSayTo(g_ownerKey, 0,
-            "⚠ Your " + g_strain + " jar is getting low — only 5g left.");
-    else if (g_grams == 0)
-        llRegionSayTo(g_ownerKey, 0,
-            "Your " + g_strain + " jar is empty.");
-
-    updateVisuals();
-}
-
-// ----------------------------------------------------------------
-// Load flower into the jar from a bag or raw flower
-// strain/quality/grams/packager come from the HUD inventory
-// ----------------------------------------------------------------
-loadJar(string strain, string quality, integer grams, string packager)
-{
-    integer space = g_capacity - g_grams;
-    if (space <= 0)
-    {
-        llRegionSayTo(g_ownerKey, 0, "The jar is full (" +
-                      (string)g_capacity + "g capacity).");
-        return;
-    }
-
-    // Can only hold one strain at a time — mixing not allowed
-    if (g_grams > 0 && g_strain != strain)
-    {
-        llRegionSayTo(g_ownerKey, 0,
-            "The jar already has " + g_strain + " in it. Empty it first.");
-        return;
-    }
-
-    integer toLoad = grams;
-    if (toLoad > space) toLoad = space;
-
-    g_strain   = strain;
-    g_quality  = quality;
-    g_packager = packager;
-    g_grams   += toLoad;
-    saveState();
-    updateVisuals();
-
-    llOwnerSay("✓ Loaded " + (string)toLoad + "g of " +
-               quality + " " + strain + " into the jar.");
-
-    if (toLoad < grams)
-        llOwnerSay("Jar is now full. " + (string)(grams - toLoad) +
-                   "g of flower was left over.");
-}
-
-// ----------------------------------------------------------------
-// Empty the jar back to owner's HUD inventory
-// ----------------------------------------------------------------
-emptyJar()
-{
-    if (g_grams == 0)
-    {
-        llOwnerSay("The jar is already empty.");
-        return;
-    }
-
-    // Return remaining flower to HUD inventory
-    llRegionSayTo(g_ownerKey, g_hudChannel,
-        "TC_ADD_ITEM|flower_raw|" + g_strain + "|" +
-        g_quality + "|" + (string)g_grams + "|" + g_packager);
-
-    llOwnerSay("Emptied " + (string)g_grams + "g of " +
-               g_strain + " back to your inventory.");
-
-    g_grams    = 0;
-    g_strain   = "";
-    g_quality  = "";
-    g_packager = "";
-    saveState();
-    updateVisuals();
+    g_pendingSmoker = smoker;
+    llMessageLinked(LINK_SET, JCHAN_STORAGE, "TAKE_FROM_JAR", NULL_KEY);
 }
 
 // ----------------------------------------------------------------
@@ -435,8 +311,6 @@ showOwnerMenu()
                      (string)g_grams + "g / " + (string)g_capacity + "g";
     else
         statusLine = "Empty";
-
-    list accessLabels = ["Owner Only", "Group Access", "Open Access"];
 
     list buttons;
     if (g_grams > 0)
@@ -472,7 +346,6 @@ showVisitorMenu(key visitor)
 // ----------------------------------------------------------------
 showLoadMenu(string invData)
 {
-    // Parse flower slots from inventory data
     list slots = llParseString2List(invData, ["^"], []);
     if (llGetListLength(slots) == 0)
     {
@@ -481,7 +354,7 @@ showLoadMenu(string invData)
         return;
     }
 
-    list qualNames = ["reggie","mids","loud","exotic"];
+    list qualNames  = ["reggie","mids","loud","exotic"];
     list qualLabels = ["[R]","[M]","[L]","[E]"];
     list buttons;
     string menuText = "=== LOAD JAR ===\nChoose flower to load:\n\n";
@@ -536,12 +409,13 @@ default
 {
     state_entry()
     {
-        g_ownerKey  = llGetOwner();
-        g_ownerName = llKey2Name(g_ownerKey);
+        g_ownerKey   = llGetOwner();
+        g_ownerName  = llKey2Name(g_ownerKey);
         g_hudChannel = deriveHUDChannel(g_ownerKey);
 
-        loadState();
-        updateVisuals();
+        // Storage broadcasts CONTENTS_UPDATED on its state_entry,
+        // which will populate our local cache and update visuals.
+        updateVisuals(); // show empty/default until Storage responds
 
         if (g_listenRegister) llListenRemove(g_listenRegister);
         g_listenRegister = llListen(0, "", NULL_KEY, "");
@@ -557,19 +431,35 @@ default
     {
         if (change & CHANGED_OWNER)
         {
-            // New owner — clear personal data, keep jar type
-            llLinksetDataDeleteFound("jar_", "");
+            // Storage handles llLinksetData cleanup; we just reset
             llResetScript();
         }
     }
 
     timer()
     {
+        // Smoke burst ended — restore idle particles
+        if (g_burstUntil > 0 && llGetUnixTime() >= g_burstUntil)
+        {
+            g_burstUntil = 0;
+            if (g_grams > 0) startIdleParticles();
+            else llLinkParticleSystem(4, []);
+
+            // If dialogs are still open, keep their timeout running
+            if (g_listenOwner || g_listenLoad || g_listenAccess || g_listenVisitor)
+            {
+                llSetTimerEvent(25.0);
+                return;
+            }
+            llSetTimerEvent(0.0);
+            return;
+        }
+
         // Dialog timeout cleanup
         if (g_listenOwner)   { llListenRemove(g_listenOwner);   g_listenOwner   = 0; }
-        if (g_listenLoad)    { llListenRemove(g_listenLoad);     g_listenLoad    = 0; }
-        if (g_listenAccess)  { llListenRemove(g_listenAccess);   g_listenAccess  = 0; }
-        if (g_listenVisitor) { llListenRemove(g_listenVisitor);  g_listenVisitor = 0; }
+        if (g_listenLoad)    { llListenRemove(g_listenLoad);    g_listenLoad    = 0; }
+        if (g_listenAccess)  { llListenRemove(g_listenAccess);  g_listenAccess  = 0; }
+        if (g_listenVisitor) { llListenRemove(g_listenVisitor); g_listenVisitor = 0; }
         llSetTimerEvent(0.0);
 
         if (!g_registered)
@@ -584,13 +474,10 @@ default
         if (toucher == g_ownerKey)
         {
             pingHUD();
-            // Show menu after HUD responds — handled in listen()
-            // Store intent so listen knows what to do after registration
             llLinksetDataWrite("jar_pending_action", "owner_menu");
         }
         else if (hasAccess(toucher))
         {
-            // Non-owner with access — direct smoke interaction
             if (g_grams > 0)
                 showVisitorMenu(toucher);
             else
@@ -599,7 +486,6 @@ default
         }
         else
         {
-            // No access
             string accessMsg = "This jar is ";
             if (g_accessMode == 0)
                 accessMsg += "private (owner only).";
@@ -626,7 +512,6 @@ default
             if (g_listenRegister) { llListenRemove(g_listenRegister); g_listenRegister = 0; }
             llSetTimerEvent(0.0);
 
-            // Act on pending action
             string pending = llLinksetDataRead("jar_pending_action");
             llLinksetDataDelete("jar_pending_action");
 
@@ -634,7 +519,6 @@ default
                 showOwnerMenu();
             else if (pending == "load_flower")
             {
-                // Request flower inventory
                 llRegionSayTo(g_ownerKey, g_hudChannel,
                     "TC_INVENTORY_REQUEST|flower_raw|" + (string)llGetKey());
             }
@@ -654,7 +538,7 @@ default
             if (g_listenOwner) { llListenRemove(g_listenOwner); g_listenOwner = 0; }
 
             if (msg == "Take A Hit")
-                doSmoke(g_ownerKey);
+                requestSmoke(g_ownerKey);
 
             else if (msg == "Load Flower" || msg == "Load More")
             {
@@ -663,7 +547,8 @@ default
             }
 
             else if (msg == "Empty Jar")
-                emptyJar();
+                llMessageLinked(LINK_SET, JCHAN_STORAGE,
+                    "EMPTY_JAR", NULL_KEY);
 
             else if (msg == "Access Mode")
                 showAccessMenu();
@@ -708,19 +593,20 @@ default
                     integer qty      = (integer)llList2String(fields, 3);
                     string  packager = llList2String(fields, 4);
 
-                    // How much to load — all available or up to capacity
                     integer space   = g_capacity - g_grams;
                     integer toLoad  = qty;
                     if (toLoad > space) toLoad = space;
 
-                    // Remove from HUD inventory
-                    llRegionSayTo(g_ownerKey, g_hudChannel,
-                        "TC_REMOVE_ITEM|flower_raw|" + strain + "|" +
-                        quality + "|" + (string)toLoad + "|" + packager);
+                    // Store pending load data for FILL_OK handler
+                    g_pendingLoadStrain   = strain;
+                    g_pendingLoadQuality  = quality;
+                    g_pendingLoadGrams    = toLoad;
+                    g_pendingLoadPackager = packager;
 
-                    // Load immediately — TC_REMOVE_OK confirms but we trust it
-                    // A more robust version would wait for TC_REMOVE_OK
-                    loadJar(strain, quality, toLoad, packager);
+                    // Ask Storage to fill the jar
+                    llMessageLinked(LINK_SET, JCHAN_STORAGE,
+                        "FILL_JAR|" + strain + "|" + quality + "|" +
+                        (string)toLoad + "|" + packager, NULL_KEY);
                     return;
                 }
                 @skip_match;
@@ -736,15 +622,17 @@ default
             if (g_listenAccess) { llListenRemove(g_listenAccess); g_listenAccess = 0; }
 
             if (msg == "Back")    { showOwnerMenu(); return; }
-            if (msg == "Owner Only") g_accessMode = 0;
-            if (msg == "Group")      g_accessMode = 1;
-            if (msg == "Open")       g_accessMode = 2;
+
+            integer mode = 0;
+            if (msg == "Group") mode = 1;
+            if (msg == "Open")  mode = 2;
+
+            llMessageLinked(LINK_SET, JCHAN_STORAGE,
+                "SET_ACCESS|" + (string)mode, NULL_KEY);
 
             list accessLabels = ["Owner Only", "Group", "Open"];
             llOwnerSay("Jar access set to: " +
-                       llList2String(accessLabels, g_accessMode));
-            saveState();
-            updateVisuals();
+                       llList2String(accessLabels, mode));
         }
 
         // VISITOR MENU response
@@ -754,7 +642,7 @@ default
             if (g_listenVisitor) { llListenRemove(g_listenVisitor); g_listenVisitor = 0; }
 
             if (msg == "Take A Hit")
-                doSmoke(id);
+                requestSmoke(id);
         }
     }
 
@@ -765,12 +653,143 @@ default
         list   parts = llParseString2List(msg, ["|"], []);
         string cmd   = llList2String(parts, 0);
 
-        // Session object telling jar to go into session mode
-        if (cmd == "SESSION_ACTIVE")
+        // ---- Storage: full contents update (cache refresh + visuals) ----
+        if (cmd == "CONTENTS_UPDATED")
+        {
+            // CONTENTS_UPDATED|strain|quality|grams|capacity|packager|accessMode|jarType
+            g_strain     = llList2String(parts, 1);
+            g_quality    = llList2String(parts, 2);
+            g_grams      = (integer)llList2String(parts, 3);
+            g_capacity   = (integer)llList2String(parts, 4);
+            g_packager   = llList2String(parts, 5);
+            g_accessMode = (integer)llList2String(parts, 6);
+            g_jarType    = llList2String(parts, 7);
+            updateVisuals();
+        }
+
+        // ---- Storage: smoke take succeeded ----
+        else if (cmd == "TAKE_OK")
+        {
+            // TAKE_OK|strain|quality|gramsRemaining
+            string  strain    = llList2String(parts, 1);
+            string  quality   = llList2String(parts, 2);
+            integer remaining = (integer)llList2String(parts, 3);
+
+            g_grams     = remaining;
+            g_lastSmoke = llGetUnixTime();
+
+            key smoker = g_pendingSmoker;
+            g_pendingSmoker = NULL_KEY;
+            if (smoker == NULL_KEY) return; // safety
+
+            // Tell smoker's HUD about the smoke event
+            integer smokerHUDChan = deriveHUDChannel(smoker);
+            llRegionSayTo(smoker, smokerHUDChan,
+                "TC_SMOKED|" + strain + "|" + quality);
+
+            // Tell attach script to auto-attach smokeable to hand
+            llMessageLinked(LINK_SET, JCHAN_ATTACH,
+                "ATTACH|" + (string)smoker + "|" + strain + "|" + quality,
+                NULL_KEY);
+
+            // Burst particles and play sound
+            burstSmokeParticles();
+            llPlaySound("jar_open", 0.5);
+
+            // Feedback
+            if (smoker == g_ownerKey)
+                llOwnerSay("You reached in for some " + quality + " " +
+                           strain + ". " + (string)remaining + "g left.");
+            else
+                llRegionSayTo(smoker, 0,
+                    "You grabbed some " + quality + " " + strain +
+                    " from the jar.");
+
+            // Low jar warnings
+            if (remaining == 5)
+                llRegionSayTo(g_ownerKey, 0,
+                    "Your " + strain + " jar is getting low — only 5g left.");
+            else if (remaining == 0)
+                llRegionSayTo(g_ownerKey, 0,
+                    "Your " + strain + " jar is empty.");
+        }
+
+        // ---- Storage: smoke take failed (empty) ----
+        else if (cmd == "TAKE_FAIL")
+        {
+            key smoker = g_pendingSmoker;
+            g_pendingSmoker = NULL_KEY;
+            if (smoker != NULL_KEY)
+                llRegionSayTo(smoker, 0, "The jar is empty.");
+        }
+
+        // ---- Storage: fill succeeded ----
+        else if (cmd == "FILL_OK")
+        {
+            // FILL_OK|gramsLoaded|overflow
+            integer gramsLoaded = (integer)llList2String(parts, 1);
+            integer overflow    = (integer)llList2String(parts, 2);
+
+            // Remove loaded amount from HUD inventory
+            if (g_registered && g_hudChannel != 0)
+            {
+                llRegionSayTo(g_ownerKey, g_hudChannel,
+                    "TC_REMOVE_ITEM|flower_raw|" +
+                    g_pendingLoadStrain + "|" +
+                    g_pendingLoadQuality + "|" +
+                    (string)gramsLoaded + "|" +
+                    g_pendingLoadPackager);
+            }
+
+            llOwnerSay("Loaded " + (string)gramsLoaded + "g of " +
+                       g_pendingLoadQuality + " " + g_pendingLoadStrain +
+                       " into the jar.");
+
+            if (overflow > 0)
+                llOwnerSay("Jar is now full. " + (string)overflow +
+                           "g of flower was left over.");
+
+            g_pendingLoadStrain = "";
+        }
+
+        // ---- Storage: fill failed ----
+        else if (cmd == "FILL_FAIL")
+        {
+            llRegionSayTo(g_ownerKey, 0, llList2String(parts, 1));
+            g_pendingLoadStrain = "";
+        }
+
+        // ---- Storage: jar emptied, return to HUD ----
+        else if (cmd == "EMPTIED")
+        {
+            // EMPTIED|strain|quality|grams|packager
+            string  oldStrain   = llList2String(parts, 1);
+            string  oldQuality  = llList2String(parts, 2);
+            integer oldGrams    = (integer)llList2String(parts, 3);
+            string  oldPackager = llList2String(parts, 4);
+
+            if (oldGrams > 0)
+            {
+                // Return remaining flower to HUD inventory
+                if (g_registered && g_hudChannel != 0)
+                {
+                    llRegionSayTo(g_ownerKey, g_hudChannel,
+                        "TC_ADD_ITEM|flower_raw|" + oldStrain + "|" +
+                        oldQuality + "|" + (string)oldGrams + "|" +
+                        oldPackager);
+                }
+                llOwnerSay("Emptied " + (string)oldGrams + "g of " +
+                           oldStrain + " back to your inventory.");
+            }
+            else
+                llOwnerSay("The jar is already empty.");
+        }
+
+        // ---- Session object: session mode on/off ----
+        else if (cmd == "SESSION_ACTIVE")
         {
             g_inSession  = TRUE;
             g_sessionKey = id;
-            // Update hover text to show session mode
             updateHoverText();
         }
         else if (cmd == "SESSION_END")

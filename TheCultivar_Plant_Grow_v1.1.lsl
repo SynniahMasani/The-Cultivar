@@ -1,8 +1,9 @@
 // ================================================================
 // THE CULTIVAR — Plant Grow Script
-// Version: 1.0
+// Version: 1.1
 // Handles: Growth timer, stage progression, strain data,
-//          yield and quality calculation, visual stage updates
+//          yield and quality calculation, visual stage updates,
+//          grow-light bonus (GROW_LIGHT_CHAN listener)
 //
 // GROWTH STAGES:
 //   0 = Empty pot (no seed planted)
@@ -629,11 +630,10 @@ default
             llMessageLinked(LINK_SET, PCHAN_PERSIST, "SAVE_STATE", NULL_KEY);
             updateVisuals();
 
-            // Subtle visual feedback — brief golden glow on plant mesh
+            // Brief golden glow on plant mesh — the next updateVisuals() call
+            // from the timer (every 30s) will reset this to the correct value,
+            // so no llSleep is needed (which would block the entire script).
             llSetLinkPrimitiveParamsFast(2, [PRIM_GLOW, ALL_SIDES, 0.12]);
-            llSleep(1.5);
-            float baseGlow = (g_stage == 4) ? 0.05 : 0.0;
-            llSetLinkPrimitiveParamsFast(2, [PRIM_GLOW, ALL_SIDES, baseGlow]);
         }
     }
 }

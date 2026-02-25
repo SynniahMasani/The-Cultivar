@@ -224,8 +224,6 @@ default
 
         if (g_listenRegister) llListenRemove(g_listenRegister);
         g_listenRegister = llListen(0, "", NULL_KEY, "");
-        // Always listen on grow light channel for sensor feedback
-        llListen(GROW_LIGHT_CHAN, "", NULL_KEY, "");
 
         updateVisuals();
         llSetTimerEvent(SCAN_INTERVAL);
