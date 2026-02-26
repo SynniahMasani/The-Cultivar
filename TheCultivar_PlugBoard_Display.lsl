@@ -32,6 +32,7 @@ integer SLOT_STRIDE = 5;
 integer MAX_SLOTS   = 8;
 integer g_boardOpen = TRUE;
 integer g_count     = 0;
+integer g_flashSlot = -1; // slot index pending clearSlot after sold flash
 
 // Link numbers for slot prims and sign
 integer FIRST_SLOT_LINK = 2;
@@ -177,6 +178,7 @@ parseAndRefresh(string data)
 
 // ----------------------------------------------------------------
 // Brief "SOLD" flash on a slot before clearing it
+// Uses timer to avoid llSleep in link_message handler
 // ----------------------------------------------------------------
 flashSold(integer slot)
 {
@@ -186,8 +188,8 @@ flashSold(integer slot)
         PRIM_GLOW,  ALL_SIDES, 0.2,
         PRIM_TEXT,  "SOLD", <1.0, 1.0, 0.0>, 1.0
     ]);
-    llSleep(2.0);
-    clearSlot(slot);
+    g_flashSlot = slot;
+    llSetTimerEvent(2.0);
 }
 
 // ================================================================
@@ -200,6 +202,17 @@ default
         for (i = 0; i < MAX_SLOTS; i++)
             clearSlot(i);
         updateSign();
+    }
+
+    timer()
+    {
+        // Clear the slot that showed the "SOLD" flash
+        if (g_flashSlot >= 0)
+        {
+            clearSlot(g_flashSlot);
+            g_flashSlot = -1;
+        }
+        llSetTimerEvent(0.0);
     }
 
     link_message(integer sender_num, integer num, string msg, key id)
