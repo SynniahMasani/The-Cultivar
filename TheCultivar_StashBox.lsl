@@ -99,7 +99,7 @@ list parseItemName(string invName)
         {
             list parts = llParseString2List(
                 llGetSubString(invName, colonIdx + 1, -1), [":"], []);
-            if (llGetListLength(parts) >= 3)
+            if (llGetListLength(parts) >= 4)
             {
                 string strain   = llList2String(parts, 0);
                 string quality  = llList2String(parts, 1);
@@ -372,9 +372,10 @@ showVisitorMenu(key visitor)
 // ----------------------------------------------------------------
 closeAllListens()
 {
-    if (g_listenOwner)   { llListenRemove(g_listenOwner);   g_listenOwner   = 0; }
-    if (g_listenVisitor) { llListenRemove(g_listenVisitor); g_listenVisitor = 0; }
-    if (g_listenItem)    { llListenRemove(g_listenItem);    g_listenItem    = 0; }
+    if (g_listenRegister) { llListenRemove(g_listenRegister); g_listenRegister = 0; }
+    if (g_listenOwner)    { llListenRemove(g_listenOwner);    g_listenOwner    = 0; }
+    if (g_listenVisitor)  { llListenRemove(g_listenVisitor);  g_listenVisitor  = 0; }
+    if (g_listenItem)     { llListenRemove(g_listenItem);     g_listenItem     = 0; }
 }
 
 // ================================================================
@@ -479,7 +480,7 @@ default
                 updateHoverText();
                 llOwnerSay("Stash box unlocked — visitors can browse.");
             }
-            else if (msg == "View Contents")
+            else if (msg == "View Contents" || msg == "Take Item")
                 showContentsList(g_ownerKey, TRUE);
         }
 
