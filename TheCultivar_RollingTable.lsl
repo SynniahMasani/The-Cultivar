@@ -34,7 +34,7 @@ integer DCHAN_BATCH   = -112003;
 integer DCHAN_CONFIRM = -112004;
 
 integer g_listenRegister;
-integer g_listenHUD;
+integer g_listenHUD;       // opened on g_hudChannel after TC_REGISTER
 integer g_listenType;
 integer g_listenStrain;
 integer g_listenBatch;
@@ -45,6 +45,7 @@ string  g_ownerName   = "";
 integer g_hudChannel  = 0;
 integer g_registered  = FALSE;
 integer g_busy        = FALSE;
+integer g_craftDisplayActive = FALSE; // TRUE while post-craft visuals are showing
 
 // Available flower from HUD — parsed on each session
 // Stride 4: [strain, quality, qty, packager]
@@ -314,20 +315,10 @@ finishCraft()
         llToLower(g_selectedType) + (g_batchCount > 1 ? "s" : "") +
         " (" + (string)g_totalCost + "g used)");
 
-    // Fade display and mat back after a few seconds
-    llSleep(3.0);
-    llLinkParticleSystem(3, []);
-    llSetLinkPrimitiveParamsFast(2, [
-        PRIM_COLOR, ALL_SIDES, <0.3, 0.25, 0.2>, 1.0,
-        PRIM_GLOW,  ALL_SIDES, 0.0
-    ]);
-    llSetLinkPrimitiveParamsFast(4, [
-        PRIM_COLOR, ALL_SIDES, <0.3, 0.25, 0.2>, 0.0,
-        PRIM_TEXT, "", ZERO_VECTOR, 0.0
-    ]);
-
-    g_busy = FALSE;
-    resetTransaction();
+    // Schedule visual fade-down — g_craftDisplayActive flag is checked in timer()
+    // so we never call llSleep() inside a listen handler
+    g_craftDisplayActive = TRUE;
+    llSetTimerEvent(3.0);
 }
 
 // ----------------------------------------------------------------
@@ -387,6 +378,26 @@ default
 
     timer()
     {
+        // Post-craft visual fade — fires 3s after finishCraft()
+        if (g_craftDisplayActive)
+        {
+            g_craftDisplayActive = FALSE;
+            llLinkParticleSystem(3, []);
+            llSetLinkPrimitiveParamsFast(2, [
+                PRIM_COLOR, ALL_SIDES, <0.3, 0.25, 0.2>, 1.0,
+                PRIM_GLOW,  ALL_SIDES, 0.0
+            ]);
+            llSetLinkPrimitiveParamsFast(4, [
+                PRIM_COLOR, ALL_SIDES, <0.3, 0.25, 0.2>, 0.0,
+                PRIM_TEXT, "", ZERO_VECTOR, 0.0
+            ]);
+            g_busy = FALSE;
+            resetTransaction();
+            llSetTimerEvent(0.0);
+            return;
+        }
+
+        // Dialog / HUD-registration timeout
         closeAllListens();
         llSetTimerEvent(0.0);
         g_busy = FALSE;
@@ -428,6 +439,10 @@ default
             g_ownerName  = llList2String(parts, 3);
             g_registered = TRUE;
             if (g_listenRegister) { llListenRemove(g_listenRegister); g_listenRegister = 0; }
+            // Open listener on the derived HUD channel so TC_INVENTORY_DATA /
+            // TC_REMOVE_OK / TC_REMOVE_FAIL can be received
+            if (g_listenHUD) { llListenRemove(g_listenHUD); g_listenHUD = 0; }
+            g_listenHUD = llListen(g_hudChannel, "", NULL_KEY, "");
             llSetTimerEvent(0.0);
             updateHoverText();
             // Request flower inventory
