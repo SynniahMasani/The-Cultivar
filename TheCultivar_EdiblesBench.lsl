@@ -45,6 +45,7 @@ string  g_ownerName   = "";
 integer g_hudChannel  = 0;
 integer g_registered  = FALSE;
 integer g_busy        = FALSE;
+integer g_craftDisplayActive = FALSE; // TRUE while post-craft visuals are showing
 string  g_benchMode   = ""; // "edibles" or "press"
 
 // Available flower
@@ -373,17 +374,9 @@ finishCraft()
         g_selectedQuality + " " + g_selectedStrain + " " + itemLabel +
         " (" + (string)g_totalCost + "g used)");
 
-    // Fade everything back
-    llSleep(4.0);
-    llLinkParticleSystem(5, []);
-    llSetLinkPrimitiveParamsFast(3, [PRIM_GLOW, ALL_SIDES, 0.0]);
-    llSetLinkPrimitiveParamsFast(4, [
-        PRIM_GLOW, ALL_SIDES, 0.0,
-        PRIM_TEXT, "", ZERO_VECTOR, 0.0
-    ]);
-
-    g_busy = FALSE;
-    resetTransaction();
+    // Schedule visual fade-down via timer — never call llSleep in a listen handler
+    g_craftDisplayActive = TRUE;
+    llSetTimerEvent(4.0);
 }
 
 resetTransaction()
@@ -424,6 +417,23 @@ default
 
     timer()
     {
+        // Post-craft visual fade — fires 4s after finishCraft()
+        if (g_craftDisplayActive)
+        {
+            g_craftDisplayActive = FALSE;
+            llLinkParticleSystem(5, []);
+            llSetLinkPrimitiveParamsFast(3, [PRIM_GLOW, ALL_SIDES, 0.0]);
+            llSetLinkPrimitiveParamsFast(4, [
+                PRIM_GLOW, ALL_SIDES, 0.0,
+                PRIM_TEXT, "", ZERO_VECTOR, 0.0
+            ]);
+            g_busy = FALSE;
+            resetTransaction();
+            llSetTimerEvent(0.0);
+            return;
+        }
+
+        // Dialog / HUD-registration timeout
         closeAllListens();
         llSetTimerEvent(0.0);
         g_busy = FALSE;
@@ -459,6 +469,10 @@ default
             g_ownerName  = llList2String(parts, 3);
             g_registered = TRUE;
             if (g_listenRegister) { llListenRemove(g_listenRegister); g_listenRegister = 0; }
+            // Open HUD channel listener so TC_INVENTORY_DATA / TC_REMOVE_OK /
+            // TC_REMOVE_FAIL can be received
+            if (g_listenHUD) { llListenRemove(g_listenHUD); g_listenHUD = 0; }
+            g_listenHUD = llListen(g_hudChannel, "", NULL_KEY, "");
             llSetTimerEvent(0.0);
             updateHoverText();
             llRegionSayTo(g_ownerKey, g_hudChannel,
