@@ -93,7 +93,7 @@ stopAmbientSmoke()
 updateGlowRing()
 {
     vector col = qualColor(g_quality);
-    float  glow = g_active ? 0.08 : 0.0;
+    float  glow = g_active * 0.08;
     llSetLinkPrimitiveParamsFast(3, [
         PRIM_COLOR, ALL_SIDES, col, 1.0,
         PRIM_GLOW,  ALL_SIDES, glow

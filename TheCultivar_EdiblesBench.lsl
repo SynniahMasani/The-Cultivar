@@ -248,10 +248,11 @@ showBatchMenu()
     integer qIdx   = llListFindList(QUALITY_NAMES, [g_selectedQuality]);
     integer bonus  = llList2Integer(QUALITY_BONUS, qIdx);
     integer baseIdx = llListFindList(EDIBLE_IDS, [g_selectedItem]);
-    integer yield  = (g_selectedItem == CONC_ID) ? 1 :
-                     llList2Integer(EDIBLE_YIELDS, baseIdx);
-    string  bonusStr = bonus > 0 ? "  (+" + (string)bonus + " " +
-                       g_selectedQuality + " bonus!)" : "";
+    integer yield;
+    if (g_selectedItem == CONC_ID) yield = 1;
+    else yield = llList2Integer(EDIBLE_YIELDS, baseIdx);
+    string  bonusStr = "";
+    if (bonus > 0) bonusStr = "  (+" + (string)bonus + " " + g_selectedQuality + " bonus!)";
 
     list   buttons;
     string menuText = "=== HOW MANY BATCHES? ===\n" +
@@ -321,9 +322,10 @@ finishCraft()
     integer isPress = (g_benchMode == "press");
 
     // Burner glow (link 3)
+    vector burnerCol = <1.0, 0.5, 0.1>;
+    if (isPress) burnerCol = <0.5, 0.8, 1.0>;
     llSetLinkPrimitiveParamsFast(3, [
-        PRIM_COLOR, ALL_SIDES,
-            isPress ? <0.5, 0.8, 1.0> : <1.0, 0.5, 0.1>, 1.0,
+        PRIM_COLOR, ALL_SIDES, burnerCol, 1.0,
         PRIM_GLOW,  ALL_SIDES, 0.2
     ]);
 
@@ -337,7 +339,8 @@ finishCraft()
     ]);
 
     // Particle steam or vapor (link 5)
-    vector steamCol = isPress ? <0.7, 0.9, 1.0> : <1.0, 0.95, 0.8>;
+    vector steamCol = <1.0, 0.95, 0.8>;
+    if (isPress) steamCol = <0.7, 0.9, 1.0>;
     llLinkParticleSystem(5, [
         PSYS_PART_FLAGS,           PSYS_PART_INTERP_COLOR_MASK |
                                    PSYS_PART_INTERP_SCALE_MASK |
@@ -360,7 +363,9 @@ finishCraft()
         PSYS_SRC_ANGLE_END,        0.25
     ]);
 
-    llPlaySound(isPress ? "press_done" : "cook_done", 0.6);
+    string craftSound = "cook_done";
+    if (isPress) craftSound = "press_done";
+    llPlaySound(craftSound, 0.6);
 
     // Nice readable item label for the notification
     string itemLabel = g_selectedItem;
@@ -395,8 +400,9 @@ resetTransaction()
 
 updateHoverText()
 {
-    llSetText("THE CULTIVAR\nCrafting Bench\n" +
-              (g_registered ? "Touch to craft" : "Touch to begin"),
+    string benchPrompt = "Touch to begin";
+    if (g_registered) benchPrompt = "Touch to craft";
+    llSetText("THE CULTIVAR\nCrafting Bench\n" + benchPrompt,
               <0.9, 0.6, 0.2>, 1.0);
 }
 

@@ -136,9 +136,11 @@ string fastForward(string stateStr)
 
     if (stagesAdvanced > 0)
     {
+        string harvestMsg = ".";
+        if (stage == 4) harvestMsg = " — ready to harvest!";
         llOwnerSay("🌿 Your " + strainName +
                    " grew while you were away. Now at stage " +
-                   (string)stage + (stage == 4 ? " — ready to harvest!" : "."));
+                   (string)stage + harvestMsg);
     }
 
     return buildSaveString(strainName, qualityTier, stage, stageStartTime,

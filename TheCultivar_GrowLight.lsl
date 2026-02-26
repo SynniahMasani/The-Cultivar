@@ -131,16 +131,21 @@ updateVisuals()
         ]);
         // Status prim
         string tierName = llList2String(TIER_NAMES, g_tier);
-        string autoStr  = (g_powerState == "auto") ? " [AUTO]" : "";
+        string autoStr  = "";
+        if (g_powerState == "auto") autoStr = " [AUTO]";
+        string plantsStr = "No plants in range";
+        if (g_plantsFound > 0)
+        {
+            string sPl = "";
+            if (g_plantsFound > 1) sPl = "s";
+            plantsStr = (string)g_plantsFound + " plant" + sPl + " in range";
+        }
         llSetLinkPrimitiveParamsFast(4, [
             PRIM_COLOR, ALL_SIDES, <0.2, 0.9, 0.2>, 1.0,
             PRIM_TEXT,
                 "✓ " + tierName + autoStr + "\n" +
                 "-" + (string)llList2Integer(TIER_BONUS, g_tier) + "% grow time\n" +
-                (g_plantsFound > 0 ?
-                    (string)g_plantsFound + " plant" +
-                    (g_plantsFound > 1 ? "s" : "") + " in range" :
-                    "No plants in range"),
+                plantsStr,
                 <0.2, 0.9, 0.2>, 1.0
         ]);
     }
@@ -155,8 +160,8 @@ updateVisuals()
         llSetLinkPrimitiveParamsFast(3, [
             PRIM_COLOR, ALL_SIDES, <0.3, 0.3, 0.3>, 0.0
         ]);
-        string reason = (g_powerState == "off") ? "OFF" :
-                        "AUTO — waiting for 6am SLT";
+        string reason = "AUTO — waiting for 6am SLT";
+        if (g_powerState == "off") reason = "OFF";
         llSetLinkPrimitiveParamsFast(4, [
             PRIM_COLOR, ALL_SIDES, <0.8, 0.2, 0.2>, 1.0,
             PRIM_TEXT,  reason, <0.8, 0.2, 0.2>, 1.0
@@ -200,12 +205,13 @@ showOwnerMenu()
     else if (g_powerState == "off")  stateLabel = "State: OFF";
     else                             stateLabel = "State: AUTO";
 
+    string plantSuffix = "";
+    if (g_plantsFound != 1) plantSuffix = "s";
     llDialog(g_ownerKey,
         "=== GROW LIGHT ===\n" +
         llList2String(TIER_NAMES, g_tier) + "\n" +
         stateLabel + "  •  " +
-        (string)g_plantsFound + " plant" +
-        (g_plantsFound != 1 ? "s" : "") + " in range",
+        (string)g_plantsFound + " plant" + plantSuffix + " in range",
         ["Turn On", "Turn Off", "Auto Mode",
          "Standard", "LED Panel", "Full Spectrum",
          "Close"],

@@ -137,8 +137,8 @@ setButtonGlow(integer link, float glow)
 
 refreshAllGlows()
 {
-    setButtonGlow(LINK_BTN_SMOKE,   g_isSmoking ? 0.1 : 0.0);
-    setButtonGlow(LINK_BTN_SESSION, g_inSession ? 0.1 : 0.0);
+    setButtonGlow(LINK_BTN_SMOKE,   g_isSmoking * 0.1);
+    setButtonGlow(LINK_BTN_SESSION, g_inSession * 0.1);
     // All other buttons stay dim
     setButtonGlow(LINK_BTN_INVENTORY, 0.0);
     setButtonGlow(LINK_BTN_GROW,      0.0);
@@ -207,12 +207,10 @@ parseItems(string rawData, string filterPrefix)
 showMainMenu()
 {
     closeAllListens();
-    string line1 = g_isSmoking ?
-        "Smoking: " + g_smokeQuality + " " + g_smokeStrain :
-        "Not smoking";
-    string line2 = g_inSession ?
-        "Session: " + g_sessionHost :
-        "No active session";
+    string line1 = "Not smoking";
+    if (g_isSmoking) line1 = "Smoking: " + g_smokeQuality + " " + g_smokeStrain;
+    string line2 = "No active session";
+    if (g_inSession) line2 = "Session: " + g_sessionHost;
 
     g_lisMain = llListen(DCHAN_MAIN, "", g_ownerKey, "");
     llDialog(g_ownerKey,

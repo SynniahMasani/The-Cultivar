@@ -101,9 +101,10 @@ pingHUD()
 startIdleParticles()
 {
     if (!g_effectsOn || !g_attached) return;
-    vector col = g_currentQuality != "" ?
-                 qualColor(g_currentQuality) : <0.5, 0.5, 0.5>;
-    float alpha = g_inSession ? 0.2 : 0.05;
+    vector col = <0.5, 0.5, 0.5>;
+    if (g_currentQuality != "") col = qualColor(g_currentQuality);
+    float alpha = 0.05;
+    if (g_inSession) alpha = 0.2;
 
     llLinkParticleSystem(3, [
         PSYS_PART_FLAGS,           PSYS_PART_INTERP_COLOR_MASK |
@@ -136,10 +137,11 @@ playHitParticles(string quality)
 
     // Dab rig gets a different, denser burst (concentrate is potent)
     integer isDab   = (PIECE_TYPE == "dab_rig");
-    float   alpha   = isDab ? 0.75 : 0.6;
-    integer count   = isDab ? 10 : 6;
-    float   maxAge  = isDab ? 5.0 : 4.0;
-    float   srcAge  = isDab ? 2.5 : 1.8;
+    float   alpha   = 0.6;
+    integer count   = 6;
+    float   maxAge  = 4.0;
+    float   srcAge  = 1.8;
+    if (isDab) { alpha = 0.75; count = 10; maxAge = 5.0; srcAge = 2.5; }
 
     llLinkParticleSystem(3, [
         PSYS_PART_FLAGS,           PSYS_PART_INTERP_COLOR_MASK |
@@ -164,15 +166,18 @@ playHitParticles(string quality)
     ]);
 
     // Bowl/nail glow (link 2) flares on hit
+    float hitGlow = 0.18;
+    if (isDab) hitGlow = 0.25;
     llSetLinkPrimitiveParamsFast(2, [
         PRIM_COLOR, ALL_SIDES, col, 1.0,
-        PRIM_GLOW,  ALL_SIDES, isDab ? 0.25 : 0.18
+        PRIM_GLOW,  ALL_SIDES, hitGlow
     ]);
     llPlaySound("piece_hit", 0.5);
 
     // Fade back to idle after hit duration
     llSleep(srcAge + 1.0);
-    float idleGlow = g_inSession ? 0.07 : 0.02;
+    float idleGlow = 0.02;
+    if (g_inSession) idleGlow = 0.07;
     llSetLinkPrimitiveParamsFast(2, [
         PRIM_COLOR, ALL_SIDES, col, 1.0,
         PRIM_GLOW,  ALL_SIDES, idleGlow
@@ -186,11 +191,14 @@ playHitParticles(string quality)
 updateBowlGlow()
 {
     if (!g_attached) return;
-    vector col = g_currentQuality != "" ?
-                 qualColor(g_currentQuality) : <0.4, 0.4, 0.4>;
+    vector col = <0.4, 0.4, 0.4>;
+    if (g_currentQuality != "") col = qualColor(g_currentQuality);
     float glow = 0.0;
     if (g_currentQuality != "")
-        glow = g_inSession ? 0.08 : 0.02;
+    {
+        glow = 0.02;
+        if (g_inSession) glow = 0.08;
+    }
 
     llSetLinkPrimitiveParamsFast(2, [
         PRIM_COLOR, ALL_SIDES, col, 1.0,
@@ -210,15 +218,16 @@ updateHoverText()
     else if (PIECE_TYPE == "bong")    typeLabel = "Bong 💨";
     else if (PIECE_TYPE == "dab_rig") typeLabel = "Dab Rig ✨";
 
-    string strainLine = g_currentQuality != "" ?
-        g_currentQuality + " " + g_currentStrain :
-        "No strain loaded";
-    string sessionStr = g_inSession ? "  •  🌿 Session" : "";
+    string strainLine = "No strain loaded";
+    if (g_currentQuality != "") strainLine = g_currentQuality + " " + g_currentStrain;
+    string sessionStr = "";
+    if (g_inSession) sessionStr = "  •  🌿 Session";
+    string textQuality = "reggie";
+    if (g_currentQuality != "") textQuality = g_currentQuality;
 
     llSetText("THE CULTIVAR — " + typeLabel + "\n" +
               strainLine + sessionStr,
-              qualColor(g_currentQuality != "" ?
-                        g_currentQuality : "reggie"), 0.85);
+              qualColor(textQuality), 0.85);
 }
 
 // ----------------------------------------------------------------
@@ -229,13 +238,16 @@ showTouchMenu()
     if (g_listenTouch) llListenRemove(g_listenTouch);
     g_listenTouch = llListen(DCHAN_TOUCH, "", g_ownerKey, "");
 
-    string effectsLabel = g_effectsOn ? "Effects: ON" : "Effects: OFF";
+    string effectsLabel = "Effects: OFF";
+    if (g_effectsOn) effectsLabel = "Effects: ON";
+    string dialogItem = "Nothing loaded";
+    if (g_currentQuality != "") dialogItem = g_currentQuality + " " + g_currentStrain;
+    string dialogSession = "";
+    if (g_inSession) dialogSession = "In session";
     llDialog(g_ownerKey,
         "=== " + llToUpper(PIECE_TYPE) + " ===\n" +
-        (g_currentQuality != "" ?
-            g_currentQuality + " " + g_currentStrain :
-            "Nothing loaded") + "\n" +
-        (g_inSession ? "In session" : ""),
+        dialogItem + "\n" +
+        dialogSession,
         [effectsLabel, "Clear Strain", "Detach", "Close"],
         DCHAN_TOUCH);
     llSetTimerEvent(20.0);

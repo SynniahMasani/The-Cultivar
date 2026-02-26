@@ -206,7 +206,9 @@ updateHoverText()
         return;
     }
 
-    text += (string)count + " strain" + (count != 1 ? "s" : "") + " available\n";
+    string strainPl = "";
+    if (count != 1) strainPl = "s";
+    text += (string)count + " strain" + strainPl + " available\n";
     text += "Touch to browse\nOwner: " + g_ownerName;
     llSetText(text, <0.4, 0.9, 0.4>, 1.0);
 }
@@ -231,13 +233,16 @@ showOwnerMenu()
 {
     closeAllListens();
     integer count  = llGetListLength(g_listings) / LIST_STRIDE;
-    string  status = (string)count + " listings  •  " +
-                     (g_boardOpen ? "OPEN" : "CLOSED");
+    string  boardStateStr = "CLOSED";
+    if (g_boardOpen) boardStateStr = "OPEN";
+    string  status = (string)count + " listings  •  " + boardStateStr;
+    string  toggleBtn = "Open Board";
+    if (g_boardOpen) toggleBtn = "Close Board";
 
     g_listenOwnerMain = llListen(DCHAN_OWNER_MAIN, "", g_ownerKey, "");
     llDialog(g_ownerKey,
         "=== YOUR PLUG BOARD ===\n" + status,
-        ["Set Prices", "Restock", g_boardOpen ? "Close Board" : "Open Board",
+        ["Set Prices", "Restock", toggleBtn,
          "Clear Slot", "Board Stats", "Close"],
         DCHAN_OWNER_MAIN);
     llSetTimerEvent(30.0);
@@ -265,7 +270,8 @@ showSetPricesMenu()
         string  quality = listingStr(i, 2);
         integer price   = listingInt(i, 5);
         integer weight  = listingInt(i, 4);
-        string  priceStr = price > 0 ? "L$" + (string)price : "unpriced";
+        string  priceStr = "unpriced";
+        if (price > 0) priceStr = "L$" + (string)price;
 
         buttons += [llGetSubString(strain, 0, 8) + " #" + (string)(i+1)];
         menuText += "#" + (string)(i+1) + " " + quality + " " + strain +
@@ -290,7 +296,8 @@ showPricePicker(integer slot)
     integer weight = listingInt(slot, 4);
     integer cur    = listingInt(slot, 5);
 
-    string curStr = cur > 0 ? "Current: L$" + (string)cur : "Unpriced";
+    string curStr = "Unpriced";
+    if (cur > 0) curStr = "Current: L$" + (string)cur;
     g_listenOwnerPrice = llListen(DCHAN_OWNER_PRICE, "", g_ownerKey, "");
     llDialog(g_ownerKey,
         "=== PRICE: " + quality + " " + strain + " " + (string)weight + "g ===\n" +
