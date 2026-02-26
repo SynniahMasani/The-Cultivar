@@ -69,14 +69,16 @@ updateSlot(integer slot, string strain, string quality,
     integer linkNum = FIRST_SLOT_LINK + slot;
 
     vector col  = qualColor(quality);
-    float  glow = (price > 0) ? 0.12 : 0.04;
+    float  glow = 0.04;
+    if (price > 0) glow = 0.12;
 
     llSetLinkPrimitiveParamsFast(linkNum, [
         PRIM_COLOR, ALL_SIDES, col, 1.0,
         PRIM_GLOW,  ALL_SIDES, glow
     ]);
 
-    string priceStr = (price > 0) ? "L$" + (string)price : "[ unpriced ]";
+    string priceStr = "[ unpriced ]";
+    if (price > 0) priceStr = "L$" + (string)price;
     string hoverText =
         qualLabel(quality) + "  " + strain + "\n" +
         (string)weight + "g  •  by " + packager + "\n" +

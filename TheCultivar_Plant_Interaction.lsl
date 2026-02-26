@@ -91,7 +91,8 @@ string buildStatusString()
         if (g_fertApplied) status += "✓ Fertilized\n";
     }
 
-    string potLabel = g_potType_basic ? "Basic pot" : "Premium pot";
+    string potLabel = "Premium pot";
+    if (g_potType_basic) potLabel = "Basic pot";
     if (g_potType_basic)
         potLabel += " (" + (string)g_potUsesLeft + " uses left)";
     status += potLabel;
@@ -368,7 +369,8 @@ default
         {
             if (msg == "Back") { showPotMenu(); return; }
             // msg is the chosen strain name
-            string potType   = g_potType_basic ? "basic" : "premium";
+            string potType = "premium";
+            if (g_potType_basic) potType = "basic";
             integer usesLeft = g_potUsesLeft;
             llMessageLinked(LINK_SET, PCHAN_GROW,
                 "PLANT_SEED|" + msg + "|" + potType + "|" + (string)usesLeft,

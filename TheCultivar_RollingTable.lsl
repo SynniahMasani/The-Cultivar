@@ -309,10 +309,12 @@ finishCraft()
     llPlaySound("rolling_done", 0.6);
 
     // Notify player
+    string rollPl = "";
+    if (g_batchCount > 1) rollPl = "s";
     llRegionSayTo(g_ownerKey, 0,
         "✓ Rolled " + (string)g_batchCount + "x " +
         g_selectedQuality + " " + g_selectedStrain + " " +
-        llToLower(g_selectedType) + (g_batchCount > 1 ? "s" : "") +
+        llToLower(g_selectedType) + rollPl +
         " (" + (string)g_totalCost + "g used)");
 
     // Schedule visual fade-down — g_craftDisplayActive flag is checked in timer()
@@ -352,7 +354,8 @@ resetTransaction()
 // ----------------------------------------------------------------
 updateHoverText()
 {
-    string status = g_registered ? "Touch to roll" : "Touch to begin";
+    string status = "Touch to begin";
+    if (g_registered) status = "Touch to roll";
     llSetText("THE CULTIVAR\nRolling Table\n" + status,
               <0.55, 0.45, 0.3>, 1.0);
 }

@@ -167,7 +167,8 @@ updateDisplay()
             vector  col     = qualColor(quality);
             string  dname   = llList2String(g_contents, i * CONT_STRIDE + 1);
             string  cat     = llList2String(g_contents, i * CONT_STRIDE + 3);
-            string  catIcon = (cat == "jar") ? "🫙" : "📦";
+            string  catIcon = "📦";
+            if (cat == "jar") catIcon = "🫙";
 
             llSetLinkPrimitiveParamsFast(linkNum, [
                 PRIM_COLOR, ALL_SIDES, col, 1.0,
@@ -254,7 +255,8 @@ updateDisplay()
 updateHoverText()
 {
     integer count = llGetListLength(g_contents) / CONT_STRIDE;
-    string  lockStr = g_locked ? " 🔒" : "";
+    string  lockStr = "";
+    if (g_locked) lockStr = " 🔒";
     if (count == 0)
     {
         llSetText("THE CULTIVAR\nStash Box [Empty]" + lockStr +
@@ -274,11 +276,18 @@ updateHoverText()
     }
 
     string contents = "";
-    if (bags > 0) contents += (string)bags + " bag" + (bags > 1 ? "s" : "");
+    if (bags > 0)
+    {
+        string bagPl = "";
+        if (bags > 1) bagPl = "s";
+        contents += (string)bags + " bag" + bagPl;
+    }
     if (jars > 0)
     {
         if (contents != "") contents += "  •  ";
-        contents += (string)jars + " jar" + (jars > 1 ? "s" : "");
+        string jarPl = "";
+        if (jars > 1) jarPl = "s";
+        contents += (string)jars + " jar" + jarPl;
     }
 
     llSetText("THE CULTIVAR\nStash Box" + lockStr + "\n" +
@@ -295,13 +304,17 @@ showOwnerMenu()
     g_listenOwner = llListen(DCHAN_OWNER, "", g_ownerKey, "");
 
     integer count = llGetListLength(g_contents) / CONT_STRIDE;
+    string itemPl = "";
+    if (count != 1) itemPl = "s";
+    string lockStatus = "UNLOCKED — visitors can view";
+    if (g_locked) lockStatus = "LOCKED — visitors can't browse";
+    string lockBtn = "Lock";
+    if (g_locked) lockBtn = "Unlock";
     llDialog(g_ownerKey,
         "=== YOUR STASH BOX ===\n" +
-        (string)count + " item" + (count != 1 ? "s" : "") + " stored\n" +
-        (g_locked ? "LOCKED — visitors can't browse" :
-                    "UNLOCKED — visitors can view"),
-        [g_locked ? "Unlock" : "Lock",
-         "View Contents", "Take Item", "Close"],
+        (string)count + " item" + itemPl + " stored\n" +
+        lockStatus,
+        [lockBtn, "View Contents", "Take Item", "Close"],
         DCHAN_OWNER);
     llSetTimerEvent(30.0);
 }
@@ -325,7 +338,8 @@ showContentsList(key viewer, integer ownerView)
         string dname   = llList2String(g_contents, i * CONT_STRIDE + 1);
         string quality = llList2String(g_contents, i * CONT_STRIDE + 2);
         string cat     = llList2String(g_contents, i * CONT_STRIDE + 3);
-        string catIcon = (cat == "jar") ? "🫙" : "📦";
+        string catIcon = "📦";
+        if (cat == "jar") catIcon = "🫙";
         msg += catIcon + " " + quality + " " + dname + "\n";
     }
 
@@ -361,9 +375,11 @@ showVisitorMenu(key visitor)
     g_listenVisitor = llListen(DCHAN_VISITOR, "", visitor, "");
 
     integer count = llGetListLength(g_contents) / CONT_STRIDE;
+    string visItemPl = "";
+    if (count != 1) visItemPl = "s";
     llDialog(visitor,
         "=== " + g_ownerName + "'s Stash Box ===\n" +
-        (string)count + " item" + (count != 1 ? "s" : "") + " inside\n" +
+        (string)count + " item" + visItemPl + " inside\n" +
         "Touch to browse contents.",
         ["View Contents", "Close"], DCHAN_VISITOR);
     llSetTimerEvent(30.0);

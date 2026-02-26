@@ -171,11 +171,13 @@ showOwnerMenu()
     else
         buttons = ["Put For Sale", "Load Into Jar", "Take Back", "Close"];
 
+    string saleStr = "Personal";
+    if (g_forSale) saleStr = "FOR SALE @ L$" + (string)g_price;
     llDialog(g_ownerKey,
         "=== YOUR BAG ===\n" +
         g_strain + " [" + qualLabel() + "]\n" +
         (string)g_weight + "g  •  Packed by: " + g_packager + "\n" +
-        (g_forSale ? "FOR SALE @ L$" + (string)g_price : "Personal"),
+        saleStr,
         buttons, DCHAN_OWNER);
     llSetTimerEvent(30.0);
 }
