@@ -216,6 +216,7 @@ updateHoverText()
 // ----------------------------------------------------------------
 closeAllListens()
 {
+    if (g_listenRegister)     { llListenRemove(g_listenRegister);     g_listenRegister    = 0; }
     if (g_listenOwnerMain)    { llListenRemove(g_listenOwnerMain);    g_listenOwnerMain   = 0; }
     if (g_listenOwnerPrice)   { llListenRemove(g_listenOwnerPrice);   g_listenOwnerPrice  = 0; }
     if (g_listenOwnerSlot)    { llListenRemove(g_listenOwnerSlot);    g_listenOwnerSlot   = 0; }
@@ -371,10 +372,8 @@ showBuyerMenu(key buyer)
 
     if (llGetListLength(buttons) == 0)
     {
-        llDialog(buyer,
-            "Nothing priced for sale right now. Check back soon.",
-            ["Close"], -999);
-        llListen(-999, "", buyer, "");
+        llRegionSayTo(buyer, 0,
+            "Nothing priced for sale right now. Check back soon.");
         return;
     }
 
@@ -496,8 +495,8 @@ default
         if (g_listenRegister) llListenRemove(g_listenRegister);
         g_listenRegister = llListen(0, "", NULL_KEY, "");
 
-        // Listen on HUD private channel
-        llListen(g_hudChannel, "", NULL_KEY, "");
+        // g_listenHUD is not opened here — the board sends TC_SALE_COMPLETE
+        // to the HUD but never needs to receive anything on g_hudChannel
 
         rebuildListings();
         updateHoverText();
