@@ -227,10 +227,10 @@ default
         // UI requests current animation state (for display)
         else if (cmd == "REQUEST_ANIM_STATE")
         {
-            string state = "IDLE";
+            string animState = "IDLE";
             if (g_currentAnim != "")
-                state = "SMOKING|" + g_currentStrain + "|" + g_currentQuality;
-            llMessageLinked(LINK_SET, CHAN_UI, "ANIM_STATE|" + state, NULL_KEY);
+                animState = "SMOKING|" + g_currentStrain + "|" + g_currentQuality;
+            llMessageLinked(LINK_SET, CHAN_UI, "ANIM_STATE|" + animState, NULL_KEY);
         }
 
         // Switch animation quality on the fly (e.g. passed a better item)
