@@ -222,6 +222,12 @@ default
         g_ownerName  = llKey2Name(g_ownerKey);
         g_hudChannel = deriveHUDChannel(g_ownerKey);
 
+        // Restore saved power state and tier after a sim restart or reset
+        string savedPower = llLinksetDataRead("light_power");
+        string savedTier  = llLinksetDataRead("light_tier");
+        if (savedPower != "") g_powerState = savedPower;
+        if (savedTier  != "") g_tier = (integer)savedTier;
+
         if (g_listenRegister) llListenRemove(g_listenRegister);
         g_listenRegister = llListen(0, "", NULL_KEY, "");
 

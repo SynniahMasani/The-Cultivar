@@ -61,6 +61,7 @@ integer DCHAN_CLAIM = -140001;
 integer g_listenClaim;
 
 integer g_busy = FALSE;
+integer g_celebrateUntil = 0; // unix time after which idle particles should be restored
 
 // ----------------------------------------------------------------
 vector qualColor(string quality)
@@ -251,7 +252,9 @@ giveSeed(key claimer, string strain)
         "✨ DROP CLAIMED! " + g_dropQuality + " " + strain +
         " seed added to your inventory. Grow something special.");
 
-    // Brief celebration burst
+    // Brief celebration burst — PSYS_SRC_MAX_AGE auto-stops the source at 0.5s.
+    // g_celebrateUntil causes the timer to restore idle particles after 2.5s
+    // without calling llSleep() inside an http_response handler.
     llLinkParticleSystem(4, [
         PSYS_PART_FLAGS,           PSYS_PART_EMISSIVE_MASK,
         PSYS_SRC_PATTERN,          PSYS_SRC_PATTERN_EXPLODE,
@@ -268,8 +271,8 @@ giveSeed(key claimer, string strain)
         PSYS_SRC_MAX_AGE,          0.5
     ]);
     llPlaySound("drop_claimed", 0.8);
-    llSleep(2.0);
-    updateVisuals(); // restore idle particles
+    g_celebrateUntil = llGetUnixTime() + 3;
+    llSetTimerEvent(3.0); // restore idle particles after celebration
 }
 
 // ================================================================
@@ -279,8 +282,9 @@ default
     {
         llSetTimerEvent(5.0); // initial poll shortly after rez
         updateVisuals();
-        // Listen for claim dialog responses on a fixed channel
-        llListen(DCHAN_CLAIM, "", NULL_KEY, "");
+        // Per-toucher listener opened in touch_start; no always-on listen needed.
+        // An always-on NULL_KEY listener here would cause double processing
+        // (unfiltered + key-filtered both fire for the same dialog response).
     }
 
     on_rez(integer start_param) { llResetScript(); }
@@ -288,6 +292,15 @@ default
 
     timer()
     {
+        // Restore idle particles after celebration burst
+        if (g_celebrateUntil > 0 && llGetUnixTime() >= g_celebrateUntil)
+        {
+            g_celebrateUntil = 0;
+            updateVisuals();
+            llSetTimerEvent(POLL_INTERVAL);
+            return;
+        }
+
         // Claim request timed out
         if (g_claimRequest != NULL_KEY)
         {

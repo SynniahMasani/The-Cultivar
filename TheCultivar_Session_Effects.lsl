@@ -33,6 +33,11 @@ float   PULSE_STEP = 0.05;
 float   PULSE_MIN  = 0.02;
 float   PULSE_MAX  = 0.18;
 
+// Pass effect cleanup — unix time when link 4 particles can be cleared.
+// PSYS_SRC_MAX_AGE stops the source automatically; this clears the
+// particle system definition so it doesn't fire again on region-crossing.
+integer g_passCleanupAt = 0;
+
 // ----------------------------------------------------------------
 // Quality color
 // ----------------------------------------------------------------
@@ -144,9 +149,10 @@ playPassEffect(key fromKey, key toKey)
     // Play pass sound
     llPlaySound("pass_whoosh", 0.6);
 
-    // Clear after burst
-    llSleep(2.0);
-    llLinkParticleSystem(4, []);
+    // Schedule cleanup — pulseTick() checks this every 0.15s.
+    // PSYS_SRC_MAX_AGE stops the burst source at 1.5s; we clear the
+    // particle system definition at 2s so it doesn't persist.
+    g_passCleanupAt = llGetUnixTime() + 2;
 }
 
 // ----------------------------------------------------------------
@@ -155,6 +161,13 @@ playPassEffect(key fromKey, key toKey)
 // ----------------------------------------------------------------
 pulseTick()
 {
+    // Clear pass effect particles once the burst has expired
+    if (g_passCleanupAt > 0 && llGetUnixTime() >= g_passCleanupAt)
+    {
+        g_passCleanupAt = 0;
+        llLinkParticleSystem(4, []);
+    }
+
     g_pulseVal += (float)g_pulseDir * PULSE_STEP;
 
     if (g_pulseVal >= PULSE_MAX)
