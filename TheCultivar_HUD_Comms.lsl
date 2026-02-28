@@ -247,13 +247,21 @@ default
                 integer qty    = (integer)llList2String(parts, 3);
                 string owner   = llKey2Name(g_ownerKey);
 
+                // Apply grower level yield perk before adding to inventory
+                integer growerLevel = (integer)llLinksetDataRead("grower_level");
+                if (growerLevel >= 20)
+                    qty = qty + (qty * 30 / 100);
+                else if (growerLevel >= 10)
+                    qty = qty + (qty * 15 / 100);
+
                 // Add to inventory
                 llMessageLinked(LINK_SET, CHAN_INVENTORY,
                     "ADD_ITEM|flower_raw|" + strain + "|" + quality + "|" +
                     (string)qty + "|" + owner, NULL_KEY);
 
-                // Update grown stat
+                // Update grown stat and grant grower XP
                 llMessageLinked(LINK_SET, CHAN_IDENTITY, "UPDATE_GROWN", NULL_KEY);
+                llMessageLinked(LINK_SET, CHAN_IDENTITY, "UPDATE_XP|grower|5", NULL_KEY);
 
                 llOwnerSay("Harvest received: " + (string)qty + "g of " +
                            quality + " " + strain + "!");
@@ -346,8 +354,18 @@ default
             else if (cmd == "TC_SALE_COMPLETE")
             {
                 llMessageLinked(LINK_SET, CHAN_IDENTITY, "UPDATE_SOLD", NULL_KEY);
+                llMessageLinked(LINK_SET, CHAN_IDENTITY, "UPDATE_XP|seller|1", NULL_KEY);
                 llOwnerSay("Sale complete! L$" + llList2String(parts,1) +
                            " has been paid to you.");
+            }
+
+            // World object reporting XP earned (e.g. RollingTable after craft)
+            // TC_XP_UPDATE|track|amount
+            else if (cmd == "TC_XP_UPDATE")
+            {
+                llMessageLinked(LINK_SET, CHAN_IDENTITY,
+                    "UPDATE_XP|" + llList2String(parts, 1) + "|" +
+                    llList2String(parts, 2), NULL_KEY);
             }
 
             // Another player's HUD is passing us something

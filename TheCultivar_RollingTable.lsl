@@ -271,6 +271,10 @@ finishCraft()
         "TC_ADD_ITEM|" + itemID + "|" + g_selectedStrain + "|" +
         g_selectedQuality + "|" + (string)g_batchCount + "|" + g_brandName);
 
+    // Grant roller XP (1 XP per rolled item)
+    llRegionSayTo(g_ownerKey, g_hudChannel,
+        "TC_XP_UPDATE|roller|" + (string)g_batchCount);
+
     // Visual effects — quality-tinted particle burst from table surface
     vector col = qualColor(g_selectedQuality);
     llLinkParticleSystem(3, [
