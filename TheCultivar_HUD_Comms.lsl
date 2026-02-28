@@ -71,10 +71,11 @@ startListening()
 // ----------------------------------------------------------------
 registerWithObject(key objectKey)
 {
-    // Send our private channel and owner key to the object
+    // Send our private channel, owner key, and brand name to the object
     llRegionSayTo(objectKey, 0,
         "TC_REGISTER|" + (string)g_ownerKey + "|" +
-        (string)g_privateChannel + "|" + g_ownerName);
+        (string)g_privateChannel + "|" + g_ownerName + "|" +
+        llLinksetDataRead("id_brand"));
 }
 
 // ================================================================
@@ -220,7 +221,8 @@ default
             key objectKey = (key)llList2String(parts, 1);
             llRegionSayTo(objectKey, 0,
                 "TC_REGISTER|" + (string)g_ownerKey + "|" +
-                (string)g_privateChannel + "|" + g_ownerName);
+                (string)g_privateChannel + "|" + g_ownerName + "|" +
+                llLinksetDataRead("id_brand"));
         }
 
         // ---- Session object rezzed — it announces itself so HUD can fire TC_SESSION_START ----
@@ -437,10 +439,12 @@ default
                 // Don't invite if already in a session
                 if (g_inSession) return;
 
+                string brandName = llList2String(parts, 7);
                 // Forward to UI to show invite dialog
                 llMessageLinked(LINK_SET, CHAN_UI,
                     "SHOW_SESSION_INVITE|" + hostName + "|" +
-                    (string)sessKey + "|" + strain + "|" + quality, NULL_KEY);
+                    (string)sessKey + "|" + strain + "|" + quality + "|" +
+                    brandName, NULL_KEY);
             }
         }
     }

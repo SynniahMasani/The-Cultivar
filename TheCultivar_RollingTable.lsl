@@ -42,6 +42,7 @@ integer g_listenConfirm;
 
 key     g_ownerKey    = NULL_KEY;
 string  g_ownerName   = "";
+string  g_brandName   = "";   // brand name received from HUD (used as packager)
 integer g_hudChannel  = 0;
 integer g_registered  = FALSE;
 integer g_busy        = FALSE;
@@ -268,7 +269,7 @@ finishCraft()
     // Add crafted items to HUD inventory
     llRegionSayTo(g_ownerKey, g_hudChannel,
         "TC_ADD_ITEM|" + itemID + "|" + g_selectedStrain + "|" +
-        g_selectedQuality + "|" + (string)g_batchCount + "|" + g_ownerName);
+        g_selectedQuality + "|" + (string)g_batchCount + "|" + g_brandName);
 
     // Visual effects — quality-tinted particle burst from table surface
     vector col = qualColor(g_selectedQuality);
@@ -440,6 +441,8 @@ default
             if (regOwner != g_ownerKey) return;
             g_hudChannel = (integer)llList2String(parts, 2);
             g_ownerName  = llList2String(parts, 3);
+            g_brandName  = llList2String(parts, 4);
+            if (g_brandName == "") g_brandName = g_ownerName;
             g_registered = TRUE;
             if (g_listenRegister) { llListenRemove(g_listenRegister); g_listenRegister = 0; }
             // Open listener on the derived HUD channel so TC_INVENTORY_DATA /

@@ -46,6 +46,7 @@ integer g_listenPass;
 // Session identity
 key     g_hostKey       = NULL_KEY;
 string  g_hostName      = "";
+string  g_brandName     = "";   // host's brand name for invite display
 integer g_hostHUDChan   = 0;
 string  g_strain        = "";
 string  g_quality       = "";
@@ -195,7 +196,7 @@ broadcastInvite()
         "TC_SESSION_INVITE|" + g_hostName + "|" +
         (string)g_hostKey + "|" +
         (string)llGetKey() + "|" + g_strain + "|" + g_quality + "|" +
-        (string)g_sessionChannel);
+        (string)g_sessionChannel + "|" + g_brandName);
 }
 
 // ----------------------------------------------------------------
@@ -429,6 +430,8 @@ default
             g_hostName    = llList2String(parts, 3);
             g_strain      = llList2String(parts, 4);
             g_quality     = llList2String(parts, 5);
+            g_brandName   = llList2String(parts, 6);
+            if (g_brandName == "") g_brandName = g_hostName;
 
             g_sessionActive = TRUE;
             g_startTime     = llGetUnixTime();

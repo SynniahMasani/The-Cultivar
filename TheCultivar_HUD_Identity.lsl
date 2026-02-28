@@ -24,6 +24,7 @@ string  g_favoriteStrain;
 string  g_strainHistory;   // comma-delimited list of unique strains tried
 integer g_repScore;
 string  g_joinDate;
+string  g_brandName;    // player's brand/label name (defaults to playerName)
 
 // ----------------------------------------------------------------
 // Save all identity fields to persistent linkset storage
@@ -39,6 +40,7 @@ saveIdentity()
     llLinksetDataWrite("id_history", g_strainHistory);
     llLinksetDataWrite("id_rep",     (string)g_repScore);
     llLinksetDataWrite("id_joined",  g_joinDate);
+    llLinksetDataWrite("id_brand",   g_brandName);
 }
 
 // ----------------------------------------------------------------
@@ -61,6 +63,7 @@ loadIdentity()
         g_strainHistory  = "";
         g_repScore       = 0;
         g_joinDate       = llGetDate();
+        g_brandName      = g_playerName;
         saveIdentity();
         llOwnerSay("Welcome to the The Cultivar! Your profile has been created.");
     }
@@ -76,6 +79,8 @@ loadIdentity()
         g_strainHistory  = llLinksetDataRead("id_history");
         g_repScore       = (integer)llLinksetDataRead("id_rep");
         g_joinDate       = llLinksetDataRead("id_joined");
+        g_brandName      = llLinksetDataRead("id_brand");
+        if (g_brandName == "") g_brandName = g_playerName;
     }
 }
 
@@ -92,7 +97,8 @@ broadcastIdentity()
                      (string)g_totalSold    + "|" +
                      g_favoriteStrain       + "|" +
                      (string)g_repScore     + "|" +
-                     g_joinDate;
+                     g_joinDate             + "|" +
+                     g_brandName;
 
     // Must send on CHAN_UI — that is the channel the UI script listens on.
     // CHAN_IDENTITY is for commands sent TO this script, not broadcasts FROM it.
@@ -197,11 +203,23 @@ default
             broadcastIdentity();
         }
 
+        // UI sets a custom brand/label name
+        else if (cmd == "SET_BRAND_NAME")
+        {
+            g_brandName = llList2String(parts, 1);
+            llLinksetDataWrite("id_brand", g_brandName);
+            broadcastIdentity();
+        }
+
         // UI requests a formatted stats card for display
         else if (cmd == "REQUEST_STATS_CARD")
         {
             list history = llParseString2List(g_strainHistory, [","], []);
+            string brandLine = "";
+            if (g_brandName != "" && g_brandName != g_playerName)
+                brandLine = "Brand Name: " + g_brandName + "\n";
             string card = "\n=== " + g_playerName + "'s Stats ===\n" +
+                          brandLine +
                           "Member Since: "    + g_joinDate           + "\n" +
                           "Times Smoked: "    + (string)g_totalSmoked  + "\n" +
                           "Total Grown: "     + (string)g_totalGrown   + "\n" +
