@@ -383,6 +383,24 @@ default
                     llList2String(parts, 2), NULL_KEY);
             }
 
+            // Session object sending cypher mode turn countdown to this player
+            // TC_YOUR_TURN|secondsRemaining|strain
+            else if (cmd == "TC_YOUR_TURN")
+            {
+                llMessageLinked(LINK_SET, CHAN_UI,
+                    "YOUR_TURN_COUNTDOWN|" + llList2String(parts, 1) + "|" +
+                    llList2String(parts, 2), NULL_KEY);
+            }
+
+            // Session object broadcasting cypher mode change
+            // TC_CYPHER_MODE|active|turnSeconds
+            else if (cmd == "TC_CYPHER_MODE")
+            {
+                llMessageLinked(LINK_SET, CHAN_UI,
+                    "CYPHER_MODE_CHANGE|" + llList2String(parts, 1) + "|" +
+                    llList2String(parts, 2), NULL_KEY);
+            }
+
             // Another player's HUD is passing us something
             else if (cmd == "TC_RECEIVE_PASS")
             {

@@ -951,6 +951,32 @@ default
                 llOwnerSay(fromName + " passed you " + quality +
                            " " + strain + ". ✊");
             }
+
+            // Cypher mode: it's our turn with X seconds remaining
+            // YOUR_TURN_COUNTDOWN|secondsRemaining|strain
+            else if (cmd == "YOUR_TURN_COUNTDOWN")
+            {
+                integer remaining = (integer)llList2String(parts, 1);
+                string  strain    = llList2String(parts, 2);
+                llOwnerSay("⏱ " + strain + " — " + (string)remaining + "s remaining!");
+            }
+
+            // Cypher mode toggled on/off
+            // CYPHER_MODE_CHANGE|active|turnSeconds
+            else if (cmd == "CYPHER_MODE_CHANGE")
+            {
+                if (llList2String(parts, 1) == "1")
+                    llOwnerSay("⏱ Cypher mode ON — " +
+                        llList2String(parts, 2) + "s per turn. Pass it quick!");
+                else
+                    llOwnerSay("Cypher mode OFF — back to free flow.");
+            }
+
+            // XP level-up announcement from Identity script
+            else if (cmd == "XP_LEVEL_UP")
+            {
+                // Already shown as llOwnerSay in Identity — nothing extra needed here
+            }
         }
 
         // ---- RAW_INVENTORY data coming back via CHAN_COMMS ----

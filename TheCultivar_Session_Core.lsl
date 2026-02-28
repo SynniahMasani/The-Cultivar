@@ -62,6 +62,12 @@ integer MAX_PARTICIPANTS = 8;
 integer g_currentHolder = 0; // index into participants list (stride-divided)
 integer g_passCount     = 0; // total passes this session
 
+// Cypher mode — auto-enables when >= 3 participants join
+integer g_cypherMode          = FALSE;
+integer g_turnTimer           = 15;  // seconds per turn in cypher mode
+integer g_turnTimeRemaining   = 0;
+integer g_lastInviteBroadcast = 0;   // llGetUnixTime() of last invite send
+
 // Session's own private channel (derived from object key)
 integer g_sessionChannel;
 
@@ -217,6 +223,7 @@ updateHoverText()
     text += g_quality + " " + g_strain + "\n";
     text += (string)count + " in the circle\n";
     text += "With: " + holderName;
+    if (g_cypherMode) text += "\n⏱ CYPHER — " + (string)g_turnTimeRemaining + "s";
 
     llSetText(text, <0.4, 0.9, 0.4>, 1.0);
 }
@@ -256,7 +263,8 @@ showPassMenu(key requester)
 
     buttons += ["Next In Rotation", "End Session", "Close"];
     llDialog(requester, menuText, buttons, DCHAN_PASS);
-    llSetTimerEvent(30.0);
+    // In cypher mode, keep the 5s timer running; menu timeout is handled by auto-pass
+    if (!g_cypherMode) llSetTimerEvent(30.0);
 }
 
 // ----------------------------------------------------------------
@@ -275,6 +283,9 @@ passToNext()
     string nextName = participantName(nextIdx);
     string prevName = participantName((nextIdx - 1 + count) % count);
 
+    // Reset cypher turn timer on every pass
+    if (g_cypherMode) g_turnTimeRemaining = g_turnTimer;
+
     // Notify previous holder
     key prevKey = participantKey((nextIdx - 1 + count) % count);
     llRegionSayTo(prevKey, 0,
@@ -288,6 +299,11 @@ passToNext()
     // Tell new holder's HUD to play receive animation
     llRegionSayTo(nextKey, participantHUDChan(nextIdx),
         "TC_PASS_RECEIVED|" + g_strain + "|" + g_quality);
+
+    // In cypher mode, send turn countdown to new holder's HUD
+    if (g_cypherMode)
+        llRegionSayTo(nextKey, participantHUDChan(nextIdx),
+            "TC_YOUR_TURN|" + (string)g_turnTimeRemaining + "|" + g_strain);
 
     // Tell previous holder's HUD to play give animation
     llRegionSayTo(prevKey, deriveHUDChannel(prevKey),
@@ -324,6 +340,9 @@ passToNamed(string targetName, key requester)
             g_currentHolder = i;
             g_passCount++;
 
+            // Reset cypher turn timer on every pass
+            if (g_cypherMode) g_turnTimeRemaining = g_turnTimer;
+
             llRegionSayTo(requester, 0,
                 "Passed the " + g_strain + " to " + pName + ".");
             llRegionSayTo(targetKey, 0,
@@ -332,6 +351,12 @@ passToNamed(string targetName, key requester)
 
             llRegionSayTo(targetKey, participantHUDChan(i),
                 "TC_PASS_RECEIVED|" + g_strain + "|" + g_quality);
+
+            // In cypher mode, send turn countdown to new holder's HUD
+            if (g_cypherMode)
+                llRegionSayTo(targetKey, participantHUDChan(i),
+                    "TC_YOUR_TURN|" + (string)g_turnTimeRemaining + "|" + g_strain);
+
             llRegionSayTo(requester, deriveHUDChannel(requester),
                 "TC_PASS_GIVEN");
 
@@ -411,9 +436,45 @@ default
             return;
         }
 
-        // Periodic invite rebroadcast for late arrivals (every 30 sec)
-        broadcastInvite();
-        llSetTimerEvent(30.0);
+        if (g_cypherMode)
+        {
+            // 5-second cypher tick
+            g_turnTimeRemaining -= 5;
+
+            // Rebroadcast invite every 30s even during cypher mode
+            integer now = llGetUnixTime();
+            if (now - g_lastInviteBroadcast >= 30)
+            {
+                broadcastInvite();
+                g_lastInviteBroadcast = now;
+            }
+
+            if (g_turnTimeRemaining <= 0)
+            {
+                // Time's up — auto-pass to next in rotation
+                llRegionSayTo(participantKey(g_currentHolder), 0,
+                    "⏱ Time's up! Auto-passing the " + g_strain + "...");
+                passToNext();
+                // passToNext() resets g_turnTimeRemaining = g_turnTimer
+            }
+            else
+            {
+                // Broadcast countdown to current holder's HUD
+                key holderKey  = participantKey(g_currentHolder);
+                integer holderChan = participantHUDChan(g_currentHolder);
+                llRegionSayTo(holderKey, holderChan,
+                    "TC_YOUR_TURN|" + (string)g_turnTimeRemaining + "|" + g_strain);
+                updateHoverText();
+            }
+            llSetTimerEvent(5.0);
+        }
+        else
+        {
+            // Standard mode: periodic invite rebroadcast
+            broadcastInvite();
+            g_lastInviteBroadcast = llGetUnixTime();
+            llSetTimerEvent(30.0);
+        }
     }
 
     listen(integer channel, string name, key id, string msg)
@@ -496,6 +557,23 @@ default
                     joinerName + " joined the session. " +
                     (string)participantCount() + " in the circle.");
 
+                // Auto-enable cypher mode when 3 or more are in the circle
+                if (!g_cypherMode && participantCount() >= 3)
+                {
+                    g_cypherMode         = TRUE;
+                    g_turnTimeRemaining  = g_turnTimer;
+                    g_lastInviteBroadcast = llGetUnixTime();
+                    llSetTimerEvent(5.0);
+                    broadcastToAll("TC_CYPHER_MODE|1|" + (string)g_turnTimer);
+                    llRegionSayTo(g_hostKey, 0,
+                        "⏱ Cypher mode activated — " +
+                        (string)g_turnTimer + "s turns!");
+                    // Start the first holder's countdown
+                    key holderKey = participantKey(g_currentHolder);
+                    llRegionSayTo(holderKey, participantHUDChan(g_currentHolder),
+                        "TC_YOUR_TURN|" + (string)g_turnTimeRemaining + "|" + g_strain);
+                }
+
                 updateHoverText();
             }
         }
@@ -544,6 +622,16 @@ default
                     return;
                 }
 
+                // Disable cypher mode if circle drops below 3
+                if (g_cypherMode && participantCount() < 3)
+                {
+                    g_cypherMode = FALSE;
+                    llSetTimerEvent(30.0);
+                    broadcastToAll("TC_CYPHER_MODE|0|0");
+                    llRegionSayTo(g_hostKey, 0,
+                        "Cypher mode deactivated (fewer than 3 players).");
+                }
+
                 updateHoverText();
                 llRegionSayTo(g_hostKey, 0,
                     leaverName + " left the session. " +
@@ -554,7 +642,9 @@ default
         // ---- Pass menu dialog responses ----
         else if (channel == DCHAN_PASS)
         {
-            llSetTimerEvent(30.0); // reset invite timer
+            // Resume cypher tick or invite timer based on mode
+            if (g_cypherMode) llSetTimerEvent(5.0);
+            else llSetTimerEvent(30.0);
             if (g_listenPass) { llListenRemove(g_listenPass); g_listenPass = 0; }
 
             if (msg == "Close") return;
