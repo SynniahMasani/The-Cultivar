@@ -353,10 +353,25 @@ default
             // Plug board reports a sale completed
             else if (cmd == "TC_SALE_COMPLETE")
             {
+                string salePrice  = llList2String(parts, 1);
+                string buyerName  = llList2String(parts, 2);
                 llMessageLinked(LINK_SET, CHAN_IDENTITY, "UPDATE_SOLD", NULL_KEY);
                 llMessageLinked(LINK_SET, CHAN_IDENTITY, "UPDATE_XP|seller|1", NULL_KEY);
-                llOwnerSay("Sale complete! L$" + llList2String(parts,1) +
+                // Fire notification so player gets an IM even if AFK
+                llMessageLinked(LINK_SET, CHAN_UI,
+                    "NOTIFY|sale_made|Sale! L$" + salePrice +
+                    " from " + buyerName + ".", NULL_KEY);
+                llOwnerSay("Sale complete! L$" + salePrice +
                            " has been paid to you.");
+            }
+
+            // World object sending a notification to the player
+            // TC_NOTIFY|type|message
+            else if (cmd == "TC_NOTIFY")
+            {
+                llMessageLinked(LINK_SET, CHAN_UI,
+                    "NOTIFY|" + llList2String(parts, 1) + "|" +
+                    llList2String(parts, 2), NULL_KEY);
             }
 
             // World object reporting XP earned (e.g. RollingTable after craft)

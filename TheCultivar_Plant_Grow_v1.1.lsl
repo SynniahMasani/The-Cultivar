@@ -258,6 +258,11 @@ advanceStage()
         llMessageLinked(LINK_SET, PCHAN_GROW, "STAGE_READY|4", NULL_KEY);
         llRegionSayTo(g_ownerKey, 0,
             "🌿 Your " + g_strainName + " is ready to harvest!");
+        // Send harvest-ready notification to HUD (routed to Notifications script)
+        if (g_hudChannel != 0)
+            llRegionSayTo(g_ownerKey, g_hudChannel,
+                "TC_NOTIFY|harvest_ready|" +
+                g_strainName + " is ready to harvest!");
     }
     else
     {
