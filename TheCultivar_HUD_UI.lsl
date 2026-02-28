@@ -76,6 +76,7 @@ integer g_repScore       = 0;
 integer g_totalSmoked    = 0;
 string  g_favoriteStrain = "";
 string  g_brandName      = "";
+string  g_playerTitle    = "Seedling";
 string  g_inventoryDisplay = "Loading...";
 
 // ---- Current state ----
@@ -420,8 +421,8 @@ showStats()
     if (g_brandName != "" && g_brandName != g_playerName)
         brandInfo = "\nBrand: " + g_brandName;
     llDialog(g_ownerKey,
-        "=== STATS ===\n" + g_playerName + brandInfo,
-        ["View Stats", "Set Brand Name", "Close"],
+        "=== STATS ===\n" + g_playerName + "\nTitle: " + g_playerTitle + brandInfo,
+        ["View Stats", "Achievements", "Set Brand Name", "Close"],
         DCHAN_STATS_MENU);
     llSetTimerEvent(30.0);
 }
@@ -788,6 +789,8 @@ default
         {
             if (msg == "View Stats")
                 llMessageLinked(LINK_SET, CHAN_IDENTITY, "REQUEST_STATS_CARD", NULL_KEY);
+            else if (msg == "Achievements")
+                llMessageLinked(LINK_SET, CHAN_IDENTITY, "REQUEST_ACHIEVEMENTS", NULL_KEY);
             else if (msg == "Set Brand Name")
                 showBrandNameTextBox();
             // "Close" — do nothing
@@ -832,6 +835,8 @@ default
                 g_favoriteStrain = llList2String(parts, 7);
                 g_repScore       = (integer)llList2String(parts, 8);
                 g_brandName      = llList2String(parts, 10);
+                if (llGetListLength(parts) > 14)
+                    g_playerTitle = llList2String(parts, 14);
             }
 
             // Inventory summary string for display
@@ -976,6 +981,13 @@ default
             else if (cmd == "XP_LEVEL_UP")
             {
                 // Already shown as llOwnerSay in Identity — nothing extra needed here
+            }
+
+            // Achievement unlocked — Identity script already shows it via llOwnerSay;
+            // title will update on next IDENTITY_DATA broadcast. Nothing extra needed.
+            else if (cmd == "ACHIEVEMENT_UNLOCKED")
+            {
+                // aLabel is parts[2]; announcements handled by HUD_Identity llOwnerSay
             }
         }
 
