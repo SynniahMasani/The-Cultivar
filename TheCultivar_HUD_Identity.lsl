@@ -26,21 +26,96 @@ integer g_repScore;
 string  g_joinDate;
 string  g_brandName;    // player's brand/label name (defaults to playerName)
 
+// --- XP Tracking ---
+integer g_growerXP   = 0;
+integer g_rollerXP   = 0;
+integer g_sellerXP   = 0;
+
 // ----------------------------------------------------------------
 // Save all identity fields to persistent linkset storage
 // ----------------------------------------------------------------
 saveIdentity()
 {
-    llLinksetDataWrite("id_name",    g_playerName);
-    llLinksetDataWrite("id_smoked",  (string)g_totalSmoked);
-    llLinksetDataWrite("id_grown",   (string)g_totalGrown);
-    llLinksetDataWrite("id_passed",  (string)g_totalPassed);
-    llLinksetDataWrite("id_sold",    (string)g_totalSold);
-    llLinksetDataWrite("id_fav",     g_favoriteStrain);
-    llLinksetDataWrite("id_history", g_strainHistory);
-    llLinksetDataWrite("id_rep",     (string)g_repScore);
-    llLinksetDataWrite("id_joined",  g_joinDate);
-    llLinksetDataWrite("id_brand",   g_brandName);
+    llLinksetDataWrite("id_name",      g_playerName);
+    llLinksetDataWrite("id_smoked",    (string)g_totalSmoked);
+    llLinksetDataWrite("id_grown",     (string)g_totalGrown);
+    llLinksetDataWrite("id_passed",    (string)g_totalPassed);
+    llLinksetDataWrite("id_sold",      (string)g_totalSold);
+    llLinksetDataWrite("id_fav",       g_favoriteStrain);
+    llLinksetDataWrite("id_history",   g_strainHistory);
+    llLinksetDataWrite("id_rep",       (string)g_repScore);
+    llLinksetDataWrite("id_joined",    g_joinDate);
+    llLinksetDataWrite("id_brand",     g_brandName);
+    llLinksetDataWrite("id_grower_xp", (string)g_growerXP);
+    llLinksetDataWrite("id_roller_xp", (string)g_rollerXP);
+    llLinksetDataWrite("id_seller_xp", (string)g_sellerXP);
+}
+
+// ----------------------------------------------------------------
+// XP/Level helpers
+// ----------------------------------------------------------------
+integer levelFromXP(integer xp)
+{
+    if (xp <= 0) return 0;
+    return (integer)llSqrt((float)xp);
+}
+
+notifyLevelUp(string track, integer level)
+{
+    string perkMsg = "";
+    if (track == "grower")
+    {
+        if (level == 10) perkMsg = "Perk: +15% harvest yield!";
+        else if (level == 20) perkMsg = "Perk: +30% harvest yield!";
+    }
+    else if (track == "roller")
+    {
+        if (level == 10) perkMsg = "Perk: Backwood option unlocked at rolling table!";
+        else if (level == 20) perkMsg = "Perk: -1g rolling cost reduction!";
+    }
+    else if (track == "seller")
+    {
+        if (level == 10) perkMsg = "Perk: 5% PlugBoard fee reduction!";
+        else if (level == 20) perkMsg = "Perk: 10% PlugBoard fee reduction!";
+    }
+    string msg = "Level Up! " + llToUpper(track) + " Level " + (string)level + "!";
+    if (perkMsg != "") msg += "  " + perkMsg;
+    llOwnerSay(msg);
+    llMessageLinked(LINK_SET, CHAN_UI,
+        "XP_LEVEL_UP|" + track + "|" + (string)level + "|" + perkMsg, NULL_KEY);
+}
+
+grantXP(string track, integer amount)
+{
+    integer oldLevel;
+    integer newLevel;
+    if (track == "grower")
+    {
+        oldLevel = levelFromXP(g_growerXP);
+        g_growerXP += amount;
+        newLevel = levelFromXP(g_growerXP);
+        llLinksetDataWrite("grower_level", (string)newLevel);
+        llLinksetDataWrite("id_grower_xp", (string)g_growerXP);
+    }
+    else if (track == "roller")
+    {
+        oldLevel = levelFromXP(g_rollerXP);
+        g_rollerXP += amount;
+        newLevel = levelFromXP(g_rollerXP);
+        llLinksetDataWrite("roller_level", (string)newLevel);
+        llLinksetDataWrite("id_roller_xp", (string)g_rollerXP);
+    }
+    else if (track == "seller")
+    {
+        oldLevel = levelFromXP(g_sellerXP);
+        g_sellerXP += amount;
+        newLevel = levelFromXP(g_sellerXP);
+        llLinksetDataWrite("seller_level", (string)newLevel);
+        llLinksetDataWrite("id_seller_xp", (string)g_sellerXP);
+    }
+    else return;
+    if (newLevel > oldLevel)
+        notifyLevelUp(track, newLevel);
 }
 
 // ----------------------------------------------------------------
@@ -64,6 +139,9 @@ loadIdentity()
         g_repScore       = 0;
         g_joinDate       = llGetDate();
         g_brandName      = g_playerName;
+        g_growerXP       = 0;
+        g_rollerXP       = 0;
+        g_sellerXP       = 0;
         saveIdentity();
         llOwnerSay("Welcome to the The Cultivar! Your profile has been created.");
     }
@@ -81,6 +159,13 @@ loadIdentity()
         g_joinDate       = llLinksetDataRead("id_joined");
         g_brandName      = llLinksetDataRead("id_brand");
         if (g_brandName == "") g_brandName = g_playerName;
+        g_growerXP       = (integer)llLinksetDataRead("id_grower_xp");
+        g_rollerXP       = (integer)llLinksetDataRead("id_roller_xp");
+        g_sellerXP       = (integer)llLinksetDataRead("id_seller_xp");
+        // Restore level caches so world objects get current levels via TC_REGISTER
+        llLinksetDataWrite("grower_level", (string)levelFromXP(g_growerXP));
+        llLinksetDataWrite("roller_level", (string)levelFromXP(g_rollerXP));
+        llLinksetDataWrite("seller_level", (string)levelFromXP(g_sellerXP));
     }
 }
 
@@ -98,7 +183,10 @@ broadcastIdentity()
                      g_favoriteStrain       + "|" +
                      (string)g_repScore     + "|" +
                      g_joinDate             + "|" +
-                     g_brandName;
+                     g_brandName            + "|" +
+                     (string)levelFromXP(g_growerXP) + "|" +
+                     (string)levelFromXP(g_rollerXP) + "|" +
+                     (string)levelFromXP(g_sellerXP);
 
     // Must send on CHAN_UI — that is the channel the UI script listens on.
     // CHAN_IDENTITY is for commands sent TO this script, not broadcasts FROM it.
@@ -203,6 +291,13 @@ default
             broadcastIdentity();
         }
 
+        // XP grant from HUD_Comms or other internal scripts
+        else if (cmd == "UPDATE_XP")
+        {
+            // UPDATE_XP|track|amount
+            grantXP(llList2String(parts, 1), (integer)llList2String(parts, 2));
+        }
+
         // UI sets a custom brand/label name
         else if (cmd == "SET_BRAND_NAME")
         {
@@ -227,7 +322,13 @@ default
                           "Items Sold: "      + (string)g_totalSold    + "\n" +
                           "Favorite Strain: " + g_favoriteStrain       + "\n" +
                           "Strains Tried: "   + (string)llGetListLength(history) + "\n" +
-                          "Rep Score: "       + (string)g_repScore;
+                          "Rep Score: "       + (string)g_repScore     + "\n" +
+                          "Grower: Lvl "      + (string)levelFromXP(g_growerXP) +
+                            "  (" + (string)g_growerXP + " XP)\n" +
+                          "Roller: Lvl "      + (string)levelFromXP(g_rollerXP) +
+                            "  (" + (string)g_rollerXP + " XP)\n" +
+                          "Seller: Lvl "      + (string)levelFromXP(g_sellerXP) +
+                            "  (" + (string)g_sellerXP + " XP)";
             llMessageLinked(LINK_SET, CHAN_UI, "SHOW_STATS|" + card, NULL_KEY);
         }
     }
