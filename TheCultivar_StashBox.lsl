@@ -415,7 +415,7 @@ default
     {
         if (change & CHANGED_OWNER)
         {
-            llLinksetDataDeleteFound("stash_", "");
+            llLinksetDataReset();
             llResetScript();
         }
         if (change & CHANGED_INVENTORY)

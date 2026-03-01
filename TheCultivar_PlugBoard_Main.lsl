@@ -682,10 +682,8 @@ default
     {
         if (change & CHANGED_OWNER)
         {
-            // Board transferred — wipe pricing, consignment data, keep structure
-            llLinksetDataDeleteFound("price_", "");
-            llLinksetDataDeleteFound("board_", "");
-            llLinksetDataDeleteFound("cs_", "");
+            // Board transferred — wipe all data for new owner, then reset
+            llLinksetDataReset();
             llResetScript();
         }
 

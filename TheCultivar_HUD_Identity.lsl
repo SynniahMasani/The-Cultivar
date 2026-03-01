@@ -314,8 +314,8 @@ default
     {
         if (change & CHANGED_OWNER)
         {
-            // Wipe data for new owner
-            llLinksetDataDeleteFound("id_", "");
+            // Wipe all data for new owner, then reset
+            llLinksetDataReset();
             llResetScript();
         }
     }

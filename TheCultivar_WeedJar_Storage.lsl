@@ -113,7 +113,7 @@ default
         if (change & CHANGED_OWNER)
         {
             // New owner — clear personal data, keep jar type/capacity
-            llLinksetDataDeleteFound("jar_", "");
+            // (saveState() below overwrites all jar_* keys with cleared values)
             g_strain     = "";
             g_quality    = "";
             g_packager   = "";
