@@ -14,17 +14,23 @@ integer PCHAN_GROW    = 1000;
 integer PCHAN_PERSIST = 1100;
 
 // Dialog channels
-integer DCHAN_MAIN    = -33001;
-integer DCHAN_PLANT   = -33002;
-integer DCHAN_STRAIN  = -33003;
-integer DCHAN_CONFIRM = -33004;
+integer DCHAN_MAIN     = -33001;
+integer DCHAN_PLANT    = -33002;
+integer DCHAN_STRAIN   = -33003;
+integer DCHAN_CONFIRM  = -33004;
+integer DCHAN_ACCESS   = -33005;
+integer DCHAN_ADD_AUTH = -33006;
+integer DCHAN_REM_AUTH = -33007;
 
 integer g_listenMain;
 integer g_listenPlant;
 integer g_listenStrain;
 integer g_listenConfirm;
-integer g_listenFert;    // fertilizer tier sub-menu
-integer g_listenVisitor; // visitor "Close" dialog
+integer g_listenFert;     // fertilizer tier sub-menu
+integer g_listenVisitor;  // visitor "Close" dialog
+integer g_listenAccess;
+integer g_listenAddAuth;
+integer g_listenRemAuth;
 
 key     g_ownerKey;
 string  g_ownerName;
