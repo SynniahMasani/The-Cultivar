@@ -34,6 +34,12 @@
 // Public ping channel (same as bagging table — for HUD communication)
 integer TC_OBJECT_PING_CHAN = -111222333;
 
+// llSetForSale type constants (defined explicitly for compiler compatibility)
+integer SALE_NOT      = 0;
+integer SALE_ORIGINAL = 1;  // sell the original object to the buyer
+integer SALE_COPY     = 2;
+integer SALE_CONTENTS = 3;
+
 // Dialog channels
 integer DCHAN_OWNER   = -77001;
 integer DCHAN_PRICE   = -77002;
