@@ -481,6 +481,28 @@ default
                     llList2String(parts, 4) + "|" +
                     llList2String(parts, 5), id);
             }
+
+            // World object consuming a single item type by strain (breeding station)
+            // TC_CONSUME_ITEM|itemType|strainName|qty
+            else if (cmd == "TC_CONSUME_ITEM")
+            {
+                llMessageLinked(LINK_SET, CHAN_INVENTORY,
+                    "REMOVE_ITEM|"          +
+                    llList2String(parts, 1) + "|" +
+                    llList2String(parts, 2) + "||" +
+                    llList2String(parts, 3) + "|", id);
+            }
+
+            // World object requesting raw inventory list (breeding station, etc.)
+            // TC_REQUEST_RAW_INVENTORY|itemType
+            // Response will be sent back as TC_INVENTORY_DATA on channel 0 to sender
+            else if (cmd == "TC_REQUEST_RAW_INVENTORY")
+            {
+                // Pass sender object key (id) so RAW_INVENTORY handler can relay it back
+                llMessageLinked(LINK_SET, CHAN_INVENTORY,
+                    "REQUEST_RAW_INVENTORY|" + llList2String(parts, 1) + "|" + (string)id,
+                    NULL_KEY);
+            }
         }
 
         // ---- Messages on public session channel ----
