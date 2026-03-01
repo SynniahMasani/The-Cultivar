@@ -67,6 +67,8 @@ list GROW_TIMES = [2700, 7200, 14400, 28800];
 // --- Current Plant State ---
 string  g_strainName      = "";
 integer g_qualityTier     = 0;   // 0=reggie 1=mids 2=loud 3=exotic
+integer g_isHybrid        = FALSE; // TRUE if strain contains " x " (bred hybrid)
+integer g_isLegendary     = FALSE; // TRUE if hybrid and suffix "[LEGENDARY]" present
 integer g_stage           = 0;   // 0-4
 integer g_stageStartTime  = 0;   // llGetUnixTime() when current stage began
 integer g_stageDuration   = 0;   // seconds this stage should last
@@ -122,6 +124,10 @@ integer calcStageDuration()
     integer stageDur  = fullCycle / 4; // 4 equal stages
     if (g_potType == "premium")
         stageDur = (integer)((float)stageDur * 0.95); // 5% faster
+    if (g_isLegendary)
+        stageDur = (integer)((float)stageDur * 0.85); // legendary hybrid: -15% time
+    else if (g_isHybrid)
+        stageDur = (integer)((float)stageDur * 0.92); // standard hybrid: -8% time
     return stageDur;
 }
 
@@ -258,6 +264,11 @@ advanceStage()
         llMessageLinked(LINK_SET, PCHAN_GROW, "STAGE_READY|4", NULL_KEY);
         llRegionSayTo(g_ownerKey, 0,
             "🌿 Your " + g_strainName + " is ready to harvest!");
+        // Send harvest-ready notification to HUD (routed to Notifications script)
+        if (g_hudChannel != 0)
+            llRegionSayTo(g_ownerKey, g_hudChannel,
+                "TC_NOTIFY|harvest_ready|" +
+                g_strainName + " is ready to harvest!");
     }
     else
     {
@@ -299,6 +310,10 @@ integer calculateYield()
 
     // Pot bonus
     if (g_potType == "premium") multiplier += 0.05;
+
+    // Hybrid gene bonus
+    if (g_isLegendary)      multiplier += 0.20; // legendary: +20% yield
+    else if (g_isHybrid)    multiplier += 0.10; // standard hybrid: +10% yield
 
     return (integer)((float)base * multiplier);
 }
@@ -383,6 +398,8 @@ resetPlant()
     g_isWatered      = FALSE;
     g_fertApplied    = FALSE;
     g_fertTier       = 0;
+    g_isHybrid       = FALSE;
+    g_isLegendary    = FALSE;
     llSetTimerEvent(0.0);
     updateVisuals();
     llMessageLinked(LINK_SET, PCHAN_PERSIST, "SAVE_STATE", NULL_KEY);
@@ -462,15 +479,29 @@ default
             g_potType     = llList2String(parts, 2);
             g_potUsesLeft = (integer)llList2String(parts, 3);
 
-            // Look up quality tier from strain data
-            list data = getStrainData(g_strainName);
-            if (llGetListLength(data) == 0)
+            // Detect hybrid and legendary status from strain name conventions
+            g_isHybrid    = (llSubStringIndex(g_strainName, " x ") != -1);
+            g_isLegendary = g_isHybrid &&
+                            (llSubStringIndex(g_strainName, "[LEGENDARY]") != -1);
+
+            // Hybrids use "exotic" quality tier (forced) since they combine parent genes
+            if (g_isLegendary)
+                g_qualityTier = 3; // exotic
+            else if (g_isHybrid)
+                g_qualityTier = 2; // loud (standard hybrid baseline)
+            else
             {
-                llRegionSayTo(g_ownerKey, 0,
-                    "Unknown strain: " + g_strainName + ". Check seed name.");
-                return;
+                // Look up quality tier from strain data table
+                list data = getStrainData(g_strainName);
+                if (llGetListLength(data) == 0)
+                {
+                    llRegionSayTo(g_ownerKey, 0,
+                        "Unknown strain: " + g_strainName + ". Check seed name.");
+                    return;
+                }
+                g_qualityTier = llList2Integer(data, 1);
             }
-            g_qualityTier    = llList2Integer(data, 1);
+
             g_stage          = 1; // seedling
             g_stageStartTime = llGetUnixTime();
             g_stageDuration  = calcStageDuration();
@@ -482,10 +513,18 @@ default
             updateVisuals();
             llMessageLinked(LINK_SET, PCHAN_PERSIST, "SAVE_STATE", NULL_KEY);
 
-            list flavorData = getStrainData(g_strainName);
-            string flavor   = llList2String(flavorData, 4);
+            string flavorMsg;
+            if (g_isLegendary)
+                flavorMsg = "A legendary cross. This one's special.";
+            else if (g_isHybrid)
+                flavorMsg = "A bred hybrid. Grows faster, yields bigger.";
+            else
+            {
+                list flavorData = getStrainData(g_strainName);
+                flavorMsg = llList2String(flavorData, 4);
+            }
             llRegionSayTo(g_ownerKey, 0,
-                "🌱 Planted " + g_strainName + ". \"" + flavor + "\"");
+                "🌱 Planted " + g_strainName + ". \"" + flavorMsg + "\"");
         }
 
         // Player watered the plant

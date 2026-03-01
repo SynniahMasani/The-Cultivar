@@ -50,6 +50,8 @@ integer DCHAN_SESSION_MENU   = -11006;
 integer DCHAN_SESSION_INVITE = -11007;
 integer DCHAN_SESSION_ITEM   = -11008;
 integer DCHAN_INVENTORY      = -11009;
+integer DCHAN_STATS_MENU     = -11010;
+integer DCHAN_BRAND_NAME     = -11011;
 
 // ---- Listener handles ----
 integer g_lisMain;
@@ -61,6 +63,8 @@ integer g_lisSessionMenu;
 integer g_lisSessionInvite;
 integer g_lisSessionItem;
 integer g_lisInv;
+integer g_lisStatsMenu;
+integer g_lisBrandName;
 
 // ---- Owner info ----
 key     g_ownerKey  = NULL_KEY;
@@ -71,6 +75,8 @@ string  g_playerName     = "";
 integer g_repScore       = 0;
 integer g_totalSmoked    = 0;
 string  g_favoriteStrain = "";
+string  g_brandName      = "";
+string  g_playerTitle    = "Seedling";
 string  g_inventoryDisplay = "Loading...";
 
 // ---- Current state ----
@@ -128,6 +134,8 @@ closeAllListens()
     if (g_lisSessionInvite) { llListenRemove(g_lisSessionInvite); g_lisSessionInvite = 0; }
     if (g_lisSessionItem)   { llListenRemove(g_lisSessionItem);   g_lisSessionItem   = 0; }
     if (g_lisInv)           { llListenRemove(g_lisInv);           g_lisInv           = 0; }
+    if (g_lisStatsMenu)     { llListenRemove(g_lisStatsMenu);     g_lisStatsMenu     = 0; }
+    if (g_lisBrandName)     { llListenRemove(g_lisBrandName);     g_lisBrandName     = 0; }
 }
 
 setButtonGlow(integer link, float glow)
@@ -407,7 +415,27 @@ showInventoryMenu()
 
 showStats()
 {
-    llMessageLinked(LINK_SET, CHAN_IDENTITY, "REQUEST_STATS_CARD", NULL_KEY);
+    closeAllListens();
+    g_lisStatsMenu = llListen(DCHAN_STATS_MENU, "", g_ownerKey, "");
+    string brandInfo = "";
+    if (g_brandName != "" && g_brandName != g_playerName)
+        brandInfo = "\nBrand: " + g_brandName;
+    llDialog(g_ownerKey,
+        "=== STATS ===\n" + g_playerName + "\nTitle: " + g_playerTitle + brandInfo,
+        ["View Stats", "Achievements", "Set Brand Name", "Close"],
+        DCHAN_STATS_MENU);
+    llSetTimerEvent(30.0);
+}
+
+showBrandNameTextBox()
+{
+    closeAllListens();
+    g_lisBrandName = llListen(DCHAN_BRAND_NAME, "", g_ownerKey, "");
+    llTextBox(g_ownerKey,
+        "Enter your brand name (max 24 chars):\nAvoid | ~ ^ : characters\n\nCurrent: " +
+        g_brandName,
+        DCHAN_BRAND_NAME);
+    llSetTimerEvent(60.0);
 }
 
 
@@ -718,7 +746,7 @@ default
                     llRegionSayTo(g_pendingSessionObjKey, 0,
                         "TC_SESSION_START|" + (string)g_ownerKey + "|" +
                         (string)hudChan + "|" + g_ownerName + "|" +
-                        strain + "|" + quality);
+                        strain + "|" + quality + "|" + g_brandName);
                     llMessageLinked(LINK_SET, CHAN_COMMS,
                         "START_SESSION|" + (string)g_pendingSessionObjKey,
                         NULL_KEY);
@@ -755,6 +783,32 @@ default
             else if (msg == "Fill Bag")
                 llOwnerSay("Touch your bagging table to package flower into bags.");
         }
+
+        // ---- STATS SUB-MENU ----
+        else if (channel == DCHAN_STATS_MENU)
+        {
+            if (msg == "View Stats")
+                llMessageLinked(LINK_SET, CHAN_IDENTITY, "REQUEST_STATS_CARD", NULL_KEY);
+            else if (msg == "Achievements")
+                llMessageLinked(LINK_SET, CHAN_IDENTITY, "REQUEST_ACHIEVEMENTS", NULL_KEY);
+            else if (msg == "Set Brand Name")
+                showBrandNameTextBox();
+            // "Close" — do nothing
+        }
+
+        // ---- BRAND NAME TEXTBOX RESPONSE ----
+        else if (channel == DCHAN_BRAND_NAME)
+        {
+            string cleaned = llStringTrim(msg, STRING_TRIM);
+            if (llStringLength(cleaned) > 24) cleaned = llGetSubString(cleaned, 0, 23);
+            cleaned = llDumpList2String(
+                llParseString2List(cleaned, ["|","~","^",":"], []), "");
+            if (cleaned == "") { llOwnerSay("Brand name not changed (invalid input)."); return; }
+            g_brandName = cleaned;
+            llMessageLinked(LINK_SET, CHAN_IDENTITY,
+                "SET_BRAND_NAME|" + g_brandName, NULL_KEY);
+            llOwnerSay("Brand name set to: " + g_brandName);
+        }
     }
 
 
@@ -780,6 +834,9 @@ default
                 g_totalSmoked    = (integer)llList2String(parts, 3);
                 g_favoriteStrain = llList2String(parts, 7);
                 g_repScore       = (integer)llList2String(parts, 8);
+                g_brandName      = llList2String(parts, 10);
+                if (llGetListLength(parts) > 14)
+                    g_playerTitle = llList2String(parts, 14);
             }
 
             // Inventory summary string for display
@@ -876,11 +933,15 @@ default
                 g_inviteSessKey  = (key)llList2String(parts, 2);
                 g_inviteStrain   = llList2String(parts, 3);
                 g_inviteQuality  = llList2String(parts, 4);
+                string inviteBrand = llList2String(parts, 5);
 
                 if (g_lisSessionInvite) llListenRemove(g_lisSessionInvite);
                 g_lisSessionInvite = llListen(DCHAN_SESSION_INVITE, "", g_ownerKey, "");
+                string brandDisplay = g_inviteHostName;
+                if (inviteBrand != "" && inviteBrand != g_inviteHostName)
+                    brandDisplay = inviteBrand + " (" + g_inviteHostName + ")";
                 llDialog(g_ownerKey,
-                    "🌿 " + g_inviteHostName + " is sparking a session!\n" +
+                    "🌿 " + brandDisplay + " is sparking a session!\n" +
                     g_inviteQuality + " " + g_inviteStrain + "\nJoin the circle?",
                     ["Join!", "No Thanks"],
                     DCHAN_SESSION_INVITE);
@@ -894,6 +955,39 @@ default
                 string quality  = llList2String(parts, 3);
                 llOwnerSay(fromName + " passed you " + quality +
                            " " + strain + ". ✊");
+            }
+
+            // Cypher mode: it's our turn with X seconds remaining
+            // YOUR_TURN_COUNTDOWN|secondsRemaining|strain
+            else if (cmd == "YOUR_TURN_COUNTDOWN")
+            {
+                integer remaining = (integer)llList2String(parts, 1);
+                string  strain    = llList2String(parts, 2);
+                llOwnerSay("⏱ " + strain + " — " + (string)remaining + "s remaining!");
+            }
+
+            // Cypher mode toggled on/off
+            // CYPHER_MODE_CHANGE|active|turnSeconds
+            else if (cmd == "CYPHER_MODE_CHANGE")
+            {
+                if (llList2String(parts, 1) == "1")
+                    llOwnerSay("⏱ Cypher mode ON — " +
+                        llList2String(parts, 2) + "s per turn. Pass it quick!");
+                else
+                    llOwnerSay("Cypher mode OFF — back to free flow.");
+            }
+
+            // XP level-up announcement from Identity script
+            else if (cmd == "XP_LEVEL_UP")
+            {
+                // Already shown as llOwnerSay in Identity — nothing extra needed here
+            }
+
+            // Achievement unlocked — Identity script already shows it via llOwnerSay;
+            // title will update on next IDENTITY_DATA broadcast. Nothing extra needed.
+            else if (cmd == "ACHIEVEMENT_UNLOCKED")
+            {
+                // aLabel is parts[2]; announcements handled by HUD_Identity llOwnerSay
             }
         }
 

@@ -71,10 +71,11 @@ startListening()
 // ----------------------------------------------------------------
 registerWithObject(key objectKey)
 {
-    // Send our private channel and owner key to the object
+    // Send our private channel, owner key, and brand name to the object
     llRegionSayTo(objectKey, 0,
         "TC_REGISTER|" + (string)g_ownerKey + "|" +
-        (string)g_privateChannel + "|" + g_ownerName);
+        (string)g_privateChannel + "|" + g_ownerName + "|" +
+        llLinksetDataRead("id_brand"));
 }
 
 // ================================================================
@@ -220,7 +221,8 @@ default
             key objectKey = (key)llList2String(parts, 1);
             llRegionSayTo(objectKey, 0,
                 "TC_REGISTER|" + (string)g_ownerKey + "|" +
-                (string)g_privateChannel + "|" + g_ownerName);
+                (string)g_privateChannel + "|" + g_ownerName + "|" +
+                llLinksetDataRead("id_brand"));
         }
 
         // ---- Session object rezzed — it announces itself so HUD can fire TC_SESSION_START ----
@@ -245,13 +247,21 @@ default
                 integer qty    = (integer)llList2String(parts, 3);
                 string owner   = llKey2Name(g_ownerKey);
 
+                // Apply grower level yield perk before adding to inventory
+                integer growerLevel = (integer)llLinksetDataRead("grower_level");
+                if (growerLevel >= 20)
+                    qty = qty + (qty * 30 / 100);
+                else if (growerLevel >= 10)
+                    qty = qty + (qty * 15 / 100);
+
                 // Add to inventory
                 llMessageLinked(LINK_SET, CHAN_INVENTORY,
                     "ADD_ITEM|flower_raw|" + strain + "|" + quality + "|" +
                     (string)qty + "|" + owner, NULL_KEY);
 
-                // Update grown stat
+                // Update grown stat and grant grower XP
                 llMessageLinked(LINK_SET, CHAN_IDENTITY, "UPDATE_GROWN", NULL_KEY);
+                llMessageLinked(LINK_SET, CHAN_IDENTITY, "UPDATE_XP|grower|5", NULL_KEY);
 
                 llOwnerSay("Harvest received: " + (string)qty + "g of " +
                            quality + " " + strain + "!");
@@ -289,6 +299,17 @@ default
                 llMessageLinked(LINK_SET, CHAN_ANIMATION, "STOP_SMOKE_ANIM", NULL_KEY);
                 llMessageLinked(LINK_SET, CHAN_UI, "SESSION_ENDED", NULL_KEY);
                 llOwnerSay("The session has ended.");
+            }
+
+            // Session object rejected our join (distance too far)
+            else if (cmd == "TC_JOIN_REJECTED")
+            {
+                string reason = llList2String(parts, 1);
+                if (reason == "distance")
+                    llOwnerSay("Couldn't join: you're too far from the session object. Move closer.");
+                else
+                    llOwnerSay("Couldn't join the session.");
+                g_inSession = FALSE;
             }
 
             // Session object confirms we joined a session as participant
@@ -343,9 +364,52 @@ default
             // Plug board reports a sale completed
             else if (cmd == "TC_SALE_COMPLETE")
             {
+                string salePrice  = llList2String(parts, 1);
+                string buyerName  = llList2String(parts, 2);
                 llMessageLinked(LINK_SET, CHAN_IDENTITY, "UPDATE_SOLD", NULL_KEY);
-                llOwnerSay("Sale complete! L$" + llList2String(parts,1) +
+                llMessageLinked(LINK_SET, CHAN_IDENTITY, "UPDATE_XP|seller|1", NULL_KEY);
+                // Fire notification so player gets an IM even if AFK
+                llMessageLinked(LINK_SET, CHAN_UI,
+                    "NOTIFY|sale_made|Sale! L$" + salePrice +
+                    " from " + buyerName + ".", NULL_KEY);
+                llOwnerSay("Sale complete! L$" + salePrice +
                            " has been paid to you.");
+            }
+
+            // World object sending a notification to the player
+            // TC_NOTIFY|type|message
+            else if (cmd == "TC_NOTIFY")
+            {
+                llMessageLinked(LINK_SET, CHAN_UI,
+                    "NOTIFY|" + llList2String(parts, 1) + "|" +
+                    llList2String(parts, 2), NULL_KEY);
+            }
+
+            // World object reporting XP earned (e.g. RollingTable after craft)
+            // TC_XP_UPDATE|track|amount
+            else if (cmd == "TC_XP_UPDATE")
+            {
+                llMessageLinked(LINK_SET, CHAN_IDENTITY,
+                    "UPDATE_XP|" + llList2String(parts, 1) + "|" +
+                    llList2String(parts, 2), NULL_KEY);
+            }
+
+            // Session object sending cypher mode turn countdown to this player
+            // TC_YOUR_TURN|secondsRemaining|strain
+            else if (cmd == "TC_YOUR_TURN")
+            {
+                llMessageLinked(LINK_SET, CHAN_UI,
+                    "YOUR_TURN_COUNTDOWN|" + llList2String(parts, 1) + "|" +
+                    llList2String(parts, 2), NULL_KEY);
+            }
+
+            // Session object broadcasting cypher mode change
+            // TC_CYPHER_MODE|active|turnSeconds
+            else if (cmd == "TC_CYPHER_MODE")
+            {
+                llMessageLinked(LINK_SET, CHAN_UI,
+                    "CYPHER_MODE_CHANGE|" + llList2String(parts, 1) + "|" +
+                    llList2String(parts, 2), NULL_KEY);
             }
 
             // Another player's HUD is passing us something
@@ -417,6 +481,28 @@ default
                     llList2String(parts, 4) + "|" +
                     llList2String(parts, 5), id);
             }
+
+            // World object consuming a single item type by strain (breeding station)
+            // TC_CONSUME_ITEM|itemType|strainName|qty
+            else if (cmd == "TC_CONSUME_ITEM")
+            {
+                llMessageLinked(LINK_SET, CHAN_INVENTORY,
+                    "REMOVE_ITEM|"          +
+                    llList2String(parts, 1) + "|" +
+                    llList2String(parts, 2) + "||" +
+                    llList2String(parts, 3) + "|", id);
+            }
+
+            // World object requesting raw inventory list (breeding station, etc.)
+            // TC_REQUEST_RAW_INVENTORY|itemType
+            // Response will be sent back as TC_INVENTORY_DATA on channel 0 to sender
+            else if (cmd == "TC_REQUEST_RAW_INVENTORY")
+            {
+                // Pass sender object key (id) so RAW_INVENTORY handler can relay it back
+                llMessageLinked(LINK_SET, CHAN_INVENTORY,
+                    "REQUEST_RAW_INVENTORY|" + llList2String(parts, 1) + "|" + (string)id,
+                    NULL_KEY);
+            }
         }
 
         // ---- Messages on public session channel ----
@@ -437,10 +523,12 @@ default
                 // Don't invite if already in a session
                 if (g_inSession) return;
 
+                string brandName = llList2String(parts, 7);
                 // Forward to UI to show invite dialog
                 llMessageLinked(LINK_SET, CHAN_UI,
                     "SHOW_SESSION_INVITE|" + hostName + "|" +
-                    (string)sessKey + "|" + strain + "|" + quality, NULL_KEY);
+                    (string)sessKey + "|" + strain + "|" + quality + "|" +
+                    brandName, NULL_KEY);
             }
         }
     }

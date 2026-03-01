@@ -35,11 +35,13 @@
 integer TC_OBJECT_PING_CHAN = -111222333;
 
 // Dialog channels
-integer DCHAN_OWNER_MAIN  = -101001;
-integer DCHAN_OWNER_PRICE = -101002;
-integer DCHAN_OWNER_SLOT  = -101003;
-integer DCHAN_BUYER_BROWSE = -101004;
+integer DCHAN_OWNER_MAIN    = -101001;
+integer DCHAN_OWNER_PRICE   = -101002;
+integer DCHAN_OWNER_SLOT    = -101003;
+integer DCHAN_BUYER_BROWSE  = -101004;
 integer DCHAN_BUYER_CONFIRM = -101005;
+integer DCHAN_CONSIGN_TERMS = -101006;
+integer DCHAN_CONSIGN_CLEAR = -101007;
 
 integer g_listenOwnerMain;
 integer g_listenOwnerPrice;
@@ -48,6 +50,8 @@ integer g_listenBuyerBrowse;
 integer g_listenBuyerConfirm;
 integer g_listenRegister;
 integer g_listenHUD;
+integer g_listenConsignTerms;
+integer g_listenConsignClear;
 
 key     g_ownerKey    = NULL_KEY;
 string  g_ownerName   = "";
@@ -68,6 +72,15 @@ integer g_pendingPrice   = 0;
 
 // Owner's pending price-set slot
 integer g_pricingSlot = -1;
+
+// Consignment mode
+integer g_consignEnabled      = FALSE;
+integer g_consignFeePercent   = 10;    // % board owner takes on consignment sales
+integer MAX_CONSIGN_SLOTS     = 3;     // max simultaneous consignment listings
+key     g_pendingConsignKey   = NULL_KEY;
+string  g_pendingConsignName  = "";
+integer g_consignWindowActive = FALSE; // TRUE while waiting for consignor to drop
+integer g_consignWindowStart  = 0;    // llGetUnixTime() when window opened
 
 // ----------------------------------------------------------------
 // Derive HUD channel from UUID
@@ -218,12 +231,14 @@ updateHoverText()
 // ----------------------------------------------------------------
 closeAllListens()
 {
-    if (g_listenRegister)     { llListenRemove(g_listenRegister);     g_listenRegister    = 0; }
-    if (g_listenOwnerMain)    { llListenRemove(g_listenOwnerMain);    g_listenOwnerMain   = 0; }
-    if (g_listenOwnerPrice)   { llListenRemove(g_listenOwnerPrice);   g_listenOwnerPrice  = 0; }
-    if (g_listenOwnerSlot)    { llListenRemove(g_listenOwnerSlot);    g_listenOwnerSlot   = 0; }
-    if (g_listenBuyerBrowse)  { llListenRemove(g_listenBuyerBrowse);  g_listenBuyerBrowse = 0; }
-    if (g_listenBuyerConfirm) { llListenRemove(g_listenBuyerConfirm); g_listenBuyerConfirm = 0; }
+    if (g_listenRegister)      { llListenRemove(g_listenRegister);      g_listenRegister     = 0; }
+    if (g_listenOwnerMain)     { llListenRemove(g_listenOwnerMain);     g_listenOwnerMain    = 0; }
+    if (g_listenOwnerPrice)    { llListenRemove(g_listenOwnerPrice);    g_listenOwnerPrice   = 0; }
+    if (g_listenOwnerSlot)     { llListenRemove(g_listenOwnerSlot);     g_listenOwnerSlot    = 0; }
+    if (g_listenBuyerBrowse)   { llListenRemove(g_listenBuyerBrowse);   g_listenBuyerBrowse  = 0; }
+    if (g_listenBuyerConfirm)  { llListenRemove(g_listenBuyerConfirm);  g_listenBuyerConfirm = 0; }
+    if (g_listenConsignTerms)  { llListenRemove(g_listenConsignTerms);  g_listenConsignTerms = 0; }
+    if (g_listenConsignClear)  { llListenRemove(g_listenConsignClear);  g_listenConsignClear = 0; }
 }
 
 // ----------------------------------------------------------------
@@ -238,12 +253,15 @@ showOwnerMenu()
     string  status = (string)count + " listings  •  " + boardStateStr;
     string  toggleBtn = "Open Board";
     if (g_boardOpen) toggleBtn = "Close Board";
+    string  consignBtn = "Consign: OFF";
+    if (g_consignEnabled) consignBtn = "Consign: ON";
 
     g_listenOwnerMain = llListen(DCHAN_OWNER_MAIN, "", g_ownerKey, "");
     llDialog(g_ownerKey,
         "=== YOUR PLUG BOARD ===\n" + status,
         ["Set Prices", "Restock", toggleBtn,
-         "Clear Slot", "Board Stats", "Close"],
+         "Clear Slot", consignBtn, "Clr Consign",
+         "Board Stats", "Close"],
         DCHAN_OWNER_MAIN);
     llSetTimerEvent(30.0);
 }
@@ -444,16 +462,41 @@ completeSale(key buyer, integer slot)
     // Give bag to buyer
     llGiveInventory(buyer, invName);
 
-    // Pay the seller
-    llGiveMoney(g_ownerKey, price);
+    // Pay seller — split if consignment
+    if (isConsignment(invName))
+    {
+        key    cKey    = consignorKeyOf(invName);
+        string cName   = consignorNameOf(invName);
+        integer fee    = price * g_consignFeePercent / 100;
+        integer payout = price - fee;
 
-    // Notify buyer and seller
-    llRegionSayTo(buyer, 0,
-        "✓ Purchased: " + quality + " " + strain + " " +
-        (string)weight + "g  —  Check your inventory!");
-    llRegionSayTo(g_ownerKey, 0,
-        "✓ Sold " + quality + " " + strain + " " + (string)weight +
-        "g to " + llKey2Name(buyer) + " for L$" + (string)price + "!");
+        llGiveMoney(g_ownerKey, fee);
+        llGiveMoney(cKey, payout);
+
+        llRegionSayTo(buyer, 0,
+            "✓ Purchased: " + quality + " " + strain + " " +
+            (string)weight + "g  —  Check your inventory!");
+        llRegionSayTo(g_ownerKey, 0,
+            "✓ Consignment sale: " + quality + " " + strain + " to " +
+            llKey2Name(buyer) + " — fee L$" + (string)fee + " received.");
+        llInstantMessage(cKey,
+            "✓ Your " + quality + " " + strain + " sold for L$" + (string)price +
+            "! You receive L$" + (string)payout +
+            " (" + (string)g_consignFeePercent + "% board fee).");
+
+        llLinksetDataDelete(csKey(invName));
+    }
+    else
+    {
+        llGiveMoney(g_ownerKey, price);
+
+        llRegionSayTo(buyer, 0,
+            "✓ Purchased: " + quality + " " + strain + " " +
+            (string)weight + "g  —  Check your inventory!");
+        llRegionSayTo(g_ownerKey, 0,
+            "✓ Sold " + quality + " " + strain + " " + (string)weight +
+            "g to " + llKey2Name(buyer) + " for L$" + (string)price + "!");
+    }
 
     // Notify owner HUD
     llRegionSayTo(g_ownerKey, g_hudChannel,
@@ -469,6 +512,126 @@ completeSale(key buyer, integer slot)
 
     // Re-index remaining slot prices correctly
     // (handled by rebuildListings reading saved price_N keys)
+}
+
+// ----------------------------------------------------------------
+// Consignment helper functions
+// ----------------------------------------------------------------
+string csKey(string invName)
+{
+    // Linkset data key for consignment attribution
+    return "cs_" + llGetSubString(invName, 7, 36);
+}
+
+integer isConsignment(string invName)
+{
+    return llLinksetDataRead(csKey(invName)) != "";
+}
+
+key consignorKeyOf(string invName)
+{
+    string data = llLinksetDataRead(csKey(invName));
+    if (data == "") return NULL_KEY;
+    list parts = llParseString2List(data, ["^"], []);
+    return (key)llList2String(parts, 0);
+}
+
+string consignorNameOf(string invName)
+{
+    string data = llLinksetDataRead(csKey(invName));
+    if (data == "") return "";
+    list parts = llParseString2List(data, ["^"], []);
+    return llList2String(parts, 1);
+}
+
+integer countConsignedBags()
+{
+    integer count = 0;
+    integer total = llGetListLength(g_listings) / LIST_STRIDE;
+    integer i;
+    for (i = 0; i < total; i++)
+    {
+        if (isConsignment(listingStr(i, 0))) count++;
+    }
+    return count;
+}
+
+// ----------------------------------------------------------------
+// NON-OWNER MENU — Browse or Consign Here
+// ----------------------------------------------------------------
+showNonOwnerMenu(key toucher)
+{
+    closeAllListens();
+    g_listenConsignTerms = llListen(DCHAN_CONSIGN_TERMS, "", toucher, "");
+    llDialog(toucher,
+        "=== " + g_ownerName + "'s Plug Board ===\n\n" +
+        "Browse the stash, or consign your own bags here.\n" +
+        "Consignment fee: " + (string)g_consignFeePercent + "%",
+        ["Browse", "Consign Here", "Close"],
+        DCHAN_CONSIGN_TERMS);
+    llSetTimerEvent(30.0);
+}
+
+// ----------------------------------------------------------------
+// CONSIGN TERMS DIALOG — shown to prospective consignors
+// ----------------------------------------------------------------
+showConsignTerms(key consignor)
+{
+    closeAllListens();
+    integer slotsUsed = countConsignedBags();
+    if (slotsUsed >= MAX_CONSIGN_SLOTS)
+    {
+        llRegionSayTo(consignor, 0,
+            "Sorry — all " + (string)MAX_CONSIGN_SLOTS +
+            " consignment slots are full right now.");
+        return;
+    }
+    g_listenConsignTerms = llListen(DCHAN_CONSIGN_TERMS, "", consignor, "");
+    llDialog(consignor,
+        "=== CONSIGN HERE ===\n\n" +
+        "Drop a TC_Bag_ into this board.\n" +
+        "When it sells, " + (string)g_consignFeePercent +
+        "% goes to the board owner.\n" +
+        "You keep " + (string)(100 - g_consignFeePercent) + "%.\n\n" +
+        "Agree and drop your bag within 5 minutes.",
+        ["Agree & Drop", "Cancel"],
+        DCHAN_CONSIGN_TERMS);
+    llSetTimerEvent(30.0);
+}
+
+// ----------------------------------------------------------------
+// CLEAR CONSIGN MENU — owner removes consignment attribution
+// ----------------------------------------------------------------
+showClearConsignMenu()
+{
+    closeAllListens();
+    integer count = llGetListLength(g_listings) / LIST_STRIDE;
+    list   buttons;
+    string menuText = "=== CLEAR CONSIGNMENT ===\nRemove consignment tag from a slot:\n\n";
+    integer found = FALSE;
+    integer i;
+    for (i = 0; i < count; i++)
+    {
+        string invName = listingStr(i, 0);
+        if (isConsignment(invName))
+        {
+            string cName = consignorNameOf(invName);
+            buttons += [llGetSubString(listingStr(i, 1), 0, 6) + " #" + (string)(i+1)];
+            menuText += "#" + (string)(i+1) + " " + listingStr(i, 1) +
+                        " — by " + cName + "\n";
+            found = TRUE;
+        }
+    }
+    if (!found)
+    {
+        llRegionSayTo(g_ownerKey, 0, "No consignment slots to clear.");
+        showOwnerMenu();
+        return;
+    }
+    buttons += ["Back"];
+    g_listenConsignClear = llListen(DCHAN_CONSIGN_CLEAR, "", g_ownerKey, "");
+    llDialog(g_ownerKey, menuText, buttons, DCHAN_CONSIGN_CLEAR);
+    llSetTimerEvent(30.0);
 }
 
 // ----------------------------------------------------------------
@@ -519,15 +682,52 @@ default
     {
         if (change & CHANGED_OWNER)
         {
-            // Board transferred — wipe pricing, keep structure
+            // Board transferred — wipe pricing, consignment data, keep structure
             llLinksetDataDeleteFound("price_", "");
             llLinksetDataDeleteFound("board_", "");
+            llLinksetDataDeleteFound("cs_", "");
             llResetScript();
         }
 
         if (change & CHANGED_INVENTORY)
         {
-            // Owner dropped or removed a bag — rebuild
+            // If a consignment window is active, attribute any new bags
+            if (g_consignWindowActive && g_pendingConsignKey != NULL_KEY)
+            {
+                integer now = llGetUnixTime();
+                if (now - g_consignWindowStart < 300)
+                {
+                    // Find new TC_Bag_ items not already in current listings
+                    integer invCount = llGetInventoryNumber(INVENTORY_OBJECT);
+                    integer ii;
+                    for (ii = 0; ii < invCount; ii++)
+                    {
+                        string iName = llGetInventoryName(INVENTORY_OBJECT, ii);
+                        if (llSubStringIndex(iName, "TC_Bag_") == 0 &&
+                            llLinksetDataRead(csKey(iName)) == "" &&
+                            llListFindList(g_listings, [iName]) == -1)
+                        {
+                            llLinksetDataWrite(csKey(iName),
+                                (string)g_pendingConsignKey + "^" + g_pendingConsignName);
+                            llRegionSayTo(g_pendingConsignKey, 0,
+                                "✓ Bag received for consignment! The owner will set a price.");
+                            g_consignWindowActive = FALSE;
+                            g_pendingConsignKey   = NULL_KEY;
+                            g_pendingConsignName  = "";
+                            ii = invCount; // break
+                        }
+                    }
+                }
+                else
+                {
+                    // Window expired without a bag being dropped
+                    g_consignWindowActive = FALSE;
+                    g_pendingConsignKey   = NULL_KEY;
+                    g_pendingConsignName  = "";
+                }
+            }
+
+            // Rebuild listings from inventory
             rebuildListings();
             updateDisplay();
             updateHoverText();
@@ -582,7 +782,10 @@ default
             integer visitors = (integer)llLinksetDataRead("board_visitors");
             llLinksetDataWrite("board_visitors", (string)(visitors + 1));
 
-            showBuyerMenu(toucher);
+            if (g_consignEnabled)
+                showNonOwnerMenu(toucher);
+            else
+                showBuyerMenu(toucher);
         }
     }
 
@@ -660,6 +863,15 @@ default
             else if (msg == "Close Board") { g_boardOpen = FALSE; updateHoverText(); updateDisplay(); }
             else if (msg == "Open Board")  { g_boardOpen = TRUE;  updateHoverText(); updateDisplay(); }
             else if (msg == "Clear Slot")  showClearSlotMenu();
+            else if (msg == "Consign: OFF" || msg == "Consign: ON")
+            {
+                g_consignEnabled = !g_consignEnabled;
+                string consignState = "DISABLED";
+                if (g_consignEnabled) consignState = "ENABLED";
+                llRegionSayTo(g_ownerKey, 0,
+                    "Consignment mode: " + consignState + ".");
+            }
+            else if (msg == "Clr Consign") showClearConsignMenu();
             else if (msg == "Board Stats") showStats();
         }
 
@@ -774,6 +986,51 @@ default
                     "Right-click the board and choose Pay, " +
                     "then enter L$" + (string)g_pendingPrice + ".");
             }
+        }
+
+        // NON-OWNER MENU / CONSIGN TERMS
+        else if (channel == DCHAN_CONSIGN_TERMS)
+        {
+            llSetTimerEvent(0.0);
+            if (g_listenConsignTerms) { llListenRemove(g_listenConsignTerms); g_listenConsignTerms = 0; }
+
+            if (msg == "Browse")
+                showBuyerMenu(id);
+            else if (msg == "Consign Here")
+                showConsignTerms(id);
+            else if (msg == "Agree & Drop")
+            {
+                g_pendingConsignKey   = id;
+                g_pendingConsignName  = name;
+                g_consignWindowActive = TRUE;
+                g_consignWindowStart  = llGetUnixTime();
+                llRegionSayTo(id, 0,
+                    "✓ Consignment agreed! Drop your TC_Bag_ into the board within 5 minutes.");
+            }
+            // "Cancel" / "Close" — no action
+        }
+
+        // CONSIGN CLEAR — owner removes consignment tag from a slot
+        else if (channel == DCHAN_CONSIGN_CLEAR && id == g_ownerKey)
+        {
+            llSetTimerEvent(0.0);
+            if (g_listenConsignClear) { llListenRemove(g_listenConsignClear); g_listenConsignClear = 0; }
+
+            if (msg == "Back") { showOwnerMenu(); return; }
+
+            integer hashIdx = llSubStringIndex(msg, "#");
+            if (hashIdx == -1) return;
+            integer slot = (integer)llGetSubString(msg, hashIdx + 1, -1) - 1;
+            string  invName = listingStr(slot, 0);
+            if (isConsignment(invName))
+            {
+                string cName = consignorNameOf(invName);
+                llLinksetDataDelete(csKey(invName));
+                llRegionSayTo(g_ownerKey, 0,
+                    "✓ Removed consignment tag from slot #" + (string)(slot+1) +
+                    " (was consigned by " + cName + ").");
+            }
+            showOwnerMenu();
         }
     }
 }

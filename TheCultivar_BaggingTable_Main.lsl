@@ -57,6 +57,7 @@ integer g_listenHUD;
 // State
 key     g_ownerKey      = NULL_KEY;
 string  g_ownerName     = "";
+string  g_brandName     = "";   // brand name received from HUD (used as packager)
 integer g_hudChannel    = 0;
 integer g_registered    = FALSE;
 integer g_busy          = FALSE; // prevents double-touch mid-transaction
@@ -302,7 +303,7 @@ giveBag()
     // Tell HUD to add the bag to inventory with full data
     llRegionSayTo(g_ownerKey, g_hudChannel,
         "TC_ADD_ITEM|bag_" + llToLower(g_selectedSize) + "|" +
-        g_selectedStrain + "|" + g_selectedQuality + "|1|" + g_ownerName);
+        g_selectedStrain + "|" + g_selectedQuality + "|1|" + g_brandName);
 
     // Notify player
     llRegionSayTo(g_ownerKey, 0,
@@ -416,6 +417,8 @@ default
 
             g_hudChannel = (integer)llList2String(parts, 2);
             g_ownerName  = llList2String(parts, 3);
+            g_brandName  = llList2String(parts, 4);
+            if (g_brandName == "") g_brandName = g_ownerName;
             g_registered = TRUE;
 
             if (g_listenRegister) llListenRemove(g_listenRegister);

@@ -14,21 +14,31 @@ integer PCHAN_GROW    = 1000;
 integer PCHAN_PERSIST = 1100;
 
 // Dialog channels
-integer DCHAN_MAIN    = -33001;
-integer DCHAN_PLANT   = -33002;
-integer DCHAN_STRAIN  = -33003;
-integer DCHAN_CONFIRM = -33004;
+integer DCHAN_MAIN     = -33001;
+integer DCHAN_PLANT    = -33002;
+integer DCHAN_STRAIN   = -33003;
+integer DCHAN_CONFIRM  = -33004;
+integer DCHAN_ACCESS   = -33005;
+integer DCHAN_ADD_AUTH = -33006;
+integer DCHAN_REM_AUTH = -33007;
 
 integer g_listenMain;
 integer g_listenPlant;
 integer g_listenStrain;
 integer g_listenConfirm;
-integer g_listenFert;    // fertilizer tier sub-menu
-integer g_listenVisitor; // visitor "Close" dialog
+integer g_listenFert;     // fertilizer tier sub-menu
+integer g_listenVisitor;  // visitor "Close" dialog
+integer g_listenAccess;
+integer g_listenAddAuth;
+integer g_listenRemAuth;
 
 key     g_ownerKey;
 string  g_ownerName;
 key     g_toucher = NULL_KEY;
+
+// Access control
+integer g_plantLocked    = FALSE;  // if TRUE, only owner can interact
+integer g_toucherInGroup = FALSE;  // set in touch_start via llDetectedGroup(0)
 
 // Cached status from grow script
 string  g_strainName    = "";
@@ -48,21 +58,120 @@ string g_pendingAction = "";
 // ----------------------------------------------------------------
 closeAllListens()
 {
-    if (g_listenMain)    { llListenRemove(g_listenMain);    g_listenMain    = 0; }
-    if (g_listenPlant)   { llListenRemove(g_listenPlant);   g_listenPlant   = 0; }
-    if (g_listenStrain)  { llListenRemove(g_listenStrain);  g_listenStrain  = 0; }
-    if (g_listenConfirm) { llListenRemove(g_listenConfirm); g_listenConfirm = 0; }
-    if (g_listenFert)    { llListenRemove(g_listenFert);    g_listenFert    = 0; }
-    if (g_listenVisitor) { llListenRemove(g_listenVisitor); g_listenVisitor = 0; }
+    if (g_listenMain)     { llListenRemove(g_listenMain);     g_listenMain    = 0; }
+    if (g_listenPlant)    { llListenRemove(g_listenPlant);    g_listenPlant   = 0; }
+    if (g_listenStrain)   { llListenRemove(g_listenStrain);   g_listenStrain  = 0; }
+    if (g_listenConfirm)  { llListenRemove(g_listenConfirm);  g_listenConfirm = 0; }
+    if (g_listenFert)     { llListenRemove(g_listenFert);     g_listenFert    = 0; }
+    if (g_listenVisitor)  { llListenRemove(g_listenVisitor);  g_listenVisitor = 0; }
+    if (g_listenAccess)   { llListenRemove(g_listenAccess);   g_listenAccess  = 0; }
+    if (g_listenAddAuth)  { llListenRemove(g_listenAddAuth);  g_listenAddAuth = 0; }
+    if (g_listenRemAuth)  { llListenRemove(g_listenRemAuth);  g_listenRemAuth = 0; }
 }
 
 // ----------------------------------------------------------------
-// Access check — owner only for most actions
-// Visitors can view status but not interact
+// Access check — owner always authorized; others via auth list or group
+// g_toucherInGroup must be set before calling (touch_start only)
 // ----------------------------------------------------------------
 integer isOwner(key who)
 {
     return (who == g_ownerKey);
+}
+
+integer isAuthorized(key who)
+{
+    if (who == g_ownerKey) return TRUE;
+    if (g_plantLocked) return FALSE;
+    // Check explicit auth list
+    string authData = llLinksetDataRead("auth_list");
+    if (authData != "" &&
+        llListFindList(llParseString2List(authData, [","], []),
+                       [(string)who]) != -1)
+        return TRUE;
+    // Check same group as the object
+    if (g_toucherInGroup) return TRUE;
+    return FALSE;
+}
+
+// ----------------------------------------------------------------
+// ACCESS MANAGEMENT MENUS
+// ----------------------------------------------------------------
+showAccessMenu()
+{
+    closeAllListens();
+    string authData  = llLinksetDataRead("auth_list");
+    integer authCount = 0;
+    if (authData != "")
+        authCount = llGetListLength(llParseString2List(authData, [","], []));
+    string lockBtn = "Lock Plant";
+    if (g_plantLocked) lockBtn = "Unlock Plant";
+    string lockStatus = "Open (group + auth list)";
+    if (g_plantLocked) lockStatus = "LOCKED (owner only)";
+    g_listenAccess = llListen(DCHAN_ACCESS, "", g_ownerKey, "");
+    llDialog(g_ownerKey,
+        "=== ACCESS CONTROL ===\n" +
+        "Authorized: " + (string)authCount + " player(s)\n" +
+        "Status: " + lockStatus,
+        ["Add Player", "Remove Player", lockBtn, "Back"],
+        DCHAN_ACCESS);
+    llSetTimerEvent(30.0);
+}
+
+showAddPlayerMenu()
+{
+    closeAllListens();
+    list   agents  = llGetAgentList(AGENT_LIST_PARCEL, []);
+    list   buttons;
+    string menuText = "=== ADD PLAYER ===\nGrant access to:\n\n";
+    integer i;
+    for (i = 0; i < llGetListLength(agents); i++)
+    {
+        key    a = llList2Key(agents, i);
+        if (a == g_ownerKey) jump skip_self;
+        string n = llKey2Name(a);
+        buttons += [llGetSubString(n, 0, 11)];
+        menuText += n + "\n";
+        @skip_self;
+    }
+    if (llGetListLength(buttons) == 0)
+    {
+        llRegionSayTo(g_ownerKey, 0, "No other players nearby to add.");
+        showAccessMenu();
+        return;
+    }
+    buttons += ["Back"];
+    g_listenAddAuth = llListen(DCHAN_ADD_AUTH, "", g_ownerKey, "");
+    llDialog(g_ownerKey, menuText, buttons, DCHAN_ADD_AUTH);
+    llSetTimerEvent(30.0);
+}
+
+showRemovePlayerMenu()
+{
+    closeAllListens();
+    string authData = llLinksetDataRead("auth_list");
+    list   authList = llParseString2List(authData, [","], []);
+    integer n = llGetListLength(authList);
+    if (n == 0)
+    {
+        llRegionSayTo(g_ownerKey, 0, "Auth list is empty.");
+        showAccessMenu();
+        return;
+    }
+    list   buttons;
+    string menuText = "=== REMOVE PLAYER ===\nRemove access from:\n\n";
+    integer i;
+    for (i = 0; i < n && llGetListLength(buttons) < 9; i++)
+    {
+        string k     = llList2String(authList, i);
+        string pName = llKey2Name((key)k);
+        if (pName == "") pName = llGetSubString(k, 0, 7) + "...";
+        buttons  += [llGetSubString(pName, 0, 11)];
+        menuText += pName + "\n";
+    }
+    buttons += ["Back"];
+    g_listenRemAuth = llListen(DCHAN_REM_AUTH, "", g_ownerKey, "");
+    llDialog(g_ownerKey, menuText, buttons, DCHAN_REM_AUTH);
+    llSetTimerEvent(30.0);
 }
 
 // ----------------------------------------------------------------
@@ -128,6 +237,14 @@ showMainMenu()
         if (g_stage != 2 || g_fertApplied)
             buttons = llDeleteSubList(buttons, llListFindList(buttons, ["Fertilize"]),
                                      llListFindList(buttons, ["Fertilize"]));
+    }
+
+    // Owner gets an Access button for managing the auth list
+    if (isOwner(g_toucher))
+    {
+        integer closeIdx = llListFindList(buttons, ["Close"]);
+        if (closeIdx != -1)
+            buttons = llListInsertList(buttons, ["Access"], closeIdx);
     }
 
     g_listenMain = llListen(DCHAN_MAIN, "", g_toucher, "");
@@ -257,8 +374,9 @@ default
 {
     state_entry()
     {
-        g_ownerKey  = llGetOwner();
-        g_ownerName = llKey2Name(g_ownerKey);
+        g_ownerKey    = llGetOwner();
+        g_ownerName   = llKey2Name(g_ownerKey);
+        g_plantLocked = (integer)llLinksetDataRead("plant_locked");
         llMessageLinked(LINK_SET, PCHAN_GROW, "REQUEST_STATUS", NULL_KEY);
         // No channel-0 listener needed here: the grow script derives the HUD
         // channel directly from the owner key and handles TC_REGISTER itself.
@@ -266,8 +384,9 @@ default
 
     on_rez(integer start_param)
     {
-        g_ownerKey  = llGetOwner();
-        g_ownerName = llKey2Name(g_ownerKey);
+        g_ownerKey    = llGetOwner();
+        g_ownerName   = llKey2Name(g_ownerKey);
+        g_plantLocked = (integer)llLinksetDataRead("plant_locked");
         llMessageLinked(LINK_SET, PCHAN_GROW, "REQUEST_STATUS", NULL_KEY);
     }
 
@@ -275,7 +394,9 @@ default
     {
         if (change & CHANGED_OWNER)
         {
-            // Plant stays with the land — if it's transferred, reset
+            // Plant stays with the land — if it's transferred, reset and clear auth
+            llLinksetDataDelete("auth_list");
+            llLinksetDataDelete("plant_locked");
             llMessageLinked(LINK_SET, PCHAN_GROW, "DO_RESET", NULL_KEY);
             llResetScript();
         }
@@ -289,7 +410,8 @@ default
 
     touch_start(integer nd)
     {
-        g_toucher = llDetectedKey(0);
+        g_toucher        = llDetectedKey(0);
+        g_toucherInGroup = llDetectedGroup(0); // must read here, in touch_start event
         closeAllListens();
         llSetTimerEvent(0.0);
 
@@ -300,10 +422,16 @@ default
         // the grow script sends a STATUS reply (including after each action).
         llMessageLinked(LINK_SET, PCHAN_GROW, "REQUEST_STATUS", NULL_KEY);
 
-        if (isOwner(g_toucher))
+        if (isAuthorized(g_toucher))
             showMainMenu();
         else
-            showVisitorMenu();
+        {
+            if (g_plantLocked)
+                llRegionSayTo(g_toucher, 0,
+                    g_ownerName + "'s plant is locked — owner access only.");
+            else
+                showVisitorMenu();
+        }
     }
 
     listen(integer channel, string name, key id, string msg)
@@ -350,6 +478,97 @@ default
                 llRegionSayTo(g_toucher, 0,
                     "Rez a new pot from your inventory to replace this one.");
             }
+
+            else if (msg == "Access" && isOwner(g_toucher))
+                showAccessMenu();
+        }
+
+        // ACCESS CONTROL MENU — owner only
+        else if (channel == DCHAN_ACCESS && id == g_ownerKey)
+        {
+            llSetTimerEvent(0.0);
+            if (g_listenAccess) { llListenRemove(g_listenAccess); g_listenAccess = 0; }
+
+            if      (msg == "Back")           showMainMenu();
+            else if (msg == "Add Player")     showAddPlayerMenu();
+            else if (msg == "Remove Player")  showRemovePlayerMenu();
+            else if (msg == "Lock Plant" || msg == "Unlock Plant")
+            {
+                g_plantLocked = !g_plantLocked;
+                llLinksetDataWrite("plant_locked", (string)g_plantLocked);
+                string lockState = "unlocked (group members and auth list can interact)";
+                if (g_plantLocked) lockState = "LOCKED (owner only)";
+                llRegionSayTo(g_ownerKey, 0, "Plant " + lockState + ".");
+                showAccessMenu();
+            }
+        }
+
+        // ADD AUTH — pick a nearby player to grant access
+        else if (channel == DCHAN_ADD_AUTH && id == g_ownerKey)
+        {
+            llSetTimerEvent(0.0);
+            if (g_listenAddAuth) { llListenRemove(g_listenAddAuth); g_listenAddAuth = 0; }
+
+            if (msg == "Back") { showAccessMenu(); return; }
+
+            // Resolve truncated name to agent key
+            list agents = llGetAgentList(AGENT_LIST_PARCEL, []);
+            integer i;
+            for (i = 0; i < llGetListLength(agents); i++)
+            {
+                key    a = llList2Key(agents, i);
+                if (a == g_ownerKey) jump skip_ao;
+                string n = llKey2Name(a);
+                if (llGetSubString(n, 0, 11) == msg)
+                {
+                    string authData = llLinksetDataRead("auth_list");
+                    list   authList = llParseString2List(authData, [","], []);
+                    if (llListFindList(authList, [(string)a]) == -1)
+                    {
+                        if (authData == "") authData = (string)a;
+                        else authData += "," + (string)a;
+                        llLinksetDataWrite("auth_list", authData);
+                        llRegionSayTo(g_ownerKey, 0, "Added " + n + " to plant access list.");
+                    }
+                    else
+                        llRegionSayTo(g_ownerKey, 0, n + " is already authorized.");
+                    showAccessMenu();
+                    return;
+                }
+                @skip_ao;
+            }
+            llRegionSayTo(g_ownerKey, 0, "Couldn't find that player nearby.");
+            showAccessMenu();
+        }
+
+        // REMOVE AUTH — remove a player from the auth list
+        else if (channel == DCHAN_REM_AUTH && id == g_ownerKey)
+        {
+            llSetTimerEvent(0.0);
+            if (g_listenRemAuth) { llListenRemove(g_listenRemAuth); g_listenRemAuth = 0; }
+
+            if (msg == "Back") { showAccessMenu(); return; }
+
+            string authData = llLinksetDataRead("auth_list");
+            list   authList = llParseString2List(authData, [","], []);
+            integer n = llGetListLength(authList);
+            integer i;
+            for (i = 0; i < n; i++)
+            {
+                string k     = llList2String(authList, i);
+                string pName = llKey2Name((key)k);
+                if (pName == "") pName = llGetSubString(k, 0, 7) + "...";
+                if (llGetSubString(pName, 0, 11) == msg)
+                {
+                    authList = llDeleteSubList(authList, i, i);
+                    llLinksetDataWrite("auth_list", llDumpList2String(authList, ","));
+                    llRegionSayTo(g_ownerKey, 0, "Removed " + pName + " from access list.");
+                    showAccessMenu();
+                    return;
+                }
+            }
+            llRegionSayTo(g_ownerKey, 0, "Player not found in auth list.");
+            showAccessMenu();
         }
 
         // SEED TIER SELECTION (reusing plant menu listen)
