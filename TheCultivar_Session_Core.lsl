@@ -532,6 +532,21 @@ default
 
             if (!g_sessionActive) return;
 
+            // Distance check — joiner must be within 20m of the session object
+            list posInfo = llGetObjectDetails(joinerKey, [OBJECT_POS]);
+            if (llGetListLength(posInfo) > 0)
+            {
+                vector joinerPos = llList2Vector(posInfo, 0);
+                if (llVecDist(joinerPos, llGetPos()) > 20.0)
+                {
+                    integer rejChan = deriveHUDChannel(joinerKey);
+                    llRegionSayTo(joinerKey, rejChan, "TC_JOIN_REJECTED|distance");
+                    llRegionSayTo(joinerKey, 0,
+                        "You're too far from the session. Move closer and try again.");
+                    return;
+                }
+            }
+
             if (addParticipant(joinerKey, joinerName))
             {
                 integer joinerHUDChan = deriveHUDChannel(joinerKey);

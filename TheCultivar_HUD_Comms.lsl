@@ -301,6 +301,17 @@ default
                 llOwnerSay("The session has ended.");
             }
 
+            // Session object rejected our join (distance too far)
+            else if (cmd == "TC_JOIN_REJECTED")
+            {
+                string reason = llList2String(parts, 1);
+                if (reason == "distance")
+                    llOwnerSay("Couldn't join: you're too far from the session object. Move closer.");
+                else
+                    llOwnerSay("Couldn't join the session.");
+                g_inSession = FALSE;
+            }
+
             // Session object confirms we joined a session as participant
             else if (cmd == "TC_SESSION_JOINED")
             {
