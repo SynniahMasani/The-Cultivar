@@ -419,7 +419,7 @@ default
             "TC_SESSION_REZZED|" + (string)llGetKey() + "|" +
             (string)g_sessionChannel);
 
-        llSetTimerEvent(3.0); // brief wait for host HUD to respond
+        llSetTimerEvent(30.0); // wait for host HUD to show item picker and respond
     }
 
     on_rez(integer start_param)
