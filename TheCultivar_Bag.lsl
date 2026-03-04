@@ -34,12 +34,6 @@
 // Public ping channel (same as bagging table — for HUD communication)
 integer TC_OBJECT_PING_CHAN = -111222333;
 
-// llSetForSale type constants (defined explicitly for compiler compatibility)
-integer SALE_NOT      = 0;
-integer SALE_ORIGINAL = 1;  // sell the original object to the buyer
-integer SALE_COPY     = 2;
-integer SALE_CONTENTS = 3;
-
 // Dialog channels
 integer DCHAN_OWNER   = -77001;
 integer DCHAN_PRICE   = -77002;
@@ -247,7 +241,7 @@ default
         updateHoverText();
         // Restore for-sale state so the SL Buy flow works after a re-rez
         if (g_forSale && g_price > 0)
-            llSetForSale(SALE_ORIGINAL, g_price);
+            llSetForSale(1, g_price); // 1 = SALE_ORIGINAL
         if (g_listenRegister) llListenRemove(g_listenRegister);
         g_listenRegister = llListen(0, "", NULL_KEY, "");
     }
@@ -426,7 +420,7 @@ default
             saveDescription();
             updateHoverText();
             // Set the object for sale so SL's Buy flow transfers it to buyers
-            llSetForSale(SALE_ORIGINAL, g_price);
+            llSetForSale(1, g_price); // 1 = SALE_ORIGINAL
             llRegionSayTo(g_ownerKey, 0,
                 "✓ " + g_strain + " is now for sale at L$" + (string)g_price + ".");
         }
