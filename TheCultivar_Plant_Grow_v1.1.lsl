@@ -148,7 +148,7 @@ updateVisuals()
     if (g_stage == 0)
     {
         llSetLinkPrimitiveParamsFast(2, [PRIM_SIZE, <0.001, 0.001, 0.001>]);
-        llSetLinkPrimitiveParamsFast(3, [PRIM_PARTICLE_SYSTEM, []]);
+        llLinkParticleSystem(3, []);
     }
     else if (g_stage == 1)
     {
