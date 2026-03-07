@@ -1,5 +1,5 @@
 // ================================================================
-// THE CULTIVAR — Bag Object Script  (TC_Bag_Eighth  — ~3.5g)
+// THE CULTIVAR  -  Bag Object Script  (TC_Bag_Eighth   -  ~3.5g)
 // Version: 1.0
 // Lives inside: TC_Bag_Eighth
 //
@@ -73,10 +73,10 @@ string qualLabel()
 updateHoverText()
 {
     string line1 = g_strain + " [" + qualLabel() + "]";
-    string line2 = (string)g_weight + "g  •  Packed by " + g_packager;
+    string line2 = (string)g_weight + "g  *  Packed by " + g_packager;
     string line3;
     if (g_forSale)
-        line3 = "FOR SALE — L$" + (string)g_price + " — Click to buy";
+        line3 = "FOR SALE  -  L$" + (string)g_price + "  -  Click to buy";
     else
         line3 = "Personal stash";
 
@@ -117,7 +117,7 @@ showOwnerMenu()
     llDialog(g_ownerKey,
         "=== YOUR EIGHTH BAG ===\n" +
         g_strain + " [" + qualLabel() + "]\n" +
-        (string)g_weight + "g  •  Packed by: " + g_packager + "\n" + saleStr,
+        (string)g_weight + "g  *  Packed by: " + g_packager + "\n" + saleStr,
         buttons, DCHAN_OWNER);
     llSetTimerEvent(30.0);
 }
