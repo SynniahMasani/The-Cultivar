@@ -224,8 +224,6 @@ default
         g_ownerName = llKey2Name(g_ownerKey);
         parseDescription();
         updateHoverText();
-        if (g_forSale && g_price > 0)
-            llSetForSale(1, g_price); // 1 = SALE_ORIGINAL
         if (g_listenRegister) llListenRemove(g_listenRegister);
         g_listenRegister = llListen(0, "", NULL_KEY, "");
     }
@@ -362,7 +360,6 @@ default
             g_forSale = TRUE;
             saveDescription();
             updateHoverText();
-            llSetForSale(1, g_price); // 1 = SALE_ORIGINAL
             llRegionSayTo(g_ownerKey, 0,
                 g_strain + " is now for sale at L$" + (string)g_price + ".");
         }

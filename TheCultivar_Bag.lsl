@@ -240,8 +240,6 @@ default
         parseDescription();
         updateHoverText();
         // Restore for-sale state so the SL Buy flow works after a re-rez
-        if (g_forSale && g_price > 0)
-            llSetForSale(1, g_price); // 1 = SALE_ORIGINAL
         if (g_listenRegister) llListenRemove(g_listenRegister);
         g_listenRegister = llListen(0, "", NULL_KEY, "");
     }
@@ -420,7 +418,6 @@ default
             saveDescription();
             updateHoverText();
             // Set the object for sale so SL's Buy flow transfers it to buyers
-            llSetForSale(1, g_price); // 1 = SALE_ORIGINAL
             llRegionSayTo(g_ownerKey, 0,
                 "" + g_strain + " is now for sale at L$" + (string)g_price + ".");
         }
