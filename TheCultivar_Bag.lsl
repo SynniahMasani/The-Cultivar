@@ -1,5 +1,5 @@
 // ================================================================
-// THE CULTIVAR — Bag Object Script
+// THE CULTIVAR  -  Bag Object Script
 // Version: 1.0
 // Lives inside: TC_Bag_Dime, TC_Bag_Eighth, TC_Bag_Quarter,
 //               TC_Bag_Half, TC_Bag_Oz
@@ -18,8 +18,8 @@
 //   Example: "OG Kush:loud:FarmerJoe:7g:0:0"
 //
 // STATES:
-//   Personal  — only the owner can interact with it
-//   For Sale  — anyone can buy it at the set price
+//   Personal   -  only the owner can interact with it
+//   For Sale   -  anyone can buy it at the set price
 //
 // WHEN REZZED ON LAND:
 //   Shows hover text with strain info and for sale status
@@ -31,7 +31,7 @@
 //   Can be loaded into a weed jar
 // ================================================================
 
-// Public ping channel (same as bagging table — for HUD communication)
+// Public ping channel (same as bagging table  -  for HUD communication)
 integer TC_OBJECT_PING_CHAN = -111222333;
 
 // Dialog channels
@@ -45,7 +45,7 @@ integer g_listenBuyer;
 integer g_listenHUD;
 integer g_listenRegister;
 
-// Bag identity — parsed from object description on rez
+// Bag identity  -  parsed from object description on rez
 string  g_strain    = "Unknown";
 string  g_quality   = "reggie";
 string  g_packager  = "Unknown";
@@ -105,10 +105,10 @@ saveDescription()
 // ----------------------------------------------------------------
 string qualLabel()
 {
-    if (g_quality == "reggie") return "Reggie 🟤";
-    if (g_quality == "mids")   return "Mids 🟡";
-    if (g_quality == "loud")   return "Loud 🟢";
-    if (g_quality == "exotic") return "Exotic ✨";
+    if (g_quality == "reggie") return "Reggie";
+    if (g_quality == "mids")   return "Mids";
+    if (g_quality == "loud")   return "Loud";
+    if (g_quality == "exotic") return "Exotic";
     return g_quality;
 }
 
@@ -118,15 +118,15 @@ string qualLabel()
 updateHoverText()
 {
     string line1 = g_strain + " [" + qualLabel() + "]";
-    string line2 = (string)g_weight + "g  •  Packed by " + g_packager;
+    string line2 = (string)g_weight + "g  *  Packed by " + g_packager;
     string line3;
     if (g_forSale)
-        line3 = "FOR SALE — L$" + (string)g_price + " — Click to buy";
+        line3 = "FOR SALE  -  L$" + (string)g_price + "  -  Click to buy";
     else
         line3 = "Personal stash";
 
     // Color by quality tier
-    vector textColor = <0.7, 0.7, 0.7>; // reggie — grey
+    vector textColor = <0.7, 0.7, 0.7>; // reggie  -  grey
     if (g_quality == "mids")   textColor = <1.0, 0.9, 0.3>; // yellow
     if (g_quality == "loud")   textColor = <0.3, 0.9, 0.3>; // green
     if (g_quality == "exotic") textColor = <0.6, 0.3, 1.0>; // purple
@@ -158,7 +158,7 @@ pingHUD()
 }
 
 // ----------------------------------------------------------------
-// OWNER MENU — manage the bag
+// OWNER MENU  -  manage the bag
 // ----------------------------------------------------------------
 showOwnerMenu()
 {
@@ -176,14 +176,14 @@ showOwnerMenu()
     llDialog(g_ownerKey,
         "=== YOUR BAG ===\n" +
         g_strain + " [" + qualLabel() + "]\n" +
-        (string)g_weight + "g  •  Packed by: " + g_packager + "\n" +
+        (string)g_weight + "g  *  Packed by: " + g_packager + "\n" +
         saleStr,
         buttons, DCHAN_OWNER);
     llSetTimerEvent(30.0);
 }
 
 // ----------------------------------------------------------------
-// BUYER MENU — shown to non-owners when for sale
+// BUYER MENU  -  shown to non-owners when for sale
 // ----------------------------------------------------------------
 showBuyerMenu(key buyer)
 {
@@ -250,7 +250,7 @@ default
     {
         if (change & CHANGED_OWNER)
         {
-            // Bag was transferred — update owner, keep data, go to personal
+            // Bag was transferred  -  update owner, keep data, go to personal
             g_ownerKey  = llGetOwner();
             g_ownerName = llKey2Name(g_ownerKey);
             g_forSale   = FALSE;
@@ -295,7 +295,7 @@ default
     {
         if (!g_forSale)
         {
-            // Refund — not for sale
+            // Refund  -  not for sale
             llGiveMoney(buyer, amount);
             llRegionSayTo(buyer, 0, "This bag isn't for sale. Refunding your L$.");
             return;
@@ -303,14 +303,14 @@ default
 
         if (amount < g_price)
         {
-            // Underpaid — refund
+            // Underpaid  -  refund
             llGiveMoney(buyer, amount);
             llRegionSayTo(buyer, 0,
                 "That's not enough. Price is L$" + (string)g_price + ". Refunding.");
             return;
         }
 
-        // Overpaid — refund the difference
+        // Overpaid  -  refund the difference
         if (amount > g_price)
             llGiveMoney(buyer, amount - g_price);
 
@@ -319,16 +319,16 @@ default
 
         // The bag object itself transfers via llSetForSale(SALE_ORIGINAL, ...)
         // which is set when the price is configured. The SL Buy flow handles
-        // the actual object transfer — we cannot give the bag via llGiveInventory
+        // the actual object transfer  -  we cannot give the bag via llGiveInventory
         // since an object cannot give itself. Calling llDie() below cleans up
         // if the buyer used Pay instead of Buy (edge case).
 
         // Notify both parties
         llRegionSayTo(buyer, 0,
-            "✓ Purchased: " + g_strain + " [" + g_quality + "] " +
+            "Purchased: " + g_strain + " [" + g_quality + "] " +
             (string)g_weight + "g from " + g_ownerName);
         llRegionSayTo(g_ownerKey, 0,
-            "✓ Sold your " + g_strain + " bag to " +
+            "Sold your " + g_strain + " bag to " +
             llKey2Name(buyer) + " for L$" + (string)g_price);
 
         // Tell owner's HUD to record the sale
@@ -336,7 +336,7 @@ default
         llRegionSayTo(g_ownerKey, ownerHUDChan,
             "TC_SALE_COMPLETE|" + (string)g_price + "|" + llKey2Name(buyer));
 
-        // Self destruct — bag has been sold and given
+        // Self destruct  -  bag has been sold and given
         llDie();
     }
 
@@ -414,7 +414,7 @@ default
 
             if (msg == "Back") { showOwnerMenu(); return; }
 
-            // Parse "L$200" → 200
+            // Parse "L$200"  -> 200
             g_price   = (integer)llGetSubString(msg, 2, -1);
             g_forSale = TRUE;
             saveDescription();
@@ -422,7 +422,7 @@ default
             // Set the object for sale so SL's Buy flow transfers it to buyers
             llSetForSale(1, g_price); // 1 = SALE_ORIGINAL
             llRegionSayTo(g_ownerKey, 0,
-                "✓ " + g_strain + " is now for sale at L$" + (string)g_price + ".");
+                "" + g_strain + " is now for sale at L$" + (string)g_price + ".");
         }
 
         // BUYER MENU responses

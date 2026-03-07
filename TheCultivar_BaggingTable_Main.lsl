@@ -1,5 +1,5 @@
 // ================================================================
-// THE CULTIVAR — Bagging Table Main Script
+// THE CULTIVAR  -  Bagging Table Main Script
 // Version: 1.0
 // Handles: Touch input, HUD registration, flower inventory display,
 //          bag size selection, consuming flower from HUD inventory,
@@ -7,14 +7,14 @@
 //
 // FLOW:
 //   1. Player touches table
-//   2. Table pings on TC_OBJECT_PING_CHAN → HUD responds with TC_REGISTER
+//   2. Table pings on TC_OBJECT_PING_CHAN  -> HUD responds with TC_REGISTER
 //   3. Table now has owner's private channel
 //   4. Table requests flower inventory via TC_INVENTORY_REQUEST
 //   5. HUD sends back TC_INVENTORY_DATA with serialized flower slots
 //   6. Table builds a menu from available flower
-//   7. Player picks strain → picks bag size
+//   7. Player picks strain  -> picks bag size
 //   8. Table checks they have enough flower
-//   9. Table sends TC_REMOVE_ITEM to HUD → waits for TC_REMOVE_OK
+//   9. Table sends TC_REMOVE_ITEM to HUD  -> waits for TC_REMOVE_OK
 //  10. Table gives player the appropriate bag object from its inventory
 //      with strain/quality/packager/weight data written into it
 //
@@ -37,7 +37,7 @@
 // description before giving it so the bag script can read it.
 // ================================================================
 
-// Public ping channel — table broadcasts here when touched
+// Public ping channel  -  table broadcasts here when touched
 // HUD_Comms listens on this channel for world object pings
 integer TC_OBJECT_PING_CHAN = -111222333;
 
@@ -93,7 +93,7 @@ closeAllListens()
 }
 
 // ----------------------------------------------------------------
-// Ping the HUD — broadcasts table key on public ping channel
+// Ping the HUD  -  broadcasts table key on public ping channel
 // HUD_Comms hears this and sends TC_REGISTER back on channel 0
 // ----------------------------------------------------------------
 pingHUD()
@@ -174,7 +174,7 @@ showFlowerMenu()
 
         string btnLabel = llGetSubString(strain, 0, 10); // truncate for button
         buttons += [btnLabel];
-        menuText += qLabel + " " + strain + " — " + qty + "g\n";
+        menuText += qLabel + " " + strain + "  -  " + qty + "g\n";
     }
     buttons += ["Cancel"];
 
@@ -204,7 +204,7 @@ showSizeMenu()
         {
             string sizeName = llList2String(BAG_SIZES, i);
             buttons += [sizeName + " (" + (string)cost + "g)"];
-            menuText += sizeName + " — " + (string)cost + "g\n";
+            menuText += sizeName + "  -  " + (string)cost + "g\n";
         }
     }
 
@@ -279,7 +279,7 @@ giveBag()
     // the start_param of llRezObject to pass a hash, then give via
     // llGiveInventory for simplicity. The bag script reads its own
     // description which we pre-set by rezzing, configuring, and
-    // taking back — OR we encode data in the object name at give time.
+    // taking back  -  OR we encode data in the object name at give time.
     //
     // Practical SL approach: give the bag, and separately send the
     // strain data to the player's HUD which stores it mapped to the
@@ -307,11 +307,11 @@ giveBag()
 
     // Notify player
     llRegionSayTo(g_ownerKey, 0,
-        "✓ Bagged: " + g_selectedSize + " of " +
+        "Bagged: " + g_selectedSize + " of " +
         g_selectedQuality + " " + g_selectedStrain +
         " (" + (string)g_selectedCost + "g used)");
 
-    // Visual feedback — brief particle burst from table
+    // Visual feedback  -  brief particle burst from table
     llParticleSystem([
         PSYS_PART_FLAGS,        PSYS_PART_INTERP_COLOR_MASK | PSYS_PART_EMISSIVE_MASK,
         PSYS_SRC_PATTERN,       PSYS_SRC_PATTERN_EXPLODE,
@@ -367,7 +367,7 @@ default
     {
         // Listen on channel 0 for HUD registration (TC_REGISTER response)
         // The table pings on TC_OBJECT_PING_CHAN when touched (via pingHUD),
-        // it does not listen on that channel — no g_listenPing needed here.
+        // it does not listen on that channel  -  no g_listenPing needed here.
         g_listenRegister = llListen(0, "", NULL_KEY, "");
         updateHoverText();
     }
@@ -392,7 +392,7 @@ default
 
         if (g_busy)
         {
-            llRegionSayTo(toucher, 0, "Hold on — finishing previous action...");
+            llRegionSayTo(toucher, 0, "Hold on  -  finishing previous action...");
             return;
         }
 
@@ -531,13 +531,13 @@ default
         // Main fallback (empty flower close button)
         else if (channel == DCHAN_MAIN)
         {
-            // Just closes — nothing to do
+            // Just closes  -  nothing to do
         }
     }
 
     timer()
     {
-        // Timeout — clean up and reset
+        // Timeout  -  clean up and reset
         closeAllListens();
         llSetTimerEvent(0.0);
         g_busy = FALSE;

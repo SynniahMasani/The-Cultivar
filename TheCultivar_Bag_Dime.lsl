@@ -1,5 +1,5 @@
 // ================================================================
-// THE CULTIVAR — Bag Object Script  (TC_Bag_Dime  — ~1g)
+// THE CULTIVAR  -  Bag Object Script  (TC_Bag_Dime   -  ~1g)
 // Version: 1.0
 // Lives inside: TC_Bag_Dime
 //
@@ -17,11 +17,11 @@
 //   Example: "OG Kush:loud:FarmerJoe:1g:0:0"
 //
 // STATES:
-//   Personal  — only the owner can interact with it
-//   For Sale  — anyone can buy it at the set price
+//   Personal   -  only the owner can interact with it
+//   For Sale   -  anyone can buy it at the set price
 // ================================================================
 
-// Public ping channel (same as bagging table — for HUD communication)
+// Public ping channel (same as bagging table  -  for HUD communication)
 integer TC_OBJECT_PING_CHAN = -111222333;
 
 // Dialog channels
@@ -35,7 +35,7 @@ integer g_listenBuyer;
 integer g_listenHUD;
 integer g_listenRegister;
 
-// Bag identity — parsed from object description on rez
+// Bag identity  -  parsed from object description on rez
 string  g_strain    = "Unknown";
 string  g_quality   = "reggie";
 string  g_packager  = "Unknown";
@@ -107,10 +107,10 @@ string qualLabel()
 updateHoverText()
 {
     string line1 = g_strain + " [" + qualLabel() + "]";
-    string line2 = (string)g_weight + "g  •  Packed by " + g_packager;
+    string line2 = (string)g_weight + "g  *  Packed by " + g_packager;
     string line3;
     if (g_forSale)
-        line3 = "FOR SALE — L$" + (string)g_price + " — Click to buy";
+        line3 = "FOR SALE  -  L$" + (string)g_price + "  -  Click to buy";
     else
         line3 = "Personal stash";
 
@@ -164,7 +164,7 @@ showOwnerMenu()
     llDialog(g_ownerKey,
         "=== YOUR DIME BAG ===\n" +
         g_strain + " [" + qualLabel() + "]\n" +
-        (string)g_weight + "g  •  Packed by: " + g_packager + "\n" +
+        (string)g_weight + "g  *  Packed by: " + g_packager + "\n" +
         saleStr,
         buttons, DCHAN_OWNER);
     llSetTimerEvent(30.0);
@@ -189,7 +189,7 @@ showBuyerMenu(key buyer)
 }
 
 // ----------------------------------------------------------------
-// PRICE MENU — Dime bag price range
+// PRICE MENU  -  Dime bag price range
 // ----------------------------------------------------------------
 showPriceMenu()
 {
