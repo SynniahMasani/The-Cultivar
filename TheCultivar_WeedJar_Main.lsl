@@ -46,6 +46,7 @@ integer DCHAN_ACCESS  = -88003;
 integer DCHAN_VISITOR = -88004;
 
 integer g_listenRegister;
+integer g_replyChannel  = 0;   // random private channel for TC_REGISTER reply
 integer g_listenHUD;
 integer g_listenOwner;
 integer g_listenLoad;
@@ -102,9 +103,11 @@ pingHUD()
 {
     g_registered = FALSE;
     if (g_listenRegister) llListenRemove(g_listenRegister);
-    g_listenRegister = llListen(0, "", NULL_KEY, "");
+    g_replyChannel   = (integer)(llFrand(1000000.0) + 1000000) * -1;
+    g_listenRegister = llListen(g_replyChannel, "", NULL_KEY, "");
     llRegionSay(TC_OBJECT_PING_CHAN,
-        "TC_PING|" + (string)llGetKey() + "|weed_jar");
+        "TC_PING|" + (string)llGetKey() + "|weed_jar|" +
+        (string)g_replyChannel);
     llSetTimerEvent(8.0);
 }
 
@@ -417,8 +420,7 @@ default
         // which will populate our local cache and update visuals.
         updateVisuals(); // show empty/default until Storage responds
 
-        if (g_listenRegister) llListenRemove(g_listenRegister);
-        g_listenRegister = llListen(0, "", NULL_KEY, "");
+        // Registration listener opened in pingHUD() on a random reply channel.
         llListen(g_hudChannel, "", NULL_KEY, "");
     }
 
@@ -500,8 +502,8 @@ default
         list   parts = llParseString2List(msg, ["|"], []);
         string cmd   = llList2String(parts, 0);
 
-        // HUD registration response
-        if (channel == 0 && cmd == "TC_REGISTER")
+        // HUD registration response (arrives on private reply channel)
+        if (channel == g_replyChannel && cmd == "TC_REGISTER")
         {
             key regOwner = (key)llList2String(parts, 1);
             if (regOwner != g_ownerKey) return;

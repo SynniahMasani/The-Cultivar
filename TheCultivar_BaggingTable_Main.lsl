@@ -48,6 +48,7 @@ integer DCHAN_SIZE    = -66003;
 integer DCHAN_CONFIRM = -66004;
 
 integer g_listenRegister;
+integer g_replyChannel  = 0;   // random private channel used for TC_REGISTER reply
 integer g_listenMain;
 integer g_listenStrain;
 integer g_listenSize;
@@ -99,13 +100,14 @@ closeAllListens()
 pingHUD()
 {
     g_registered = FALSE;
-    // Listen on channel 0 for the HUD's TC_REGISTER response
     if (g_listenRegister) llListenRemove(g_listenRegister);
-    g_listenRegister = llListen(0, "", NULL_KEY, "");
-    // Broadcast our presence
+    // Generate a random private reply channel so TC_REGISTER arrives reliably.
+    // llRegionSayTo(objectKey, 0, ...) to world objects is unreliable in SL.
+    g_replyChannel   = (integer)(llFrand(1000000.0) + 1000000) * -1;
+    g_listenRegister = llListen(g_replyChannel, "", NULL_KEY, "");
     llRegionSay(TC_OBJECT_PING_CHAN,
-        "TC_PING|" + (string)llGetKey() + "|bagging_table");
-    // Timeout if HUD doesn't respond
+        "TC_PING|" + (string)llGetKey() + "|bagging_table|" +
+        (string)g_replyChannel);
     llSetTimerEvent(10.0);
 }
 
@@ -365,10 +367,8 @@ default
 {
     state_entry()
     {
-        // Listen on channel 0 for HUD registration (TC_REGISTER response)
-        // The table pings on TC_OBJECT_PING_CHAN when touched (via pingHUD),
-        // it does not listen on that channel  -  no g_listenPing needed here.
-        g_listenRegister = llListen(0, "", NULL_KEY, "");
+        // Registration listener is opened in pingHUD() on a random reply channel.
+        // No persistent channel-0 listen needed.
         updateHoverText();
     }
 
@@ -408,8 +408,8 @@ default
         list   parts = llParseString2List(msg, ["|"], []);
         string cmd   = llList2String(parts, 0);
 
-        // ---- HUD Registration response (channel 0) ----
-        if (channel == 0 && cmd == "TC_REGISTER")
+        // ---- HUD Registration response (private reply channel) ----
+        if (channel == g_replyChannel && cmd == "TC_REGISTER")
         {
             // TC_REGISTER|ownerKey|privateChannel|ownerName
             key regOwner = (key)llList2String(parts, 1);

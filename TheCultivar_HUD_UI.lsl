@@ -359,7 +359,6 @@ showSessionItemMenu()
 {
     closeAllListens();
     integer count = llGetListLength(g_availableItems) / ITEM_STRIDE;
-    llOwnerSay("[DEBUG] showSessionItemMenu called, sparkable count=" + (string)count);
     if (count == 0)
     {
         llOwnerSay("Nothing to spark. Roll something first.");
@@ -405,12 +404,12 @@ showInventoryMenu()
     closeAllListens();
     llMessageLinked(LINK_SET, CHAN_INVENTORY, "REQUEST_INVENTORY", NULL_KEY);
     g_lisInv = llListen(DCHAN_INVENTORY, "", g_ownerKey, "");
-    llDialog(g_ownerKey,
-        "=== INVENTORY ===\n" + g_inventoryDisplay + "\n\n" +
+    string invMsg = "=== INVENTORY ===\n" + g_inventoryDisplay + "\n\n" +
         "Load Jar  — touch a weed jar to fill it\n" +
-        "Fill Bag  — touch a bagging table",
-        ["Load Jar", "Fill Bag", "Back"],
-        DCHAN_INVENTORY);
+        "Fill Bag  — touch a bagging table";
+    if (llStringLength(invMsg) > 480)
+        invMsg = llGetSubString(invMsg, 0, 477) + "...";
+    llDialog(g_ownerKey, invMsg, ["Load Jar", "Fill Bag", "Back"], DCHAN_INVENTORY);
     llSetTimerEvent(30.0);
 }
 
@@ -446,7 +445,6 @@ showBrandNameTextBox()
 
 startSession()
 {
-    llOwnerSay("[DEBUG] startSession() called - attempting rez");
     if (llGetInventoryType("TC_SessionObject") != INVENTORY_OBJECT)
     {
         llOwnerSay("[Error] TC_SessionObject not in HUD inventory.");
@@ -455,7 +453,6 @@ startSession()
     vector pos = llGetPos() + llRot2Fwd(llGetRot()) * 1.2 + <0,0,0.1>;
     llRezObject("TC_SessionObject", pos, ZERO_VECTOR, ZERO_ROTATION, 0);
     g_flowContext = "session_spark";
-    llOwnerSay("[DEBUG] UI rezzed session object, waiting for SESSION_OBJECT_READY");
 }
 
 
@@ -883,11 +880,9 @@ default
             else if (cmd == "SESSION_OBJECT_READY")
             {
                 g_pendingSessionObjKey = (key)llList2String(parts, 1);
-                llOwnerSay("[DEBUG] UI got SESSION_OBJECT_READY, sessKey=" + (string)g_pendingSessionObjKey);
                 // Request spark-able inventory (joints, blunts, spliffs, flower)
                 llMessageLinked(LINK_SET, CHAN_INVENTORY,
                     "REQUEST_RAW_INVENTORY|all|ui_session", NULL_KEY);
-                llOwnerSay("[DEBUG] UI sent REQUEST_RAW_INVENTORY for session");
             }
 
             // We joined someone else's session as a participant
@@ -1039,7 +1034,6 @@ default
             }
             else if (reqKey == "ui_session")
             {
-                llOwnerSay("[DEBUG] UI got RAW_INVENTORY for session, rawData len=" + (string)llStringLength(rawData));
                 // Filter to spark-able items
                 list sparkTypes = ["joint","blunt","spliff","flower_raw"];
                 list parsed;
@@ -1059,7 +1053,6 @@ default
                     @skip_s;
                 }
                 g_availableItems = parsed;
-                llOwnerSay("[DEBUG] UI session sparkable items=" + (string)(llGetListLength(g_availableItems)/ITEM_STRIDE) + ", pendingKey=" + (string)g_pendingSessionObjKey);
                 if (g_pendingSessionObjKey != NULL_KEY)
                     showSessionItemMenu();
             }
