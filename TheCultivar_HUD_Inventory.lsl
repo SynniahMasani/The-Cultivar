@@ -276,11 +276,12 @@ default
                 (integer)llList2String(parts, 4),
                 llList2String(parts, 5)
             );
-            // Report success/fail back to requesting script via comms channel
+            // Report success/fail back via comms channel.
+            // Pass 'id' through so HUD_Comms can notify the requesting world object.
             if (success)
-                llMessageLinked(LINK_SET, CHAN_COMMS, "REMOVE_SUCCESS|" + llList2String(parts,1) + "|" + llList2String(parts,2), NULL_KEY);
+                llMessageLinked(LINK_SET, CHAN_COMMS, "REMOVE_SUCCESS|" + llList2String(parts,1) + "|" + llList2String(parts,2), id);
             else
-                llMessageLinked(LINK_SET, CHAN_COMMS, "REMOVE_FAIL|" + llList2String(parts,1) + "|" + llList2String(parts,2), NULL_KEY);
+                llMessageLinked(LINK_SET, CHAN_COMMS, "REMOVE_FAIL|" + llList2String(parts,1) + "|" + llList2String(parts,2), id);
         }
 
         // UI opened the inventory panel, needs fresh data

@@ -593,6 +593,22 @@ default
             }
         }
 
+        // ---- Channel 0: Participant requesting a pass ----
+        // HUD_UI sends TC_PASS_REQUEST via llRegionSayTo on channel 0
+        else if (channel == 0 && cmd == "TC_PASS_REQUEST")
+        {
+            key requester = (key)llList2String(parts, 1);
+            if (!g_sessionActive) return;
+            if (participantKey(g_currentHolder) != requester)
+            {
+                llRegionSayTo(requester, 0,
+                    "It's not your turn to pass. " +
+                    participantName(g_currentHolder) + " has it.");
+                return;
+            }
+            showPassMenu(requester);
+        }
+
         // ---- Session channel: Messages from participants ----
         else if (channel == g_sessionChannel)
         {

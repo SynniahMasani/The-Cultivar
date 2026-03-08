@@ -91,7 +91,7 @@ attachToHand()
     // Since the jar is owned by the avatar and rezzes the object,
     // the rezzed object is owned by the jar owner (= the avatar).
 
-    llAttachToAvatarTemp(ATTACH_RHAND); // right hand attachment point
+    llAttachToAvatarTemp(ATTACH_MOUTH); // mouth attachment point
     g_attached = TRUE;
     startSmokeParticles();
     llPlaySound("smoke_inhale", 0.4);

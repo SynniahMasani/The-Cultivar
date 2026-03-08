@@ -89,8 +89,6 @@ default
         // Store so UI script can include it in TC_SESSION_START messages
         llLinksetDataWrite("hud_private_chan", (string)g_privateChannel);
         startListening();
-        llOwnerSay("Comms online. Listening on private channel " +
-                   (string)g_privateChannel);
     }
 
     on_rez(integer start_param)
@@ -181,18 +179,18 @@ default
         }
 
         // Relay any remove success/fail back to UI for feedback
-        // If id is set, a world object is waiting — notify it too
+        // If id is set, a world object is waiting — notify it on our private channel
         else if (cmd == "REMOVE_SUCCESS")
         {
             llMessageLinked(LINK_SET, CHAN_UI, "ITEM_USED|" + msg, NULL_KEY);
             if (id != NULL_KEY)
-                llRegionSayTo(id, 0, "TC_REMOVE_OK");
+                llRegionSayTo(id, g_privateChannel, "TC_REMOVE_OK");
         }
         else if (cmd == "REMOVE_FAIL")
         {
             llMessageLinked(LINK_SET, CHAN_UI, "ITEM_FAILED|" + msg, NULL_KEY);
             if (id != NULL_KEY)
-                llRegionSayTo(id, 0, "TC_REMOVE_FAIL");
+                llRegionSayTo(id, g_privateChannel, "TC_REMOVE_FAIL");
         }
 
         // Inventory manager responds with raw data — forward to requesting world object
@@ -201,8 +199,10 @@ default
             // RAW_INVENTORY|serializedData|filterType|requestingObjectKey
             string rawData   = llList2String(parts, 1);
             key    reqObject = (key)llList2String(parts, 3);
+            // Send on our private channel — world objects listen on g_hudChannel
+            // which equals g_privateChannel. Channel 0 is unreliable to objects.
             if (reqObject != NULL_KEY)
-                llRegionSayTo(reqObject, 0, "TC_INVENTORY_DATA|" + rawData);
+                llRegionSayTo(reqObject, g_privateChannel, "TC_INVENTORY_DATA|" + rawData);
         }
     }
 
@@ -217,9 +217,11 @@ default
         // ---- World object announcing itself (any object that was just touched) ----
         if (channel == TC_OBJECT_PING_CHAN && cmd == "TC_PING")
         {
-            // TC_PING|objectKey|objectType
-            key objectKey = (key)llList2String(parts, 1);
-            llRegionSayTo(objectKey, 0,
+            // TC_PING|objectKey|objectType|replyChannel
+            key     objectKey   = (key)llList2String(parts, 1);
+            integer replyChannel = (integer)llList2String(parts, 3);
+            if (replyChannel == 0) replyChannel = 0; // legacy fallback (should never be 0)
+            llRegionSay(replyChannel,
                 "TC_REGISTER|" + (string)g_ownerKey + "|" +
                 (string)g_privateChannel + "|" + g_ownerName + "|" +
                 llLinksetDataRead("id_brand"));
