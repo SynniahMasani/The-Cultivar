@@ -107,10 +107,12 @@ pingHUD()
 
 updateSaleState()
 {
-    if (g_forSale && g_price > 0)
+    integer price   = g_price;
+    integer forSale = g_forSale;
+    if (forSale && price > 0)
     {
-        llSetForSale(1, g_price); // 1 = SALE_ORIGINAL
-        llSetPayPrice(PAY_HIDE, [g_price, PAY_HIDE, PAY_HIDE, PAY_HIDE]);
+        llSetForSale(1, price); // 1 = SALE_ORIGINAL
+        llSetPayPrice(PAY_HIDE, [price, PAY_HIDE, PAY_HIDE, PAY_HIDE]);
     }
     else
     {
