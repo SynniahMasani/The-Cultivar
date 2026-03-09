@@ -1,10 +1,10 @@
 // ================================================================
-// THE CULTIVAR — Plant Interaction Script
+// THE CULTIVAR  -  Plant Interaction Script
 // Version: 1.0
 // Handles: All touch input, dialog menus, action validation,
 //          and communicating player choices to the grow script.
 //
-// This script is the face of the plant — it's what players
+// This script is the face of the plant  -  it's what players
 // actually interact with. It validates actions before passing
 // them to the grow script, and handles access control so
 // random strangers can't harvest your crop.
@@ -70,7 +70,7 @@ closeAllListens()
 }
 
 // ----------------------------------------------------------------
-// Access check — owner always authorized; others via auth list or group
+// Access check  -  owner always authorized; others via auth list or group
 // g_toucherInGroup must be set before calling (touch_start only)
 // ----------------------------------------------------------------
 integer isOwner(key who)
@@ -180,12 +180,12 @@ showRemovePlayerMenu()
 string buildStatusString()
 {
     if (g_potSpent)
-        return "⚠ This pot is cracked and spent.\nReplace it with a new pot.";
+        return "? This pot is cracked and spent.\nReplace it with a new pot.";
 
     if (g_stage == 0)
         return "Pot is empty.\nPlant a seed to begin growing.";
 
-    list stageNames  = ["", "Seedling 🌱", "Vegetative 🌿", "Flowering 🌸", "✨ READY ✨"];
+    list stageNames  = ["", "Seedling ?", "Vegetative ?", "Flowering ?", "? READY ?"];
     list qualNames   = ["Reggie", "Mids", "Loud", "Exotic"];
     string stageName = llList2String(stageNames, g_stage);
     string qualName  = llList2String(qualNames, g_qualityTier);
@@ -195,9 +195,9 @@ string buildStatusString()
 
     if (g_stage < 4)
     {
-        if (g_isWatered)  status += "✓ Watered\n";
-        else              status += "⚠ Needs water\n";
-        if (g_fertApplied) status += "✓ Fertilized\n";
+        if (g_isWatered)  status += "? Watered\n";
+        else              status += "? Needs water\n";
+        if (g_fertApplied) status += "? Fertilized\n";
     }
 
     string potLabel = "Premium pot";
@@ -210,7 +210,7 @@ string buildStatusString()
 }
 
 // ----------------------------------------------------------------
-// MAIN MENU — shown to owner on touch
+// MAIN MENU  -  shown to owner on touch
 // ----------------------------------------------------------------
 showMainMenu()
 {
@@ -255,7 +255,7 @@ showMainMenu()
 }
 
 // ----------------------------------------------------------------
-// VISITOR MENU — limited view for non-owners
+// VISITOR MENU  -  limited view for non-owners
 // ----------------------------------------------------------------
 showVisitorMenu()
 {
@@ -269,7 +269,7 @@ showVisitorMenu()
 }
 
 // ----------------------------------------------------------------
-// STRAIN SELECTION MENU — shown when planting
+// STRAIN SELECTION MENU  -  shown when planting
 // ----------------------------------------------------------------
 showStrainMenu(integer qualityTier)
 {
@@ -301,7 +301,7 @@ showStrainMenu(integer qualityTier)
 }
 
 // ----------------------------------------------------------------
-// POT TYPE MENU — shown when planting (determines pot to use)
+// POT TYPE MENU  -  shown when planting (determines pot to use)
 // ----------------------------------------------------------------
 showPotMenu()
 {
@@ -315,7 +315,7 @@ showPotMenu()
 }
 
 // ----------------------------------------------------------------
-// CONFIRM HARVEST — safety check before taking the goods
+// CONFIRM HARVEST  -  safety check before taking the goods
 // ----------------------------------------------------------------
 showHarvestConfirm()
 {
@@ -328,7 +328,7 @@ showHarvestConfirm()
 }
 
 // ----------------------------------------------------------------
-// WATER ACTION — check inventory via HUD, apply if available
+// WATER ACTION  -  check inventory via HUD, apply if available
 // ----------------------------------------------------------------
 doWater()
 {
@@ -337,7 +337,7 @@ doWater()
         llRegionSayTo(g_toucher, 0, "Already watered this stage.");
         return;
     }
-    // Signal grow script — inventory check happens via HUD
+    // Signal grow script  -  inventory check happens via HUD
     // (Water can is a consumable tracked on the HUD)
     // We message the grow script directly since it trusts the interaction script
     // The full inventory-check flow would be:
@@ -350,7 +350,7 @@ doWater()
 }
 
 // ----------------------------------------------------------------
-// FERTILIZE ACTION — validate stage and apply
+// FERTILIZE ACTION  -  validate stage and apply
 // ----------------------------------------------------------------
 doFertilize(integer fertTier)
 {
@@ -394,7 +394,7 @@ default
     {
         if (change & CHANGED_OWNER)
         {
-            // Plant stays with the land — if it's transferred, reset and clear auth
+            // Plant stays with the land  -  if it's transferred, reset and clear auth
             llLinksetDataDelete("auth_list");
             llLinksetDataDelete("plant_locked");
             llMessageLinked(LINK_SET, PCHAN_GROW, "DO_RESET", NULL_KEY);
@@ -416,7 +416,7 @@ default
         llSetTimerEvent(0.0);
 
         // Request fresh status before showing menu.
-        // Note: llSleep() is not used here — it would block the event queue
+        // Note: llSleep() is not used here  -  it would block the event queue
         // and prevent the STATUS link_message from arriving anyway.
         // The menu builds from cached status values which are updated whenever
         // the grow script sends a STATUS reply (including after each action).
@@ -428,7 +428,7 @@ default
         {
             if (g_plantLocked)
                 llRegionSayTo(g_toucher, 0,
-                    g_ownerName + "'s plant is locked — owner access only.");
+                    g_ownerName + "'s plant is locked  -  owner access only.");
             else
                 showVisitorMenu();
         }
@@ -483,7 +483,7 @@ default
                 showAccessMenu();
         }
 
-        // ACCESS CONTROL MENU — owner only
+        // ACCESS CONTROL MENU  -  owner only
         else if (channel == DCHAN_ACCESS && id == g_ownerKey)
         {
             llSetTimerEvent(0.0);
@@ -503,7 +503,7 @@ default
             }
         }
 
-        // ADD AUTH — pick a nearby player to grant access
+        // ADD AUTH  -  pick a nearby player to grant access
         else if (channel == DCHAN_ADD_AUTH && id == g_ownerKey)
         {
             llSetTimerEvent(0.0);
@@ -541,7 +541,7 @@ default
             showAccessMenu();
         }
 
-        // REMOVE AUTH — remove a player from the auth list
+        // REMOVE AUTH  -  remove a player from the auth list
         else if (channel == DCHAN_REM_AUTH && id == g_ownerKey)
         {
             llSetTimerEvent(0.0);

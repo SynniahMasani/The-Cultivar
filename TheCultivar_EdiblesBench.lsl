@@ -1,24 +1,24 @@
 // ================================================================
-// THE CULTIVAR — Edibles & Concentrate Bench Script
+// THE CULTIVAR  -  Edibles & Concentrate Bench Script
 // Version: 1.0
 // Handles: Crafting edible and concentrate items from flower_raw.
-//          Two modes: Edibles and Press — owner picks via menu.
+//          Two modes: Edibles and Press  -  owner picks via menu.
 //
 // CRAFTING RATIOS:
-//   Brownie  : 3g  → 1 brownie         (slow onset, long duration)
-//   Gummies  : 4g  → 8 gummies         (portioned, shareable)
-//   Drink    : 2g  → 1 infused drink   (fast onset)
-//   Concentrate: 5g → 1 concentrate    (potent, dab-ready)
+//   Brownie  : 3g  -> 1 brownie         (slow onset, long duration)
+//   Gummies  : 4g  -> 8 gummies         (portioned, shareable)
+//   Drink    : 2g  -> 1 infused drink   (fast onset)
+//   Concentrate: 5g -> 1 concentrate    (potent, dab-ready)
 //
 // QUALITY SCALING:
-//   Reggie   — standard output
-//   Mids     — standard output, slightly better effects desc
-//   Loud     — +1 bonus item on batch (e.g. 3g → 2 brownies)
-//   Exotic   — +2 bonus items on batch
+//   Reggie    -  standard output
+//   Mids      -  standard output, slightly better effects desc
+//   Loud      -  +1 bonus item on batch (e.g. 3g -> 2 brownies)
+//   Exotic    -  +2 bonus items on batch
 //
 // PRIM LINK STRUCTURE:
 //   Link 1 (root) : Bench body
-//   Link 2        : Prep surface (color by mode — warm for edibles, cool for press)
+//   Link 2        : Prep surface (color by mode  -  warm for edibles, cool for press)
 //   Link 3        : Burner/heat element (glows during crafting)
 //   Link 4        : Output tray (flashes with completed item color)
 //   Link 5        : Particle emitter (steam for edibles, vapor for concentrate)
@@ -155,7 +155,7 @@ integer calcOutput(string itemID, string quality, integer batchCount)
 }
 
 // ----------------------------------------------------------------
-// STEP 1: Mode select — edibles or concentrate press
+// STEP 1: Mode select  -  edibles or concentrate press
 // ----------------------------------------------------------------
 showModeMenu()
 {
@@ -163,8 +163,8 @@ showModeMenu()
     g_listenMode = llListen(DCHAN_MODE, "", g_ownerKey, "");
     llDialog(g_ownerKey,
         "=== CRAFTING BENCH ===\nWhat are you making?\n\n" +
-        "Edibles  — brownies, gummies, drinks\n" +
-        "Press    — concentrate / wax / oil",
+        "Edibles   -  brownies, gummies, drinks\n" +
+        "Press     -  concentrate / wax / oil",
         ["Edibles", "Press", "Cancel"], DCHAN_MODE);
     llSetTimerEvent(30.0);
 }
@@ -178,16 +178,16 @@ showEdibleMenu()
     g_listenItem = llListen(DCHAN_ITEM, "", g_ownerKey, "");
     llDialog(g_ownerKey,
         "=== EDIBLES ===\nChoose what to make:\n\n" +
-        "Brownie      — 3g each, strong\n" +
-        "Gummies(x8)  — 4g per batch\n" +
-        "Infused Drink — 2g each, fast",
+        "Brownie       -  3g each, strong\n" +
+        "Gummies(x8)   -  4g per batch\n" +
+        "Infused Drink  -  2g each, fast",
         ["Brownie", "Gummies (x8)", "Infused Drink", "Back", "Cancel"],
         DCHAN_ITEM);
     llSetTimerEvent(30.0);
 }
 
 // ----------------------------------------------------------------
-// STEP 2b: Concentrate — no item pick needed, go straight to strain
+// STEP 2b: Concentrate  -  no item pick needed, go straight to strain
 // ----------------------------------------------------------------
 // (falls through to showStrainMenu directly)
 
@@ -221,7 +221,7 @@ showStrainMenu()
         integer qIdx    = llListFindList(qualNames, [quality]);
         string  qLabel  = llList2String(qualLabels, qIdx);
         buttons  += [llGetSubString(strain, 0, 10)];
-        menuText += qLabel + " " + strain + " — " + qty + "g\n";
+        menuText += qLabel + " " + strain + "  -  " + qty + "g\n";
     }
     buttons += ["Back", "Cancel"];
     g_listenStrain = llListen(DCHAN_STRAIN, "", g_ownerKey, "");
@@ -257,7 +257,7 @@ showBatchMenu()
 
     list   buttons;
     string menuText = "=== HOW MANY BATCHES? ===\n" +
-                      g_selectedItem + " — " + g_selectedStrain +
+                      g_selectedItem + "  -  " + g_selectedStrain +
                       "\nYield per batch: " + (string)(yield + bonus) +
                       bonusStr + "\n\n";
 
@@ -335,7 +335,7 @@ finishCraft()
         PRIM_COLOR, ALL_SIDES, col, 1.0,
         PRIM_GLOW,  ALL_SIDES, 0.15,
         PRIM_TEXT,
-            "✓ " + (string)g_outputCount + "x crafted",
+            "? " + (string)g_outputCount + "x crafted",
         col, 1.0
     ]);
 
@@ -376,11 +376,11 @@ finishCraft()
     else if (g_selectedItem == "concentrate")  itemLabel = "concentrate";
 
     llRegionSayTo(g_ownerKey, 0,
-        "✓ Crafted " + (string)g_outputCount + "x " +
+        "? Crafted " + (string)g_outputCount + "x " +
         g_selectedQuality + " " + g_selectedStrain + " " + itemLabel +
         " (" + (string)g_totalCost + "g used)");
 
-    // Schedule visual fade-down via timer — never call llSleep in a listen handler
+    // Schedule visual fade-down via timer  -  never call llSleep in a listen handler
     g_craftDisplayActive = TRUE;
     llSetTimerEvent(4.0);
 }
@@ -424,7 +424,7 @@ default
 
     timer()
     {
-        // Post-craft visual fade — fires 4s after finishCraft()
+        // Post-craft visual fade  -  fires 4s after finishCraft()
         if (g_craftDisplayActive)
         {
             g_craftDisplayActive = FALSE;

@@ -1,5 +1,5 @@
 // ================================================================
-// THE CULTIVAR — HUD Identity Script
+// THE CULTIVAR  -  HUD Identity Script
 // Version: 1.0
 // Handles: Player identity, lifetime stats, strain history, rep score
 // Persistence: llLinksetDataWrite (survives sim restarts)
@@ -131,7 +131,7 @@ loadIdentity()
 
     if (test == "")
     {
-        // First time this HUD has been used — initialize fresh
+        // First time this HUD has been used  -  initialize fresh
         g_playerName     = llKey2Name(llGetOwner());
         g_playerUUID     = llGetOwner();
         g_totalSmoked    = 0;
@@ -202,15 +202,15 @@ string titleFromStats()
 // ----------------------------------------------------------------
 string achievementLabel(string aId)
 {
-    if (aId == "first_smoke")       return "First Smoke — Welcome to the culture!";
-    if (aId == "decade_smoked")     return "Decade Smoked — 10 sessions logged!";
-    if (aId == "century_smoked")    return "Century Smoked — 100 sessions logged!";
-    if (aId == "first_grow")        return "First Harvest — Grew your first plant!";
-    if (aId == "green_thumb")       return "Green Thumb — 10 harvests completed!";
-    if (aId == "first_pass")        return "Good Vibes — First time passing the piece!";
-    if (aId == "first_sale")        return "First Sale — Made your first deal!";
-    if (aId == "strain_explorer")   return "Strain Explorer — Tried 5 different strains!";
-    if (aId == "strain_collector")  return "Strain Collector — Tried 15 different strains!";
+    if (aId == "first_smoke")       return "First Smoke  -  Welcome to the culture!";
+    if (aId == "decade_smoked")     return "Decade Smoked  -  10 sessions logged!";
+    if (aId == "century_smoked")    return "Century Smoked  -  100 sessions logged!";
+    if (aId == "first_grow")        return "First Harvest  -  Grew your first plant!";
+    if (aId == "green_thumb")       return "Green Thumb  -  10 harvests completed!";
+    if (aId == "first_pass")        return "Good Vibes  -  First time passing the piece!";
+    if (aId == "first_sale")        return "First Sale  -  Made your first deal!";
+    if (aId == "strain_explorer")   return "Strain Explorer  -  Tried 5 different strains!";
+    if (aId == "strain_collector")  return "Strain Collector  -  Tried 15 different strains!";
     return aId;
 }
 
@@ -271,7 +271,7 @@ broadcastIdentity()
                      (string)levelFromXP(g_sellerXP) + "|" +
                      titleFromStats();
 
-    // Must send on CHAN_UI — that is the channel the UI script listens on.
+    // Must send on CHAN_UI  -  that is the channel the UI script listens on.
     // CHAN_IDENTITY is for commands sent TO this script, not broadcasts FROM it.
     llMessageLinked(LINK_SET, CHAN_UI, "IDENTITY_DATA|" + payload, NULL_KEY);
 }
@@ -435,7 +435,7 @@ default
             string out = "=== ACHIEVEMENTS (" + (string)n + ") ===\n";
             integer i;
             for (i = 0; i < n; i++)
-                out += "✓ " + achievementLabel(llList2String(earned, i)) + "\n";
+                out += "? " + achievementLabel(llList2String(earned, i)) + "\n";
             llOwnerSay(out);
         }
     }

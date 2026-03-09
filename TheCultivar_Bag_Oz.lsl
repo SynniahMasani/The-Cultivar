@@ -176,7 +176,7 @@ default
 
         if (start_param != 0)
         {
-            // Freshly rezzed by bagging table — wait for strain config
+            // Freshly rezzed by bagging table  -  wait for strain config
             g_bagConfigChan = start_param;
             if (g_listenBagConfig) llListenRemove(g_listenBagConfig);
             g_listenBagConfig = llListen(g_bagConfigChan, "", NULL_KEY, "");
@@ -185,7 +185,7 @@ default
             return;
         }
 
-        // Rezzed from inventory by player — read stored description
+        // Rezzed from inventory by player  -  read stored description
         parseDescription();
         updateHoverText();
         if (g_forSale && g_price > 0)
@@ -231,7 +231,7 @@ default
     timer()
     {
         llSetTimerEvent(0.0);
-        // Config timeout — bagging table never sent TC_BAG_CONFIG
+        // Config timeout  -  bagging table never sent TC_BAG_CONFIG
         if (g_bagConfigChan != 0)
         {
             llDie();

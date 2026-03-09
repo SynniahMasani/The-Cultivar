@@ -1,5 +1,5 @@
 // ================================================================
-// THE CULTIVAR — Strain Drop Machine Script
+// THE CULTIVAR  -  Strain Drop Machine Script
 // Version: 1.0
 //
 // An in-world terminal that polls a central HTTP server for
@@ -139,7 +139,7 @@ string jsonGet(string json, string key)
         return llGetSubString(rest, 0, endQ - 1);
     }
 
-    // Unquoted (bool/int) value — read until , or }
+    // Unquoted (bool/int) value  -  read until , or }
     integer endC = llSubStringIndex(rest, ",");
     integer endB = llSubStringIndex(rest, "}");
     integer end  = endC;
@@ -157,7 +157,7 @@ updateVisuals()
     {
         vector col = qualColor(g_dropQuality);
 
-        // Screen prim — lit up with quality color
+        // Screen prim  -  lit up with quality color
         llSetLinkPrimitiveParamsFast(2, [
             PRIM_COLOR, ALL_SIDES, col, 1.0,
             PRIM_GLOW,  ALL_SIDES, 0.12
@@ -168,7 +168,7 @@ updateVisuals()
             PRIM_COLOR, ALL_SIDES, col, 1.0,
             PRIM_GLOW,  ALL_SIDES, 0.18,
             PRIM_TEXT,
-                "⚡ DROP LIVE ⚡\n" +
+                "? DROP LIVE ?\n" +
                 g_dropQuality + " " + g_dropStrain + "\n" +
                 (string)g_dropRemaining + " remaining",
             col, 1.0
@@ -208,8 +208,8 @@ updateVisuals()
             PSYS_SRC_BURST_SPEED_MAX,  0.1
         ]);
 
-        llSetText("THE CULTIVAR — DROP TERMINAL\n⚡ " +
-                  g_dropQuality + " " + g_dropStrain + " DROP LIVE ⚡\n" +
+        llSetText("THE CULTIVAR  -  DROP TERMINAL\n? " +
+                  g_dropQuality + " " + g_dropStrain + " DROP LIVE ?\n" +
                   "Touch to claim your seed!",
                   col, 1.0);
     }
@@ -227,7 +227,7 @@ updateVisuals()
         ]);
         llSetLinkPrimitiveParamsFast(5, [PRIM_TEXT, "", ZERO_VECTOR, 0.0]);
         llLinkParticleSystem(4, []);
-        llSetText("THE CULTIVAR — DROP TERMINAL\nNo active drop right now.\nCheck back soon.",
+        llSetText("THE CULTIVAR  -  DROP TERMINAL\nNo active drop right now.\nCheck back soon.",
                   <0.5, 0.5, 0.5>, 0.7);
     }
 }
@@ -249,10 +249,10 @@ giveSeed(key claimer, string strain)
 
     // Notify claimer
     llRegionSayTo(claimer, 0,
-        "✨ DROP CLAIMED! " + g_dropQuality + " " + strain +
+        "? DROP CLAIMED! " + g_dropQuality + " " + strain +
         " seed added to your inventory. Grow something special.");
 
-    // Brief celebration burst — PSYS_SRC_MAX_AGE auto-stops the source at 0.5s.
+    // Brief celebration burst  -  PSYS_SRC_MAX_AGE auto-stops the source at 0.5s.
     // g_celebrateUntil causes the timer to restore idle particles after 2.5s
     // without calling llSleep() inside an http_response handler.
     llLinkParticleSystem(4, [
@@ -305,9 +305,9 @@ default
         if (g_claimRequest != NULL_KEY)
         {
             g_claimRequest = NULL_KEY;
-            // Notify BEFORE clearing — once cleared, the key is lost
+            // Notify BEFORE clearing  -  once cleared, the key is lost
             llRegionSayTo(g_claimingAvatar, 0,
-                "Claim timed out — server didn't respond. Try again.");
+                "Claim timed out  -  server didn't respond. Try again.");
             g_claimingAvatar = NULL_KEY;
             g_claimingName   = "";
             g_busy           = FALSE;
@@ -324,7 +324,7 @@ default
 
         if (g_busy)
         {
-            llRegionSayTo(toucher, 0, "Busy — try again in a moment.");
+            llRegionSayTo(toucher, 0, "Busy  -  try again in a moment.");
             return;
         }
 
@@ -357,7 +357,7 @@ default
         g_listenClaim = llListen(DCHAN_CLAIM, "", toucher, "");
 
         llDialog(toucher,
-            "⚡ DROP: " + g_dropQuality + " " + g_dropStrain + " ⚡\n\n" +
+            "? DROP: " + g_dropQuality + " " + g_dropStrain + " ?\n\n" +
             (string)g_dropRemaining + " seed packs remaining\n" +
             "One per avatar. No exceptions.\n\n" +
             "Claim your free seed pack?",
@@ -374,7 +374,7 @@ default
 
             if (status != 200)
             {
-                // Server error — keep existing state, retry next interval
+                // Server error  -  keep existing state, retry next interval
                 llSetTimerEvent(POLL_INTERVAL);
                 return;
             }
@@ -431,7 +431,7 @@ default
                 {
                     g_dropActive = FALSE;
                     llRegionSay(0,
-                        "⚡ THE CULTIVAR DROP: " + g_dropStrain +
+                        "? THE CULTIVAR DROP: " + g_dropStrain +
                         " is now SOLD OUT. Follow the group for the next drop!");
                 }
                 updateVisuals();

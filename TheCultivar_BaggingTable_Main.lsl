@@ -280,7 +280,7 @@ giveBag()
     }
 
     // Rez the bag in-world and configure it via a private channel.
-    // llGiveInventory() gives a blank template — the bag script reads
+    // llGiveInventory() gives a blank template  -  the bag script reads
     // its data from llGetObjectDesc(), which we can only set AFTER rez.
     // The bag sends TC_BAG_READY on start_param, we reply with TC_BAG_CONFIG.
 

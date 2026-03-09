@@ -1,16 +1,16 @@
 // ================================================================
-// THE CULTIVAR — Rolling Table Main Script
+// THE CULTIVAR  -  Rolling Table Main Script
 // Version: 1.0
 // Handles: Crafting joints, blunts, and spliffs from flower_raw.
 //          Uses the same TC_PING/REGISTER flow as all other tables.
 //
 // CRAFTING RATIOS:
-//   Joint   : 1g flower → 1 joint    (single, clean, classic)
-//   Blunt   : 2g flower → 1 blunt    (thicker, longer burn)
-//   Spliff   : 1g flower → 1 spliff  (mixed, light touch)
+//   Joint   : 1g flower -> 1 joint    (single, clean, classic)
+//   Blunt   : 2g flower -> 1 blunt    (thicker, longer burn)
+//   Spliff   : 1g flower -> 1 spliff  (mixed, light touch)
 //
 // BATCH CRAFTING:
-//   Players can craft 1, 3, 5, or fill — "fill" crafts as many
+//   Players can craft 1, 3, 5, or fill  -  "fill" crafts as many
 //   as their flower stock allows (up to 20 at once).
 //
 // OUTPUT:
@@ -48,7 +48,7 @@ integer g_registered  = FALSE;
 integer g_busy        = FALSE;
 integer g_craftDisplayActive = FALSE; // TRUE while post-craft visuals are showing
 
-// Available flower from HUD — parsed on each session
+// Available flower from HUD  -  parsed on each session
 // Stride 4: [strain, quality, qty, packager]
 list    g_availableFlower;
 integer FLOWER_STRIDE = 4;
@@ -136,9 +136,9 @@ showTypeMenu()
     g_listenType = llListen(DCHAN_TYPE, "", g_ownerKey, "");
     llDialog(g_ownerKey,
         "=== ROLLING TABLE ===\nWhat are you rolling?\n\n" +
-        "Joint   — 1g each, clean burn\n" +
-        "Blunt   — 2g each, slow and thick\n" +
-        "Spliff   — 1g each, light mix",
+        "Joint    -  1g each, clean burn\n" +
+        "Blunt    -  2g each, slow and thick\n" +
+        "Spliff    -  1g each, light mix",
         ["Joint", "Blunt", "Spliff", "Cancel"], DCHAN_TYPE);
     llSetTimerEvent(30.0);
 }
@@ -174,7 +174,7 @@ showStrainMenu()
         string  qLabel  = llList2String(qualLabels, qIdx);
 
         buttons   += [llGetSubString(strain, 0, 10)];
-        menuText  += qLabel + " " + strain + " — " + qty + "g\n";
+        menuText  += qLabel + " " + strain + "  -  " + qty + "g\n";
     }
     buttons += ["Back", "Cancel"];
     g_listenStrain = llListen(DCHAN_STRAIN, "", g_ownerKey, "");
@@ -203,7 +203,7 @@ showBatchMenu()
 
     list   buttons;
     string menuText = "=== HOW MANY? ===\n" +
-                      g_selectedType + " — " + g_selectedStrain +
+                      g_selectedType + "  -  " + g_selectedStrain +
                       " [" + g_selectedQuality + "]\n" +
                       (string)g_selectedFlowerQty + "g available " +
                       "(" + (string)g_costPerItem + "g each)\n\n" +
@@ -217,7 +217,7 @@ showBatchMenu()
         if (n <= maxBatch)
             buttons += [(string)n];
     }
-    // "Fill" — roll as many as possible up to 20
+    // "Fill"  -  roll as many as possible up to 20
     if (maxBatch > 20) maxBatch = 20;
     if (!~llListFindList(buttons, [(string)maxBatch]))
         buttons += [(string)maxBatch + " (max)"];
@@ -245,7 +245,7 @@ showConfirm()
 }
 
 // ----------------------------------------------------------------
-// Execute the craft — remove flower, add items, trigger effects
+// Execute the craft  -  remove flower, add items, trigger effects
 // ----------------------------------------------------------------
 executeCraft()
 {
@@ -259,7 +259,7 @@ executeCraft()
 }
 
 // ----------------------------------------------------------------
-// Craft confirmed by HUD — add items and play effects
+// Craft confirmed by HUD  -  add items and play effects
 // ----------------------------------------------------------------
 finishCraft()
 {
@@ -275,7 +275,7 @@ finishCraft()
     llRegionSayTo(g_ownerKey, g_hudChannel,
         "TC_XP_UPDATE|roller|" + (string)g_batchCount);
 
-    // Visual effects — quality-tinted particle burst from table surface
+    // Visual effects  -  quality-tinted particle burst from table surface
     vector col = qualColor(g_selectedQuality);
     llLinkParticleSystem(3, [
         PSYS_PART_FLAGS,           PSYS_PART_INTERP_COLOR_MASK |
@@ -317,12 +317,12 @@ finishCraft()
     string rollPl = "";
     if (g_batchCount > 1) rollPl = "s";
     llRegionSayTo(g_ownerKey, 0,
-        "✓ Rolled " + (string)g_batchCount + "x " +
+        "? Rolled " + (string)g_batchCount + "x " +
         g_selectedQuality + " " + g_selectedStrain + " " +
         llToLower(g_selectedType) + rollPl +
         " (" + (string)g_totalCost + "g used)");
 
-    // Schedule visual fade-down — g_craftDisplayActive flag is checked in timer()
+    // Schedule visual fade-down  -  g_craftDisplayActive flag is checked in timer()
     // so we never call llSleep() inside a listen handler
     g_craftDisplayActive = TRUE;
     llSetTimerEvent(3.0);
@@ -386,7 +386,7 @@ default
 
     timer()
     {
-        // Post-craft visual fade — fires 3s after finishCraft()
+        // Post-craft visual fade  -  fires 3s after finishCraft()
         if (g_craftDisplayActive)
         {
             g_craftDisplayActive = FALSE;

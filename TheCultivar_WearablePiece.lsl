@@ -1,19 +1,19 @@
 // ================================================================
-// THE CULTIVAR — Wearable Piece Script
+// THE CULTIVAR  -  Wearable Piece Script
 // Version: 1.0
 // Lives inside: TC_Pipe, TC_Bong, TC_DabRig (wearable objects)
 //
 // Unlike the Smokeable temp-attach (which is disposable and tied
 // to jar use), these are persistent wearable accessories the
 // player keeps in their inventory and attaches manually.
-// They don't consume flower directly — the player uses their
+// They don't consume flower directly  -  the player uses their
 // HUD smoke menu as usual, and the piece script picks up the
 // TC_SMOKED event to play the right visual effects.
 //
 // PIECE TYPES (set g_pieceType at top of script per object):
-//   "pipe"    — right hand, classic bowl piece
-//   "bong"    — left hand, full glass piece
-//   "dab_rig" — right hand, concentrate rig
+//   "pipe"     -  right hand, classic bowl piece
+//   "bong"     -  left hand, full glass piece
+//   "dab_rig"  -  right hand, concentrate rig
 //
 // WHAT THIS SCRIPT DOES:
 //   1. On attach, registers with the owner's HUD via TC_PING
@@ -31,7 +31,7 @@
 //   Session mode idle : medium ambient, quality-colored glow ring
 //
 // PRIM STRUCTURE:
-//   Keep to 1–3 prims. Link 1 = body, Link 2 = bowl/nail glow,
+//   Keep to 1 - 3 prims. Link 1 = body, Link 2 = bowl/nail glow,
 //   Link 3 = smoke emitter tip (optional, falls back to link 1)
 // ================================================================
 
@@ -96,7 +96,7 @@ pingHUD()
 }
 
 // ----------------------------------------------------------------
-// Idle ambient — very faint, barely noticeable when just worn
+// Idle ambient  -  very faint, barely noticeable when just worn
 // ----------------------------------------------------------------
 startIdleParticles()
 {
@@ -128,7 +128,7 @@ startIdleParticles()
 }
 
 // ----------------------------------------------------------------
-// Hit burst — fires on TC_SMOKED
+// Hit burst  -  fires on TC_SMOKED
 // ----------------------------------------------------------------
 playHitParticles(string quality)
 {
@@ -207,31 +207,31 @@ updateBowlGlow()
 }
 
 // ----------------------------------------------------------------
-// Hover text — shown while worn
+// Hover text  -  shown while worn
 // ----------------------------------------------------------------
 updateHoverText()
 {
     if (!g_attached) return;
 
     string typeLabel;
-    if      (PIECE_TYPE == "pipe")    typeLabel = "Pipe 🔵";
-    else if (PIECE_TYPE == "bong")    typeLabel = "Bong 💨";
-    else if (PIECE_TYPE == "dab_rig") typeLabel = "Dab Rig ✨";
+    if      (PIECE_TYPE == "pipe")    typeLabel = "Pipe ?";
+    else if (PIECE_TYPE == "bong")    typeLabel = "Bong ?";
+    else if (PIECE_TYPE == "dab_rig") typeLabel = "Dab Rig ?";
 
     string strainLine = "No strain loaded";
     if (g_currentQuality != "") strainLine = g_currentQuality + " " + g_currentStrain;
     string sessionStr = "";
-    if (g_inSession) sessionStr = "  •  🌿 Session";
+    if (g_inSession) sessionStr = "  ?  ? Session";
     string textQuality = "reggie";
     if (g_currentQuality != "") textQuality = g_currentQuality;
 
-    llSetText("THE CULTIVAR — " + typeLabel + "\n" +
+    llSetText("THE CULTIVAR  -  " + typeLabel + "\n" +
               strainLine + sessionStr,
               qualColor(textQuality), 0.85);
 }
 
 // ----------------------------------------------------------------
-// Owner touch menu — mini controls while wearing
+// Owner touch menu  -  mini controls while wearing
 // ----------------------------------------------------------------
 showTouchMenu()
 {
@@ -289,7 +289,7 @@ default
         }
         else
         {
-            // Detached — clean up
+            // Detached  -  clean up
             g_attached   = FALSE;
             g_inSession  = FALSE;
             g_registered = FALSE;
@@ -337,20 +337,20 @@ default
             startIdleParticles();
         }
 
-        // HUD channel events — same channel the jar uses, so piece reacts too
+        // HUD channel events  -  same channel the jar uses, so piece reacts too
         else if (channel == g_hudChannel)
         {
-            // TC_SMOKED — someone smoked (this player, from jar or direct)
+            // TC_SMOKED  -  someone smoked (this player, from jar or direct)
             if (cmd == "TC_SMOKED")
             {
                 g_currentStrain  = llList2String(parts, 1);
                 g_currentQuality = llList2String(parts, 2);
-                // React to the smoke event — doesn't matter what device they used
+                // React to the smoke event  -  doesn't matter what device they used
                 playHitParticles(g_currentQuality);
                 updateHoverText();
             }
 
-            // TC_SESSION_SYNC — this player joined a session
+            // TC_SESSION_SYNC  -  this player joined a session
             else if (cmd == "TC_SESSION_SYNC")
             {
                 g_currentStrain  = llList2String(parts, 1);
@@ -362,7 +362,7 @@ default
                 playHitParticles(g_currentQuality);
             }
 
-            // TC_SESSION_END — session over
+            // TC_SESSION_END  -  session over
             else if (cmd == "TC_SESSION_END")
             {
                 g_inSession = FALSE;
@@ -371,7 +371,7 @@ default
                 updateHoverText();
             }
 
-            // TC_PASS_RECEIVED — someone passed to this player
+            // TC_PASS_RECEIVED  -  someone passed to this player
             else if (cmd == "TC_PASS_RECEIVED")
             {
                 g_currentStrain  = llList2String(parts, 1);

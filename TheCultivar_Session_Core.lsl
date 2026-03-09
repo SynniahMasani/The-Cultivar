@@ -1,5 +1,5 @@
 // ================================================================
-// THE CULTIVAR — Session Object Core Script
+// THE CULTIVAR  -  Session Object Core Script
 // Version: 1.0
 // Handles: Session lifecycle, participant management, invite
 //          broadcasts, animation sync, passing around the circle,
@@ -10,7 +10,7 @@
 //   2. On rez, this script announces itself back to the host HUD
 //   3. Host HUD calls TC_SESSION_START with strain/quality info
 //   4. Session object broadcasts TC_SESSION_INVITE on public channel
-//   5. Nearby HUDs show invite dialogs — players who accept register
+//   5. Nearby HUDs show invite dialogs  -  players who accept register
 //   6. Once 2+ participants are in, animations sync across all HUDs
 //   7. Host can pass to the next person (rotation order)
 //   8. Session ends when: host ends it, item runs out, or everyone leaves
@@ -62,7 +62,7 @@ integer MAX_PARTICIPANTS = 8;
 integer g_currentHolder = 0; // index into participants list (stride-divided)
 integer g_passCount     = 0; // total passes this session
 
-// Cypher mode — auto-enables when >= 3 participants join
+// Cypher mode  -  auto-enables when >= 3 participants join
 integer g_cypherMode          = FALSE;
 integer g_turnTimer           = 15;  // seconds per turn in cypher mode
 integer g_turnTimeRemaining   = 0;
@@ -183,7 +183,7 @@ broadcastToAll(string msg)
 }
 
 // ----------------------------------------------------------------
-// Sync animations — tell everyone to start their smoke anim
+// Sync animations  -  tell everyone to start their smoke anim
 // ----------------------------------------------------------------
 syncAnimations()
 {
@@ -219,17 +219,17 @@ updateHoverText()
     integer count    = participantCount();
     string  holderName = participantName(g_currentHolder);
 
-    string text = "THE CULTIVAR — Session 🌿\n";
+    string text = "THE CULTIVAR  -  Session ?\n";
     text += g_quality + " " + g_strain + "\n";
     text += (string)count + " in the circle\n";
     text += "With: " + holderName;
-    if (g_cypherMode) text += "\n⏱ CYPHER — " + (string)g_turnTimeRemaining + "s";
+    if (g_cypherMode) text += "\n? CYPHER  -  " + (string)g_turnTimeRemaining + "s";
 
     llSetText(text, <0.4, 0.9, 0.4>, 1.0);
 }
 
 // ----------------------------------------------------------------
-// Build the pass menu — list of participants to pass to
+// Build the pass menu  -  list of participants to pass to
 // ----------------------------------------------------------------
 showPassMenu(key requester)
 {
@@ -294,7 +294,7 @@ passToNext()
     // Notify new holder
     llRegionSayTo(nextKey, 0,
         prevName + " passed you the " + g_quality + " " + g_strain +
-        ". Your turn! 🌿");
+        ". Your turn! ?");
 
     // Tell new holder's HUD to play receive animation
     llRegionSayTo(nextKey, participantHUDChan(nextIdx),
@@ -347,7 +347,7 @@ passToNamed(string targetName, key requester)
                 "Passed the " + g_strain + " to " + pName + ".");
             llRegionSayTo(targetKey, 0,
                 llKey2Name(requester) + " passed you the " +
-                g_quality + " " + g_strain + ". 🌿");
+                g_quality + " " + g_strain + ". ?");
 
             llRegionSayTo(targetKey, participantHUDChan(i),
                 "TC_PASS_RECEIVED|" + g_strain + "|" + g_quality);
@@ -431,7 +431,7 @@ default
     {
         if (!g_sessionActive)
         {
-            // Never got TC_SESSION_START — die quietly
+            // Never got TC_SESSION_START  -  die quietly
             llDie();
             return;
         }
@@ -451,9 +451,9 @@ default
 
             if (g_turnTimeRemaining <= 0)
             {
-                // Time's up — auto-pass to next in rotation
+                // Time's up  -  auto-pass to next in rotation
                 llRegionSayTo(participantKey(g_currentHolder), 0,
-                    "⏱ Time's up! Auto-passing the " + g_strain + "...");
+                    "? Time's up! Auto-passing the " + g_strain + "...");
                 passToNext();
                 // passToNext() resets g_turnTimeRemaining = g_turnTimer
             }
@@ -515,7 +515,7 @@ default
 
             llRegionSayTo(g_hostKey, 0,
                 "Session live! " + g_quality + " " + g_strain +
-                " 🌿 Nearby players have been invited.");
+                " ? Nearby players have been invited.");
 
             // Switch to periodic invite timer
             llSetTimerEvent(30.0);
@@ -523,16 +523,16 @@ default
 
         // ---- Channel 0: Participant HUD sending join request (directed to this object) ----
         // HUD_Comms sends: TC_SESSION_JOIN|avatarKey|hudChannel|avatarName
-        // via llRegionSayTo(sessionObjectKey, 0, ...) — already targeted to us
+        // via llRegionSayTo(sessionObjectKey, 0, ...)  -  already targeted to us
         else if (channel == 0 && cmd == "TC_SESSION_JOIN")
         {
             key    joinerKey  = (key)llList2String(parts, 1);
-            // parts[2] is hudChannel — addParticipant derives it internally, skip
+            // parts[2] is hudChannel  -  addParticipant derives it internally, skip
             string joinerName = llList2String(parts, 3);
 
             if (!g_sessionActive) return;
 
-            // Distance check — joiner must be within 20m of the session object
+            // Distance check  -  joiner must be within 20m of the session object
             list posInfo = llGetObjectDetails(joinerKey, [OBJECT_POS]);
             if (llGetListLength(posInfo) > 0)
             {
@@ -567,7 +567,7 @@ default
                 // Local notification
                 llRegionSayTo(joinerKey, 0,
                     "You joined " + g_hostName + "'s session. " +
-                    g_quality + " " + g_strain + " is going around. 🌿");
+                    g_quality + " " + g_strain + " is going around. ?");
                 llRegionSayTo(g_hostKey, 0,
                     joinerName + " joined the session. " +
                     (string)participantCount() + " in the circle.");
@@ -581,7 +581,7 @@ default
                     llSetTimerEvent(5.0);
                     broadcastToAll("TC_CYPHER_MODE|1|" + (string)g_turnTimer);
                     llRegionSayTo(g_hostKey, 0,
-                        "⏱ Cypher mode activated — " +
+                        "? Cypher mode activated  -  " +
                         (string)g_turnTimer + "s turns!");
                     // Start the first holder's countdown
                     key holderKey = participantKey(g_currentHolder);

@@ -1,14 +1,14 @@
 // ================================================================
-// THE CULTIVAR — HUD Notifications Script
+// THE CULTIVAR  -  HUD Notifications Script
 // Version: 1.0
 // Handles: Player notifications delivered via llInstantMessage.
 //          Notification preferences stored in shared linkset data.
 //
 // Notification types:
-//   harvest_ready  — plant reached stage 4
-//   sale_made      — plug board sale completed
-//   drop_live      — drop machine activated
-//   session_invite — session invite received (if player misses dialog)
+//   harvest_ready   -  plant reached stage 4
+//   sale_made       -  plug board sale completed
+//   drop_live       -  drop machine activated
+//   session_invite  -  session invite received (if player misses dialog)
 //
 // Preferences: stored as "notif_<type>" = "1" (on) or "0" (off)
 //   Defaults to enabled (on) if no preference is stored.

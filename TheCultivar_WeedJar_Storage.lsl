@@ -1,5 +1,5 @@
 // ================================================================
-// THE CULTIVAR — Weed Jar Storage Script
+// THE CULTIVAR  -  Weed Jar Storage Script
 // Version: 1.0
 // Lives inside: TC_WeedJar_Standard, TC_WeedJar_Premium
 //
@@ -12,11 +12,11 @@
 //   Sends results back to Main on JCHAN_MAIN (2000)
 //
 // COMMANDS HANDLED:
-//   FILL_JAR|strain|quality|grams|packager  — add flower, validate
-//   TAKE_FROM_JAR                           — decrement 1g
-//   EMPTY_JAR                               — clear all contents
-//   SET_ACCESS|mode                         — 0=owner 1=group 2=open
-//   REQUEST_CONTENTS                        — resend full state
+//   FILL_JAR|strain|quality|grams|packager   -  add flower, validate
+//   TAKE_FROM_JAR                            -  decrement 1g
+//   EMPTY_JAR                                -  clear all contents
+//   SET_ACCESS|mode                          -  0=owner 1=group 2=open
+//   REQUEST_CONTENTS                         -  resend full state
 //
 // RESPONSES SENT (on JCHAN_MAIN):
 //   CONTENTS_UPDATED|strain|quality|grams|capacity|packager|accessMode|jarType
@@ -112,7 +112,7 @@ default
     {
         if (change & CHANGED_OWNER)
         {
-            // New owner — clear personal data, keep jar type/capacity
+            // New owner  -  clear personal data, keep jar type/capacity
             // (saveState() below overwrites all jar_* keys with cleared values)
             g_strain     = "";
             g_quality    = "";
@@ -148,7 +148,7 @@ default
                 return;
             }
 
-            // Only one strain at a time — no mixing
+            // Only one strain at a time  -  no mixing
             if (g_grams > 0 && g_strain != strain)
             {
                 llMessageLinked(LINK_SET, JCHAN_MAIN,
@@ -173,7 +173,7 @@ default
             broadcastContents();
         }
 
-        // ---- TAKE_FROM_JAR — decrement 1g ----
+        // ---- TAKE_FROM_JAR  -  decrement 1g ----
         else if (cmd == "TAKE_FROM_JAR")
         {
             if (g_grams <= 0)
@@ -201,7 +201,7 @@ default
             broadcastContents();
         }
 
-        // ---- EMPTY_JAR — return all contents, clear ----
+        // ---- EMPTY_JAR  -  return all contents, clear ----
         else if (cmd == "EMPTY_JAR")
         {
             string  oldStrain   = g_strain;
@@ -229,7 +229,7 @@ default
             broadcastContents();
         }
 
-        // ---- REQUEST_CONTENTS — resend current state ----
+        // ---- REQUEST_CONTENTS  -  resend current state ----
         else if (cmd == "REQUEST_CONTENTS")
         {
             broadcastContents();

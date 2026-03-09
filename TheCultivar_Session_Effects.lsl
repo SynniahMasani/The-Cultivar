@@ -1,5 +1,5 @@
 // ================================================================
-// THE CULTIVAR — Session Object Effects Script
+// THE CULTIVAR  -  Session Object Effects Script
 // Version: 1.0
 // Handles: All visual and audio effects for the session object.
 //          Kept separate from core so effects bugs never affect
@@ -13,10 +13,10 @@
 //   Link 5         : "Hot" ember glow (subtle, pulses)
 //
 // EFFECTS:
-//   Idle ambient    — soft rising smoke column, quality-tinted
-//   Pass effect     — brief directional particle beam toward recipient
-//   Session end     — fade out particles gracefully
-//   Pulse           — ember link slowly pulses with llSetLinkColor
+//   Idle ambient     -  soft rising smoke column, quality-tinted
+//   Pass effect      -  brief directional particle beam toward recipient
+//   Session end      -  fade out particles gracefully
+//   Pulse            -  ember link slowly pulses with llSetLinkColor
 // ================================================================
 
 integer SCHAN_CORE    = 3000;
@@ -33,7 +33,7 @@ float   PULSE_STEP = 0.05;
 float   PULSE_MIN  = 0.02;
 float   PULSE_MAX  = 0.18;
 
-// Pass effect cleanup — unix time when link 4 particles can be cleared.
+// Pass effect cleanup  -  unix time when link 4 particles can be cleared.
 // PSYS_SRC_MAX_AGE stops the source automatically; this clears the
 // particle system definition so it doesn't fire again on region-crossing.
 integer g_passCleanupAt = 0;
@@ -50,7 +50,7 @@ vector qualColor(string quality)
 }
 
 // ----------------------------------------------------------------
-// Ambient rising smoke — the session centerpiece effect
+// Ambient rising smoke  -  the session centerpiece effect
 // ----------------------------------------------------------------
 startAmbientSmoke()
 {
@@ -88,7 +88,7 @@ stopAmbientSmoke()
 }
 
 // ----------------------------------------------------------------
-// Glow ring setup — quality color, active session pulse
+// Glow ring setup  -  quality color, active session pulse
 // ----------------------------------------------------------------
 updateGlowRing()
 {
@@ -101,7 +101,7 @@ updateGlowRing()
 }
 
 // ----------------------------------------------------------------
-// Pass effect — directional particle beam from passer to receiver
+// Pass effect  -  directional particle beam from passer to receiver
 // Emitted from link 4, aimed toward receiver's position
 // ----------------------------------------------------------------
 playPassEffect(key fromKey, key toKey)
@@ -149,14 +149,14 @@ playPassEffect(key fromKey, key toKey)
     // Play pass sound
     llPlaySound("pass_whoosh", 0.6);
 
-    // Schedule cleanup — pulseTick() checks this every 0.15s.
+    // Schedule cleanup  -  pulseTick() checks this every 0.15s.
     // PSYS_SRC_MAX_AGE stops the burst source at 1.5s; we clear the
     // particle system definition at 2s so it doesn't persist.
     g_passCleanupAt = llGetUnixTime() + 2;
 }
 
 // ----------------------------------------------------------------
-// Ember pulse tick — called by timer
+// Ember pulse tick  -  called by timer
 // Slowly oscillates glow on link 5
 // ----------------------------------------------------------------
 pulseTick()
@@ -189,7 +189,7 @@ pulseTick()
 }
 
 // ----------------------------------------------------------------
-// Session start — fire up all effects
+// Session start  -  fire up all effects
 // ----------------------------------------------------------------
 onSessionStart(string quality)
 {
@@ -204,7 +204,7 @@ onSessionStart(string quality)
 }
 
 // ----------------------------------------------------------------
-// Session end — graceful fade
+// Session end  -  graceful fade
 // ----------------------------------------------------------------
 onSessionEnd()
 {
@@ -262,7 +262,7 @@ default
 
         else if (cmd == "QUALITY")
         {
-            // Quality update (in case it changes mid-session — future feature)
+            // Quality update (in case it changes mid-session  -  future feature)
             g_quality = llList2String(parts, 1);
             if (g_active)
             {

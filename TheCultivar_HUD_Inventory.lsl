@@ -1,7 +1,7 @@
 // ================================================================
-// THE CULTIVAR — HUD Inventory Manager Script
+// THE CULTIVAR  -  HUD Inventory Manager Script
 // Version: 1.0
-// Handles: All player inventory — seeds, flower, rolled items,
+// Handles: All player inventory  -  seeds, flower, rolled items,
 //          edibles, bags, consumables
 // Persistence: llLinksetDataWrite (survives sim restarts)
 // ================================================================
@@ -314,7 +314,7 @@ default
             string output;
             if (filterType != "" && filterType != "all")
             {
-                // Build filtered serialization — only matching item types
+                // Build filtered serialization  -  only matching item types
                 string filtered = "";
                 integer len = llGetListLength(g_inventory);
                 integer i;

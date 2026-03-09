@@ -1,12 +1,12 @@
 // ================================================================
-// THE CULTIVAR — Plant Persistence Script
+// THE CULTIVAR  -  Plant Persistence Script
 // Version: 1.0
 // Handles: Saving and loading all plant state so nothing is
 //          ever lost during sim restarts, crashes, or relogs.
 //
 // STORAGE STRATEGY:
-//   Primary   : llLinksetDataWrite — fast, survives restarts
-//   Backup    : Object description field — readable even without
+//   Primary   : llLinksetDataWrite  -  fast, survives restarts
+//   Backup    : Object description field  -  readable even without
 //               scripts (last resort recovery)
 //
 // WHAT IS SAVED:
@@ -105,7 +105,7 @@ string fastForward(string stateStr)
     integer stagesAdvanced = 0;
 
     // Keep advancing stages as long as time has elapsed past them
-    // Watering is forgiven during fast-forward (sim was down — not player's fault)
+    // Watering is forgiven during fast-forward (sim was down  -  not player's fault)
     while (stage < 4)
     {
         integer elapsed = now - stageStartTime;
@@ -129,7 +129,7 @@ string fastForward(string stateStr)
         }
         else
         {
-            jump done_ff; // Current stage not complete — stop here
+            jump done_ff; // Current stage not complete  -  stop here
         }
     }
     @done_ff;
@@ -137,8 +137,8 @@ string fastForward(string stateStr)
     if (stagesAdvanced > 0)
     {
         string harvestMsg = ".";
-        if (stage == 4) harvestMsg = " — ready to harvest!";
-        llOwnerSay("🌿 Your " + strainName +
+        if (stage == 4) harvestMsg = "  -  ready to harvest!";
+        llOwnerSay("? Your " + strainName +
                    " grew while you were away. Now at stage " +
                    (string)stage + harvestMsg);
     }
@@ -170,7 +170,7 @@ default
         }
         else
         {
-            // Brand new plant — tell grow script it's fresh
+            // Brand new plant  -  tell grow script it's fresh
             llMessageLinked(LINK_SET, PCHAN_GROW,
                 "STATE_LOADED|||0|0|0|0|0|0|basic|5", NULL_KEY);
         }
@@ -194,12 +194,12 @@ default
             // Ask grow script for its current state, then switch to 'saving' state
             // to intercept the STATUS response and persist it.
             // Without the state transition the STATUS reply arrives in 'default'
-            // which has no STATUS handler — nothing would ever get saved.
+            // which has no STATUS handler  -  nothing would ever get saved.
             llMessageLinked(LINK_SET, PCHAN_GROW, "REQUEST_STATUS", NULL_KEY);
             state saving;
         }
 
-        // Grow script sends current status — we save it
+        // Grow script sends current status  -  we save it
         // (We listen on PCHAN_GROW for STATUS responses so we can save them)
         else if (cmd == "LOAD_STATE")
         {
