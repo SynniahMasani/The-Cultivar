@@ -265,6 +265,7 @@ default
         {
             llSetPayPrice(PAY_HIDE, [PAY_HIDE, PAY_HIDE, PAY_HIDE, PAY_HIDE]);
         }
+        // Restore for-sale state so the SL Buy flow works after a re-rez
         if (g_listenRegister) llListenRemove(g_listenRegister);
         g_listenRegister = llListen(0, "", NULL_KEY, "");
     }
