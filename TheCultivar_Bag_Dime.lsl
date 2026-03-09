@@ -122,6 +122,19 @@ pingHUD()
     llSetTimerEvent(8.0);
 }
 
+updateSaleState()
+{
+    if (g_forSale && g_price > 0)
+    {
+        llSetForSale(1, g_price); // 1 = SALE_ORIGINAL
+        llSetPayPrice(PAY_HIDE, [g_price, PAY_HIDE, PAY_HIDE, PAY_HIDE]);
+    }
+    else
+    {
+        llSetPayPrice(PAY_HIDE, [PAY_HIDE, PAY_HIDE, PAY_HIDE, PAY_HIDE]);
+    }
+}
+
 showOwnerMenu()
 {
     if (g_listenOwner) llListenRemove(g_listenOwner);
@@ -183,10 +196,7 @@ default
         g_ownerName = llKey2Name(g_ownerKey);
         parseDescription();
         updateHoverText();
-        if (g_forSale && g_price > 0)
-            llSetPayPrice(PAY_HIDE, [g_price, PAY_HIDE, PAY_HIDE, PAY_HIDE]);
-        else
-            llSetPayPrice(PAY_HIDE, [PAY_HIDE, PAY_HIDE, PAY_HIDE, PAY_HIDE]);
+        updateSaleState();
         if (g_listenRegister) llListenRemove(g_listenRegister);
         g_listenRegister = llListen(0, "", NULL_KEY, "");
     }
@@ -210,15 +220,7 @@ default
         // Rezzed from inventory by player  -  read stored description
         parseDescription();
         updateHoverText();
-        if (g_forSale && g_price > 0)
-        {
-            llSetForSale(1, g_price); // 1 = SALE_ORIGINAL
-            llSetPayPrice(PAY_HIDE, [g_price, PAY_HIDE, PAY_HIDE, PAY_HIDE]);
-        }
-        else
-        {
-            llSetPayPrice(PAY_HIDE, [PAY_HIDE, PAY_HIDE, PAY_HIDE, PAY_HIDE]);
-        }
+        updateSaleState();
         if (g_listenRegister) llListenRemove(g_listenRegister);
         g_listenRegister = llListen(0, "", NULL_KEY, "");
     }
@@ -377,8 +379,7 @@ default
             g_forSale = TRUE;
             saveDescription();
             updateHoverText();
-            llSetForSale(1, g_price); // 1 = SALE_ORIGINAL
-            llSetPayPrice(PAY_HIDE, [g_price, PAY_HIDE, PAY_HIDE, PAY_HIDE]);
+            updateSaleState();
             llRegionSayTo(g_ownerKey, 0,
                 g_strain + " is now for sale at L$" + (string)g_price + ".");
         }
