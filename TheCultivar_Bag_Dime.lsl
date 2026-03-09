@@ -244,7 +244,7 @@ default
             g_price     = 0;
             saveDescription();
             updateHoverText();
-            llSetForSale(SALE_NOT, 0);
+            llSetForSale(0, 0); // 0 = SALE_NOT
             llSetPayPrice(PAY_HIDE, [PAY_HIDE, PAY_HIDE, PAY_HIDE, PAY_HIDE]);
             g_registered = FALSE;
         }
@@ -341,7 +341,7 @@ default
                 g_price   = 0;
                 saveDescription();
                 updateHoverText();
-                llSetForSale(SALE_NOT, 0);
+                llSetForSale(0, 0); // 0 = SALE_NOT
                 llSetPayPrice(PAY_HIDE, [PAY_HIDE, PAY_HIDE, PAY_HIDE, PAY_HIDE]);
                 llRegionSayTo(g_ownerKey, 0, "Bag removed from sale.");
             }
