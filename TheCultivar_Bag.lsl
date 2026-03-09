@@ -258,7 +258,7 @@ default
         updateHoverText();
         if (g_forSale && g_price > 0)
         {
-            llSetForSale(SALE_ORIGINAL, g_price);
+            llSetForSale(1, g_price) // 1 = SALE_ORIGINAL;
             llSetPayPrice(PAY_HIDE, [g_price, PAY_HIDE, PAY_HIDE, PAY_HIDE]);
         }
         else
@@ -455,7 +455,7 @@ default
             saveDescription();
             updateHoverText();
             // Set the object for sale so SL's Buy flow transfers it to buyers
-            llSetForSale(SALE_ORIGINAL, g_price);
+            llSetForSale(1, g_price) // 1 = SALE_ORIGINAL;
             llSetPayPrice(PAY_HIDE, [g_price, PAY_HIDE, PAY_HIDE, PAY_HIDE]);
             llRegionSayTo(g_ownerKey, 0,
                 "" + g_strain + " is now for sale at L$" + (string)g_price + ".");
