@@ -54,6 +54,8 @@ integer g_listenStrain;
 integer g_listenSize;
 integer g_listenConfirm;
 integer g_listenHUD;
+integer g_listenBagConfig = 0;  // listen for TC_BAG_READY from freshly rezzed bag
+integer g_bagConfigChan   = 0;  // random channel used to configure rezzed bag
 
 // State
 key     g_ownerKey      = NULL_KEY;
@@ -87,10 +89,11 @@ list BAG_ASSETS = ["TC_Bag_Dime", "TC_Bag_Eighth",
 // ----------------------------------------------------------------
 closeAllListens()
 {
-    if (g_listenMain)    { llListenRemove(g_listenMain);    g_listenMain    = 0; }
-    if (g_listenStrain)  { llListenRemove(g_listenStrain);  g_listenStrain  = 0; }
-    if (g_listenSize)    { llListenRemove(g_listenSize);    g_listenSize    = 0; }
-    if (g_listenConfirm) { llListenRemove(g_listenConfirm); g_listenConfirm = 0; }
+    if (g_listenMain)      { llListenRemove(g_listenMain);      g_listenMain      = 0; }
+    if (g_listenStrain)    { llListenRemove(g_listenStrain);    g_listenStrain    = 0; }
+    if (g_listenSize)      { llListenRemove(g_listenSize);      g_listenSize      = 0; }
+    if (g_listenConfirm)   { llListenRemove(g_listenConfirm);   g_listenConfirm   = 0; }
+    if (g_listenBagConfig) { llListenRemove(g_listenBagConfig); g_listenBagConfig = 0; }
 }
 
 // ----------------------------------------------------------------
@@ -276,64 +279,19 @@ giveBag()
         return;
     }
 
-    // We need to stamp data into the bag before giving it.
-    // LSL can't modify object descriptions before giving, so we use
-    // the start_param of llRezObject to pass a hash, then give via
-    // llGiveInventory for simplicity. The bag script reads its own
-    // description which we pre-set by rezzing, configuring, and
-    // taking back  -  OR we encode data in the object name at give time.
-    //
-    // Practical SL approach: give the bag, and separately send the
-    // strain data to the player's HUD which stores it mapped to the
-    // bag's UUID. The bag script requests its data from the HUD on rez.
-    //
-    // For v1.0 we use the simpler approach: encode data in the bag
-    // name so it's self-contained, then give. The bag script parses
-    // its own name on rez.
-    // Name format: TC_Bag_[Size]:[strain]:[quality]:[packager]:[weight]g
+    // Rez the bag in-world and configure it via a private channel.
+    // llGiveInventory() gives a blank template — the bag script reads
+    // its data from llGetObjectDesc(), which we can only set AFTER rez.
+    // The bag sends TC_BAG_READY on start_param, we reply with TC_BAG_CONFIG.
 
-    string bagDisplayName = bagName + ":" +
-                            g_selectedStrain + ":" +
-                            g_selectedQuality + ":" +
-                            g_ownerName + ":" +
-                            (string)g_selectedCost + "g";
+    g_bagConfigChan = (integer)(llFrand(999999.0) + 100000) * -1;
+    if (g_listenBagConfig) llListenRemove(g_listenBagConfig);
+    g_listenBagConfig = llListen(g_bagConfigChan, "", NULL_KEY, "");
 
-    // Rez the bag temporarily to set its description, then give
-    // Simpler: just give and let the HUD track it via ADD_ITEM
-    llGiveInventory(g_ownerKey, bagName);
+    vector rezPos = llGetPos() + <0.0, 0.0, 0.7>;
+    llRezObject(bagName, rezPos, ZERO_VECTOR, ZERO_ROTATION, g_bagConfigChan);
 
-    // Tell HUD to add the bag to inventory with full data
-    llRegionSayTo(g_ownerKey, g_hudChannel,
-        "TC_ADD_ITEM|bag_" + llToLower(g_selectedSize) + "|" +
-        g_selectedStrain + "|" + g_selectedQuality + "|1|" + g_brandName);
-
-    // Notify player
-    llRegionSayTo(g_ownerKey, 0,
-        "Bagged: " + g_selectedSize + " of " +
-        g_selectedQuality + " " + g_selectedStrain +
-        " (" + (string)g_selectedCost + "g used)");
-
-    // Visual feedback  -  brief particle burst from table
-    llParticleSystem([
-        PSYS_PART_FLAGS,        PSYS_PART_INTERP_COLOR_MASK | PSYS_PART_EMISSIVE_MASK,
-        PSYS_SRC_PATTERN,       PSYS_SRC_PATTERN_EXPLODE,
-        PSYS_PART_START_COLOR,  <0.4, 0.9, 0.4>,
-        PSYS_PART_END_COLOR,    <0.2, 0.6, 0.2>,
-        PSYS_PART_START_ALPHA,  0.9,
-        PSYS_PART_END_ALPHA,    0.0,
-        PSYS_PART_START_SCALE,  <0.05, 0.05, 0.0>,
-        PSYS_PART_END_SCALE,    <0.02, 0.02, 0.0>,
-        PSYS_PART_MAX_AGE,      1.5,
-        PSYS_SRC_BURST_RATE,    0.1,
-        PSYS_SRC_BURST_PART_COUNT, 10,
-        PSYS_SRC_MAX_AGE,       0.3
-    ]);
-
-    // Play sound
-    llPlaySound("bag_rustle", 0.6);
-
-    g_busy = FALSE;
-    resetTransaction();
+    llSetTimerEvent(8.0); // wait for TC_BAG_READY, or timeout
 }
 
 // ----------------------------------------------------------------
@@ -458,6 +416,52 @@ default
             g_busy = FALSE;
             llRegionSayTo(g_ownerKey, 0,
                 "Not enough flower for that bag size. Try a smaller size.");
+            resetTransaction();
+        }
+
+        // ---- Bag configuration handshake ----
+        // Bag rezzes, fires on_rez(configChan), listens, and sends TC_BAG_READY.
+        // We reply with TC_BAG_CONFIG so the bag can write its description.
+        else if (channel == g_bagConfigChan && cmd == "TC_BAG_READY")
+        {
+            if (g_listenBagConfig) { llListenRemove(g_listenBagConfig); g_listenBagConfig = 0; }
+            llSetTimerEvent(0.0);
+
+            // Send full strain data to the bag on its config channel
+            llRegionSay(g_bagConfigChan,
+                "TC_BAG_CONFIG|" + g_selectedStrain + "|" +
+                g_selectedQuality + "|" + g_ownerName + "|" +
+                (string)g_selectedCost);
+
+            // Tell HUD to record the bag in virtual inventory
+            llRegionSayTo(g_ownerKey, g_hudChannel,
+                "TC_ADD_ITEM|bag_" + llToLower(g_selectedSize) + "|" +
+                g_selectedStrain + "|" + g_selectedQuality + "|1|" + g_brandName);
+
+            // Notify player
+            llRegionSayTo(g_ownerKey, 0,
+                "Bagged: " + g_selectedSize + " of " +
+                g_selectedQuality + " " + g_selectedStrain +
+                " (" + (string)g_selectedCost + "g used)");
+
+            // Visual feedback
+            llParticleSystem([
+                PSYS_PART_FLAGS,           PSYS_PART_INTERP_COLOR_MASK | PSYS_PART_EMISSIVE_MASK,
+                PSYS_SRC_PATTERN,          PSYS_SRC_PATTERN_EXPLODE,
+                PSYS_PART_START_COLOR,     <0.4, 0.9, 0.4>,
+                PSYS_PART_END_COLOR,       <0.2, 0.6, 0.2>,
+                PSYS_PART_START_ALPHA,     0.9,
+                PSYS_PART_END_ALPHA,       0.0,
+                PSYS_PART_START_SCALE,     <0.05, 0.05, 0.0>,
+                PSYS_PART_END_SCALE,       <0.02, 0.02, 0.0>,
+                PSYS_PART_MAX_AGE,         1.5,
+                PSYS_SRC_BURST_RATE,       0.1,
+                PSYS_SRC_BURST_PART_COUNT, 10,
+                PSYS_SRC_MAX_AGE,          0.3
+            ]);
+            llPlaySound("bag_rustle", 0.6);
+
+            g_busy = FALSE;
             resetTransaction();
         }
 

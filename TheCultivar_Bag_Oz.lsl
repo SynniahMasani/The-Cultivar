@@ -19,6 +19,8 @@ integer g_listenPrice;
 integer g_listenBuyer;
 integer g_listenHUD;
 integer g_listenRegister;
+integer g_bagConfigChan   = 0;  // start_param channel when rezzed by bagging table
+integer g_listenBagConfig = 0;  // listens for TC_BAG_CONFIG from the table
 
 string  g_strain    = "Unknown";
 string  g_quality   = "reggie";
@@ -158,6 +160,11 @@ default
         g_ownerName = llKey2Name(g_ownerKey);
         parseDescription();
         updateHoverText();
+        // Set pay price based on current sale state
+        if (g_forSale && g_price > 0)
+            llSetPayPrice(PAY_HIDE, [g_price, PAY_HIDE, PAY_HIDE, PAY_HIDE]);
+        else
+            llSetPayPrice(PAY_HIDE, [PAY_HIDE, PAY_HIDE, PAY_HIDE, PAY_HIDE]);
         if (g_listenRegister) llListenRemove(g_listenRegister);
         g_listenRegister = llListen(0, "", NULL_KEY, "");
     }
@@ -166,10 +173,30 @@ default
     {
         g_ownerKey  = llGetOwner();
         g_ownerName = llKey2Name(g_ownerKey);
+
+        if (start_param != 0)
+        {
+            // Freshly rezzed by bagging table — wait for strain config
+            g_bagConfigChan = start_param;
+            if (g_listenBagConfig) llListenRemove(g_listenBagConfig);
+            g_listenBagConfig = llListen(g_bagConfigChan, "", NULL_KEY, "");
+            llRegionSay(g_bagConfigChan, "TC_BAG_READY");
+            llSetTimerEvent(10.0); // die if table never sends config
+            return;
+        }
+
+        // Rezzed from inventory by player — read stored description
         parseDescription();
         updateHoverText();
         if (g_forSale && g_price > 0)
-            llSetForSale(1, g_price); // 1 = SALE_ORIGINAL
+        {
+            llSetForSale(SALE_ORIGINAL, g_price);
+            llSetPayPrice(PAY_HIDE, [g_price, PAY_HIDE, PAY_HIDE, PAY_HIDE]);
+        }
+        else
+        {
+            llSetPayPrice(PAY_HIDE, [PAY_HIDE, PAY_HIDE, PAY_HIDE, PAY_HIDE]);
+        }
         if (g_listenRegister) llListenRemove(g_listenRegister);
         g_listenRegister = llListen(0, "", NULL_KEY, "");
     }
@@ -178,23 +205,42 @@ default
     {
         if (change & CHANGED_OWNER)
         {
-            g_ownerKey  = llGetOwner();
-            g_ownerName = llKey2Name(g_ownerKey);
+            key newOwner = llGetOwner();
+            // SALE_ORIGINAL purchase: notify the seller's HUD before updating g_ownerKey
+            if (g_forSale && g_price > 0 && g_ownerKey != NULL_KEY)
+            {
+                integer sellerHUDChan = deriveHUDChannel(g_ownerKey);
+                llRegionSayTo(g_ownerKey, sellerHUDChan,
+                    "TC_SALE_COMPLETE|" + (string)g_price + "|" + llKey2Name(newOwner));
+                llRegionSayTo(g_ownerKey, 0,
+                    "Sold your " + g_strain + " bag to " +
+                    llKey2Name(newOwner) + " for L$" + (string)g_price + ".");
+            }
+            g_ownerKey  = newOwner;
+            g_ownerName = llKey2Name(newOwner);
             g_forSale   = FALSE;
             g_price     = 0;
             saveDescription();
             updateHoverText();
+            llSetForSale(SALE_NOT, 0);
+            llSetPayPrice(PAY_HIDE, [PAY_HIDE, PAY_HIDE, PAY_HIDE, PAY_HIDE]);
             g_registered = FALSE;
         }
     }
 
     timer()
     {
+        llSetTimerEvent(0.0);
+        // Config timeout — bagging table never sent TC_BAG_CONFIG
+        if (g_bagConfigChan != 0)
+        {
+            llDie();
+            return;
+        }
         if (g_listenOwner)    { llListenRemove(g_listenOwner);    g_listenOwner    = 0; }
         if (g_listenPrice)    { llListenRemove(g_listenPrice);    g_listenPrice    = 0; }
         if (g_listenBuyer)    { llListenRemove(g_listenBuyer);    g_listenBuyer    = 0; }
         if (g_listenRegister) { llListenRemove(g_listenRegister); g_listenRegister = 0; }
-        llSetTimerEvent(0.0);
         g_pendingBuyer = NULL_KEY;
     }
 
@@ -212,34 +258,24 @@ default
 
     money(key buyer, integer amount)
     {
-        if (!g_forSale)
-        {
-            llGiveMoney(buyer, amount);
-            llRegionSayTo(buyer, 0, "This bag isn't for sale. Refunding your L$.");
-            return;
-        }
-        if (amount < g_price)
+        // Direct Pay received. Bags should be purchased via right-click -> Buy
+        // (SALE_ORIGINAL). That flow handles L$ and object transfer automatically
+        // without needing PERMISSION_DEBIT. If someone used Pay instead, attempt
+        // a refund if we have PERMISSION_DEBIT (granted when "Put For Sale" chosen).
+        if (llGetPermissions() & PERMISSION_DEBIT)
         {
             llGiveMoney(buyer, amount);
             llRegionSayTo(buyer, 0,
-                "That's not enough. Price is L$" + (string)g_price + ". Refunding.");
-            return;
+                "Refunded L$" + (string)amount +
+                ". Please right-click this bag and choose 'Buy' to purchase it.");
         }
-        if (amount > g_price)
-            llGiveMoney(buyer, amount - g_price);
-
-        llGiveMoney(g_ownerKey, g_price);
-        llRegionSayTo(buyer, 0,
-            "Purchased: " + g_strain + " [" + g_quality + "] " +
-            (string)g_weight + "g from " + g_ownerName);
-        llRegionSayTo(g_ownerKey, 0,
-            "Sold your " + g_strain + " bag to " +
-            llKey2Name(buyer) + " for L$" + (string)g_price);
-
-        integer ownerHUDChan = deriveHUDChannel(g_ownerKey);
-        llRegionSayTo(g_ownerKey, ownerHUDChan,
-            "TC_SALE_COMPLETE|" + (string)g_price + "|" + llKey2Name(buyer));
-        llDie();
+        else
+        {
+            llRegionSayTo(buyer, 0,
+                "Please right-click this bag and choose 'Buy' to purchase it.");
+            llOwnerSay(llKey2Name(buyer) + " paid L$" + (string)amount +
+                " via Pay. Tell them to use 'Buy' instead.");
+        }
     }
 
     listen(integer channel, string name, key id, string msg)
@@ -247,7 +283,24 @@ default
         list   parts = llParseString2List(msg, ["|"], []);
         string cmd   = llList2String(parts, 0);
 
-        if (channel == 0 && cmd == "TC_REGISTER")
+        // ---- Configuration from bagging table (fired once after rez) ----
+        if (g_bagConfigChan != 0 && channel == g_bagConfigChan && cmd == "TC_BAG_CONFIG")
+        {
+            // TC_BAG_CONFIG|strain|quality|packager|weight
+            g_strain   = llList2String(parts, 1);
+            g_quality  = llList2String(parts, 2);
+            g_packager = llList2String(parts, 3);
+            g_weight   = (integer)llList2String(parts, 4);
+            g_forSale  = FALSE;
+            g_price    = 0;
+            g_bagConfigChan = 0;
+            if (g_listenBagConfig) { llListenRemove(g_listenBagConfig); g_listenBagConfig = 0; }
+            llSetTimerEvent(0.0);
+            saveDescription();
+            updateHoverText();
+            llSetPayPrice(PAY_HIDE, [PAY_HIDE, PAY_HIDE, PAY_HIDE, PAY_HIDE]);
+        }
+        else if (channel == 0 && cmd == "TC_REGISTER")
         {
             key regOwner = (key)llList2String(parts, 1);
             if (regOwner != g_ownerKey) return;
@@ -263,13 +316,19 @@ default
             if (g_listenOwner) { llListenRemove(g_listenOwner); g_listenOwner = 0; }
 
             if (msg == "Put For Sale")
+            {
+                // Request PERMISSION_DEBIT now so refunds work if buyer uses Pay instead of Buy
+                llRequestPermissions(g_ownerKey, PERMISSION_DEBIT);
                 showPriceMenu();
+            }
             else if (msg == "Remove From Sale")
             {
                 g_forSale = FALSE;
                 g_price   = 0;
                 saveDescription();
                 updateHoverText();
+                llSetForSale(SALE_NOT, 0);
+                llSetPayPrice(PAY_HIDE, [PAY_HIDE, PAY_HIDE, PAY_HIDE, PAY_HIDE]);
                 llRegionSayTo(g_ownerKey, 0, "Bag removed from sale.");
             }
             else if (msg == "Change Price")
@@ -304,7 +363,8 @@ default
             g_forSale = TRUE;
             saveDescription();
             updateHoverText();
-            llSetForSale(1, g_price); // 1 = SALE_ORIGINAL
+            llSetForSale(SALE_ORIGINAL, g_price);
+            llSetPayPrice(PAY_HIDE, [g_price, PAY_HIDE, PAY_HIDE, PAY_HIDE]);
             llRegionSayTo(g_ownerKey, 0,
                 g_strain + " is now for sale at L$" + (string)g_price + ".");
         }
@@ -315,12 +375,12 @@ default
             if (msg == "Buy Now")
             {
                 llRegionSayTo(id, 0,
-                    "Pay L$" + (string)g_price +
-                    " to this bag object to complete the purchase.");
-                llRegionSayTo(id, 0,
-                    "Right-click the bag and choose 'Pay' to buy it.");
+                    "To purchase: right-click this bag and choose 'Buy' (L$" +
+                    (string)g_price + ").");
             }
             g_pendingBuyer = NULL_KEY;
         }
     }
+
+    run_time_permissions(integer perms) {}
 }
