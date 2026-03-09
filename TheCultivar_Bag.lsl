@@ -159,6 +159,19 @@ pingHUD()
     llSetTimerEvent(8.0);
 }
 
+updateSaleState()
+{
+    if (g_forSale && g_price > 0)
+    {
+        llSetForSale(1, g_price); // 1 = SALE_ORIGINAL
+        llSetPayPrice(PAY_HIDE, [g_price, PAY_HIDE, PAY_HIDE, PAY_HIDE]);
+    }
+    else
+    {
+        llSetPayPrice(PAY_HIDE, [PAY_HIDE, PAY_HIDE, PAY_HIDE, PAY_HIDE]);
+    }
+}
+
 // ----------------------------------------------------------------
 // OWNER MENU  -  manage the bag
 // ----------------------------------------------------------------
@@ -228,11 +241,7 @@ default
         g_ownerName = llKey2Name(g_ownerKey);
         parseDescription();
         updateHoverText();
-        // Set pay price based on current sale state
-        if (g_forSale && g_price > 0)
-            llSetPayPrice(PAY_HIDE, [g_price, PAY_HIDE, PAY_HIDE, PAY_HIDE]);
-        else
-            llSetPayPrice(PAY_HIDE, [PAY_HIDE, PAY_HIDE, PAY_HIDE, PAY_HIDE]);
+        updateSaleState();
         if (g_listenRegister) llListenRemove(g_listenRegister);
         g_listenRegister = llListen(0, "", NULL_KEY, "");
     }
@@ -256,6 +265,7 @@ default
         // Rezzed from inventory by player  -  read stored description
         parseDescription();
         updateHoverText();
+        updateSaleState();
         if (g_forSale && g_price > 0)
         {
             llSetForSale(1, g_price); // 1 = SALE_ORIGINAL
@@ -454,9 +464,7 @@ default
             g_forSale = TRUE;
             saveDescription();
             updateHoverText();
-            // Set the object for sale so SL's Buy flow transfers it to buyers
-            llSetForSale(1, g_price); // 1 = SALE_ORIGINAL
-            llSetPayPrice(PAY_HIDE, [g_price, PAY_HIDE, PAY_HIDE, PAY_HIDE]);
+            updateSaleState();
             llRegionSayTo(g_ownerKey, 0,
                 "" + g_strain + " is now for sale at L$" + (string)g_price + ".");
         }
