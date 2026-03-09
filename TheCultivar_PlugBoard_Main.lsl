@@ -1,5 +1,5 @@
 // ================================================================
-// THE CULTIVAR — Plug Board Main Script
+// THE CULTIVAR  -  Plug Board Main Script
 // Version: 1.0
 // Handles: Stocked inventory reading, buyer browsing, pricing,
 //          payment processing, bag delivery, owner management,
@@ -14,18 +14,18 @@
 //   Owner then sets a price per slot via the owner menu.
 //
 // HOW BUYING WORKS:
-//   Buyer touches board → sees browse menu → picks a listing
-//   → board tells them the price → buyer pays the board
-//   → board gives the bag, pays the owner, notifies owner HUD
+//   Buyer touches board -> sees browse menu -> picks a listing
+//   -> board tells them the price -> buyer pays the board
+//   -> board gives the bag, pays the owner, notifies owner HUD
 //
 // PRICING STORAGE:
 //   Prices are stored in llLinksetData keyed by slot index.
 //   Format: "price_0", "price_1", etc.
-//   Survives sim restarts — owner doesn't have to reprice on relog.
+//   Survives sim restarts  -  owner doesn't have to reprice on relog.
 //
 // PRIM LINK STRUCTURE:
 //   Link 1 (root)  : Board frame/body
-//   Links 2–9      : Display slots (up to 8, one per listing)
+//   Links 2 - 9      : Display slots (up to 8, one per listing)
 //                    Each shows quality color glow + hover label
 //   Link 10        : "OPEN/CLOSED" sign prim (optional)
 //
@@ -211,7 +211,7 @@ updateHoverText()
         return;
     }
 
-    string text = "THE CULTIVAR — Plug Board\n";
+    string text = "THE CULTIVAR  -  Plug Board\n";
     if (!g_boardOpen)
     {
         text += "[ CLOSED ]\n";
@@ -250,7 +250,7 @@ showOwnerMenu()
     integer count  = llGetListLength(g_listings) / LIST_STRIDE;
     string  boardStateStr = "CLOSED";
     if (g_boardOpen) boardStateStr = "OPEN";
-    string  status = (string)count + " listings  •  " + boardStateStr;
+    string  status = (string)count + " listings  ?  " + boardStateStr;
     string  toggleBtn = "Open Board";
     if (g_boardOpen) toggleBtn = "Close Board";
     string  consignBtn = "Consign: OFF";
@@ -267,7 +267,7 @@ showOwnerMenu()
 }
 
 // ----------------------------------------------------------------
-// SET PRICES MENU — pick a slot then enter price
+// SET PRICES MENU  -  pick a slot then enter price
 // ----------------------------------------------------------------
 showSetPricesMenu()
 {
@@ -293,7 +293,7 @@ showSetPricesMenu()
 
         buttons += [llGetSubString(strain, 0, 8) + " #" + (string)(i+1)];
         menuText += "#" + (string)(i+1) + " " + quality + " " + strain +
-                    " " + (string)weight + "g — " + priceStr + "\n";
+                    " " + (string)weight + "g  -  " + priceStr + "\n";
     }
     buttons += ["Back"];
 
@@ -303,7 +303,7 @@ showSetPricesMenu()
 }
 
 // ----------------------------------------------------------------
-// PRICE PICKER — preset L$ values
+// PRICE PICKER  -  preset L$ values
 // ----------------------------------------------------------------
 showPricePicker(integer slot)
 {
@@ -328,7 +328,7 @@ showPricePicker(integer slot)
 }
 
 // ----------------------------------------------------------------
-// CLEAR SLOT MENU — remove a listing from the board
+// CLEAR SLOT MENU  -  remove a listing from the board
 // ----------------------------------------------------------------
 showClearSlotMenu()
 {
@@ -360,7 +360,7 @@ showClearSlotMenu()
 }
 
 // ----------------------------------------------------------------
-// BUYER BROWSE MENU — show available listings with prices
+// BUYER BROWSE MENU  -  show available listings with prices
 // ----------------------------------------------------------------
 showBuyerMenu(key buyer)
 {
@@ -391,7 +391,7 @@ showBuyerMenu(key buyer)
                           " L$" + (string)price;
         buttons += [btnLabel];
         menuText += qLabel + " " + strain + "  " + (string)weight + "g" +
-                    "  —  L$" + (string)price + "\n";
+                    "   -   L$" + (string)price + "\n";
         @skip_unpriced;
     }
 
@@ -409,7 +409,7 @@ showBuyerMenu(key buyer)
 }
 
 // ----------------------------------------------------------------
-// BUYER CONFIRM MENU — shown after picking a listing
+// BUYER CONFIRM MENU  -  shown after picking a listing
 // ----------------------------------------------------------------
 showBuyerConfirm(key buyer, integer slot)
 {
@@ -427,7 +427,7 @@ showBuyerConfirm(key buyer, integer slot)
     llDialog(buyer,
         "=== CONFIRM PURCHASE ===\n" +
         quality + " " + strain + "\n" +
-        (string)weight + "g  •  Packed by " + packager + "\n\n" +
+        (string)weight + "g  ?  Packed by " + packager + "\n\n" +
         "Price: L$" + (string)g_pendingPrice + "\n\n" +
         "Pay L$" + (string)g_pendingPrice +
         " to the board to complete purchase.",
@@ -436,7 +436,7 @@ showBuyerConfirm(key buyer, integer slot)
 }
 
 // ----------------------------------------------------------------
-// Complete a sale — give bag, pay seller, notify HUD, update board
+// Complete a sale  -  give bag, pay seller, notify HUD, update board
 // ----------------------------------------------------------------
 completeSale(key buyer, integer slot)
 {
@@ -451,7 +451,7 @@ completeSale(key buyer, integer slot)
     {
         llGiveMoney(buyer, price); // refund
         llRegionSayTo(buyer, 0,
-            "Sorry — that bag was just sold. Refunding your L$" +
+            "Sorry  -  that bag was just sold. Refunding your L$" +
             (string)price + ".");
         rebuildListings();
         updateDisplay();
@@ -462,7 +462,7 @@ completeSale(key buyer, integer slot)
     // Give bag to buyer
     llGiveInventory(buyer, invName);
 
-    // Pay seller — split if consignment
+    // Pay seller  -  split if consignment
     if (isConsignment(invName))
     {
         key    cKey    = consignorKeyOf(invName);
@@ -474,13 +474,13 @@ completeSale(key buyer, integer slot)
         llGiveMoney(cKey, payout);
 
         llRegionSayTo(buyer, 0,
-            "✓ Purchased: " + quality + " " + strain + " " +
-            (string)weight + "g  —  Check your inventory!");
+            "? Purchased: " + quality + " " + strain + " " +
+            (string)weight + "g   -   Check your inventory!");
         llRegionSayTo(g_ownerKey, 0,
-            "✓ Consignment sale: " + quality + " " + strain + " to " +
-            llKey2Name(buyer) + " — fee L$" + (string)fee + " received.");
+            "? Consignment sale: " + quality + " " + strain + " to " +
+            llKey2Name(buyer) + "  -  fee L$" + (string)fee + " received.");
         llInstantMessage(cKey,
-            "✓ Your " + quality + " " + strain + " sold for L$" + (string)price +
+            "? Your " + quality + " " + strain + " sold for L$" + (string)price +
             "! You receive L$" + (string)payout +
             " (" + (string)g_consignFeePercent + "% board fee).");
 
@@ -491,10 +491,10 @@ completeSale(key buyer, integer slot)
         llGiveMoney(g_ownerKey, price);
 
         llRegionSayTo(buyer, 0,
-            "✓ Purchased: " + quality + " " + strain + " " +
-            (string)weight + "g  —  Check your inventory!");
+            "? Purchased: " + quality + " " + strain + " " +
+            (string)weight + "g   -   Check your inventory!");
         llRegionSayTo(g_ownerKey, 0,
-            "✓ Sold " + quality + " " + strain + " " + (string)weight +
+            "? Sold " + quality + " " + strain + " " + (string)weight +
             "g to " + llKey2Name(buyer) + " for L$" + (string)price + "!");
     }
 
@@ -505,7 +505,7 @@ completeSale(key buyer, integer slot)
     // Clear this slot's price data
     llLinksetDataDelete("price_" + (string)slot);
 
-    // Rebuild — bag is now gone from inventory
+    // Rebuild  -  bag is now gone from inventory
     rebuildListings();
     updateDisplay();
     updateHoverText();
@@ -557,7 +557,7 @@ integer countConsignedBags()
 }
 
 // ----------------------------------------------------------------
-// NON-OWNER MENU — Browse or Consign Here
+// NON-OWNER MENU  -  Browse or Consign Here
 // ----------------------------------------------------------------
 showNonOwnerMenu(key toucher)
 {
@@ -573,7 +573,7 @@ showNonOwnerMenu(key toucher)
 }
 
 // ----------------------------------------------------------------
-// CONSIGN TERMS DIALOG — shown to prospective consignors
+// CONSIGN TERMS DIALOG  -  shown to prospective consignors
 // ----------------------------------------------------------------
 showConsignTerms(key consignor)
 {
@@ -582,7 +582,7 @@ showConsignTerms(key consignor)
     if (slotsUsed >= MAX_CONSIGN_SLOTS)
     {
         llRegionSayTo(consignor, 0,
-            "Sorry — all " + (string)MAX_CONSIGN_SLOTS +
+            "Sorry  -  all " + (string)MAX_CONSIGN_SLOTS +
             " consignment slots are full right now.");
         return;
     }
@@ -600,7 +600,7 @@ showConsignTerms(key consignor)
 }
 
 // ----------------------------------------------------------------
-// CLEAR CONSIGN MENU — owner removes consignment attribution
+// CLEAR CONSIGN MENU  -  owner removes consignment attribution
 // ----------------------------------------------------------------
 showClearConsignMenu()
 {
@@ -618,7 +618,7 @@ showClearConsignMenu()
             string cName = consignorNameOf(invName);
             buttons += [llGetSubString(listingStr(i, 1), 0, 6) + " #" + (string)(i+1)];
             menuText += "#" + (string)(i+1) + " " + listingStr(i, 1) +
-                        " — by " + cName + "\n";
+                        "  -  by " + cName + "\n";
             found = TRUE;
         }
     }
@@ -665,7 +665,7 @@ default
         if (g_listenRegister) llListenRemove(g_listenRegister);
         g_listenRegister = llListen(0, "", NULL_KEY, "");
 
-        // g_listenHUD is not opened here — the board sends TC_SALE_COMPLETE
+        // g_listenHUD is not opened here  -  the board sends TC_SALE_COMPLETE
         // to the HUD but never needs to receive anything on g_hudChannel
 
         rebuildListings();
@@ -682,7 +682,7 @@ default
     {
         if (change & CHANGED_OWNER)
         {
-            // Board transferred — wipe all data for new owner, then reset
+            // Board transferred  -  wipe all data for new owner, then reset
             llLinksetDataReset();
             llResetScript();
         }
@@ -708,7 +708,7 @@ default
                             llLinksetDataWrite(csKey(iName),
                                 (string)g_pendingConsignKey + "^" + g_pendingConsignName);
                             llRegionSayTo(g_pendingConsignKey, 0,
-                                "✓ Bag received for consignment! The owner will set a price.");
+                                "? Bag received for consignment! The owner will set a price.");
                             g_consignWindowActive = FALSE;
                             g_pendingConsignKey   = NULL_KEY;
                             g_pendingConsignName  = "";
@@ -731,7 +731,7 @@ default
             updateHoverText();
             if (g_ownerKey != NULL_KEY)
                 llRegionSayTo(g_ownerKey, 0,
-                    "Board updated — " +
+                    "Board updated  -  " +
                     (string)(llGetListLength(g_listings) / LIST_STRIDE) +
                     " listings. Don't forget to set prices!");
         }
@@ -793,7 +793,7 @@ default
         if (g_pendingBuyer == NULL_KEY || g_pendingBuyer != buyer ||
             g_pendingSlot == -1)
         {
-            // No pending transaction — refund
+            // No pending transaction  -  refund
             llGiveMoney(buyer, amount);
             llRegionSayTo(buyer, 0,
                 "No active purchase. Browse the board first, then pay.");
@@ -809,7 +809,7 @@ default
             return;
         }
 
-        // Overpaid — refund difference
+        // Overpaid  -  refund difference
         if (amount > g_pendingPrice)
             llGiveMoney(buyer, amount - g_pendingPrice);
 
@@ -930,7 +930,7 @@ default
                     g_pricingSlot * LIST_STRIDE + 5);
 
                 llRegionSayTo(g_ownerKey, 0,
-                    "✓ " + listingStr(g_pricingSlot, 1) + " priced at L$" +
+                    "? " + listingStr(g_pricingSlot, 1) + " priced at L$" +
                     (string)newPrice);
                 updateDisplay();
                 updateHoverText();
@@ -1003,12 +1003,12 @@ default
                 g_consignWindowActive = TRUE;
                 g_consignWindowStart  = llGetUnixTime();
                 llRegionSayTo(id, 0,
-                    "✓ Consignment agreed! Drop your TC_Bag_ into the board within 5 minutes.");
+                    "? Consignment agreed! Drop your TC_Bag_ into the board within 5 minutes.");
             }
-            // "Cancel" / "Close" — no action
+            // "Cancel" / "Close"  -  no action
         }
 
-        // CONSIGN CLEAR — owner removes consignment tag from a slot
+        // CONSIGN CLEAR  -  owner removes consignment tag from a slot
         else if (channel == DCHAN_CONSIGN_CLEAR && id == g_ownerKey)
         {
             llSetTimerEvent(0.0);
@@ -1025,7 +1025,7 @@ default
                 string cName = consignorNameOf(invName);
                 llLinksetDataDelete(csKey(invName));
                 llRegionSayTo(g_ownerKey, 0,
-                    "✓ Removed consignment tag from slot #" + (string)(slot+1) +
+                    "? Removed consignment tag from slot #" + (string)(slot+1) +
                     " (was consigned by " + cName + ").");
             }
             showOwnerMenu();

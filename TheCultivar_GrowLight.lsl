@@ -1,5 +1,5 @@
 // ================================================================
-// THE CULTIVAR — Grow Light Script
+// THE CULTIVAR  -  Grow Light Script
 // Version: 1.0
 //
 // A rezzable grow light that detects nearby Cultivar plants
@@ -13,7 +13,7 @@
 //   scripts listen on this channel and reduce their stage
 //   duration when they receive the bonus.
 //
-//   The bonus is applied once per stage — the plant records
+//   The bonus is applied once per stage  -  the plant records
 //   whether the light bonus has been applied this stage so
 //   it doesn't stack. When the plant advances to the next
 //   stage it clears the flag, ready for the next bonus.
@@ -32,9 +32,9 @@
 //   Link 4        : Status indicator (on/off, tier)
 //
 // POWER STATES:
-//   ON  — scanning, broadcasting bonus, full glow
-//   OFF — no scan, no bonus, dim
-//   AUTO — on between 6am–10pm (SL server time), off overnight
+//   ON   -  scanning, broadcasting bonus, full glow
+//   OFF  -  no scan, no bonus, dim
+//   AUTO  -  on between 6am - 10pm (SL server time), off overnight
 //           (SL server time via llGetWallclock)
 // ================================================================
 
@@ -87,7 +87,7 @@ pingHUD()
 }
 
 // ----------------------------------------------------------------
-// Check auto schedule — is the light supposed to be on right now?
+// Check auto schedule  -  is the light supposed to be on right now?
 // ----------------------------------------------------------------
 integer autoShouldBeOn()
 {
@@ -124,7 +124,7 @@ updateVisuals()
             PRIM_GLOW,  ALL_SIDES, 0.35,
             PRIM_POINT_LIGHT, TRUE, bulbColor, 1.0, 6.0, 0.5
         ]);
-        // Beam cone (link 3) — semi-transparent downward cone
+        // Beam cone (link 3)  -  semi-transparent downward cone
         llSetLinkPrimitiveParamsFast(3, [
             PRIM_COLOR, ALL_SIDES, bulbColor, 0.12,
             PRIM_GLOW,  ALL_SIDES, 0.05
@@ -143,7 +143,7 @@ updateVisuals()
         llSetLinkPrimitiveParamsFast(4, [
             PRIM_COLOR, ALL_SIDES, <0.2, 0.9, 0.2>, 1.0,
             PRIM_TEXT,
-                "✓ " + tierName + autoStr + "\n" +
+                "? " + tierName + autoStr + "\n" +
                 "-" + (string)llList2Integer(TIER_BONUS, g_tier) + "% grow time\n" +
                 plantsStr,
                 <0.2, 0.9, 0.2>, 1.0
@@ -160,7 +160,7 @@ updateVisuals()
         llSetLinkPrimitiveParamsFast(3, [
             PRIM_COLOR, ALL_SIDES, <0.3, 0.3, 0.3>, 0.0
         ]);
-        string reason = "AUTO — waiting for 6am SLT";
+        string reason = "AUTO  -  waiting for 6am SLT";
         if (g_powerState == "off") reason = "OFF";
         llSetLinkPrimitiveParamsFast(4, [
             PRIM_COLOR, ALL_SIDES, <0.8, 0.2, 0.2>, 1.0,
@@ -210,7 +210,7 @@ showOwnerMenu()
     llDialog(g_ownerKey,
         "=== GROW LIGHT ===\n" +
         llList2String(TIER_NAMES, g_tier) + "\n" +
-        stateLabel + "  •  " +
+        stateLabel + "  ?  " +
         (string)g_plantsFound + " plant" + plantSuffix + " in range",
         ["Turn On", "Turn Off", "Auto Mode",
          "Standard", "LED Panel", "Full Spectrum",
@@ -250,7 +250,7 @@ default
         if (!g_registered && g_listenRegister != 0)
         {
             if (g_listenRegister) { llListenRemove(g_listenRegister); g_listenRegister = 0; }
-            // Not a critical failure for the light — it works without HUD
+            // Not a critical failure for the light  -  it works without HUD
         }
 
         // Auto schedule check

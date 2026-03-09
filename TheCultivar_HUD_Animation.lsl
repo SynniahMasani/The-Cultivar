@@ -1,22 +1,22 @@
 // ================================================================
-// THE CULTIVAR — HUD Animation Script
+// THE CULTIVAR  -  HUD Animation Script
 // Version: 1.0
 // Handles: All avatar animation playback triggered by smoking,
 //          passing, and session events. Kept isolated so animation
 //          bugs never affect inventory or comms.
 //
 // ANIMATION NAMING CONVENTION (animations stored in HUD object):
-//   smoke_joint_reggie_idle    — holding joint, reggie tier
-//   smoke_joint_mids_idle      — holding joint, mids tier
-//   smoke_joint_loud_idle      — holding joint, loud tier
-//   smoke_joint_exotic_idle    — holding joint, exotic tier
+//   smoke_joint_reggie_idle     -  holding joint, reggie tier
+//   smoke_joint_mids_idle       -  holding joint, mids tier
+//   smoke_joint_loud_idle       -  holding joint, loud tier
+//   smoke_joint_exotic_idle     -  holding joint, exotic tier
 //   smoke_blunt_[quality]_idle
 //   smoke_pipe_[quality]_idle
 //   smoke_bong_[quality]_idle
-//   smoke_puff                 — the actual hit animation (short, loops back)
-//   pass_give                  — passing to someone animation
-//   pass_receive               — receiving from someone animation
-//   smoke_sit_[quality]_idle   — sitting/session variant
+//   smoke_puff                  -  the actual hit animation (short, loops back)
+//   pass_give                   -  passing to someone animation
+//   pass_receive                -  receiving from someone animation
+//   smoke_sit_[quality]_idle    -  sitting/session variant
 // ================================================================
 
 integer CHAN_UI        = 100;
@@ -31,7 +31,7 @@ string  g_currentStrain   = "";
 string  g_currentQuality  = "";
 string  g_currentItemType = "";
 
-// Puff timer — how often the puff animation fires over the idle
+// Puff timer  -  how often the puff animation fires over the idle
 float   PUFF_INTERVAL = 12.0; // seconds between puffs
 integer g_puffTimerActive = FALSE;
 integer g_puffCount       = 0;
@@ -112,7 +112,7 @@ startSmokeAnim(string strain, string quality, string itemType)
 // ----------------------------------------------------------------
 playPuffAnim()
 {
-    // Puff anim is a short overlay — it plays then idle resumes naturally
+    // Puff anim is a short overlay  -  it plays then idle resumes naturally
     if (llGetInventoryType("smoke_puff") == INVENTORY_ANIMATION)
     {
         llStopAnimation(g_currentAnim);
@@ -155,7 +155,7 @@ default
 {
     state_entry()
     {
-        // Nothing to do on start — wait for link messages
+        // Nothing to do on start  -  wait for link messages
     }
 
     on_rez(integer start_param)
@@ -180,7 +180,7 @@ default
             g_puffCount++;
             if (g_puffCount >= MAX_PUFFS)
             {
-                // Item is spent — stop everything and notify UI
+                // Item is spent  -  stop everything and notify UI
                 stopCurrentAnim();
                 return;
             }

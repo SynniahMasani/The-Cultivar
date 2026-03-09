@@ -1,11 +1,11 @@
 // ================================================================
-// THE CULTIVAR — HUD UI Script
-// Version: 2.0  (complete rewrite — replaces broken v1.0)
+// THE CULTIVAR  -  HUD UI Script
+// Version: 2.0  (complete rewrite  -  replaces broken v1.0)
 // Handles: All touch input, dialog menus, button glow states,
 //          and display updates.
 //
-// HUD PRIM STRUCTURE — name each prim exactly as shown:
-//   Root prim    : HUD background — touch opens main menu
+// HUD PRIM STRUCTURE  -  name each prim exactly as shown:
+//   Root prim    : HUD background  -  touch opens main menu
 //   Link 2       : "btn_smoke"     lights up while smoking
 //   Link 3       : "btn_inventory"
 //   Link 4       : "btn_grow"
@@ -16,7 +16,7 @@
 //
 // WHAT WAS BROKEN IN v1.0 AND IS NOW FIXED:
 //   1. Smoke flow never triggered animation after item was consumed
-//   2. Pass flow had a TODO — target player key was dropped
+//   2. Pass flow had a TODO  -  target player key was dropped
 //   3. Session invite "Join!" created a listen but nothing handled it
 //   4. setButtonGlow() existed but was never called anywhere
 //   5. g_passItemType was reused as temp storage for both smoke
@@ -157,9 +157,9 @@ refreshAllGlows()
 
 string qualLabel(string q)
 {
-    if (q == "mids")   return "Mids ★";
-    if (q == "loud")   return "Loud ★★";
-    if (q == "exotic") return "Exotic ✨";
+    if (q == "mids")   return "Mids ?";
+    if (q == "loud")   return "Loud ??";
+    if (q == "exotic") return "Exotic ?";
     return "Reggie";
 }
 
@@ -223,7 +223,7 @@ showMainMenu()
     g_lisMain = llListen(DCHAN_MAIN, "", g_ownerKey, "");
     llDialog(g_ownerKey,
         "=== THE CULTIVAR ===\n" +
-        g_playerName + "  •  Rep: " + (string)g_repScore + "\n" +
+        g_playerName + "  ?  Rep: " + (string)g_repScore + "\n" +
         line1 + "\n" + line2,
         ["Smoke", "Inventory", "Grow",
          "Session", "Pass", "Stats",
@@ -232,7 +232,7 @@ showMainMenu()
     llSetTimerEvent(30.0);
 }
 
-// SMOKE — Step 1: what type?
+// SMOKE  -  Step 1: what type?
 showSmokeTypeMenu()
 {
     closeAllListens();
@@ -240,10 +240,10 @@ showSmokeTypeMenu()
     g_lisSmokeType = llListen(DCHAN_SMOKE_TYPE, "", g_ownerKey, "");
     llDialog(g_ownerKey,
         "=== SMOKE ===\nWhat are you smoking?\n\n" +
-        "Joint / Blunt / Spliff — rolled items\n" +
-        "Bowl / Bong — flower raw through a piece\n" +
-        "Edible — brownies, gummies, drinks\n" +
-        "Dab — concentrate",
+        "Joint / Blunt / Spliff  -  rolled items\n" +
+        "Bowl / Bong  -  flower raw through a piece\n" +
+        "Edible  -  brownies, gummies, drinks\n" +
+        "Dab  -  concentrate",
         ["Joint", "Blunt", "Spliff",
          "Bowl", "Bong", "Edible",
          "Dab", "Back"],
@@ -262,7 +262,7 @@ showEdibleTypeMenu()
     llSetTimerEvent(30.0);
 }
 
-// SMOKE — Step 2: which strain?  (also used for pass flow)
+// SMOKE  -  Step 2: which strain?  (also used for pass flow)
 showItemPickMenu()
 {
     closeAllListens();
@@ -300,7 +300,7 @@ showItemPickMenu()
     llSetTimerEvent(30.0);
 }
 
-// PASS — Step 1: pick a nearby player
+// PASS  -  Step 1: pick a nearby player
 showPassPlayerMenu()
 {
     closeAllListens();
@@ -330,7 +330,7 @@ showPassPlayerMenu()
     llSetTimerEvent(30.0);
 }
 
-// SESSION menu — different layout depending on whether in session
+// SESSION menu  -  different layout depending on whether in session
 showSessionMenu()
 {
     closeAllListens();
@@ -354,7 +354,7 @@ showSessionMenu()
     llSetTimerEvent(30.0);
 }
 
-// SESSION — Step 2: pick what to spark (shown after session object rezzes)
+// SESSION  -  Step 2: pick what to spark (shown after session object rezzes)
 showSessionItemMenu()
 {
     closeAllListens();
@@ -405,8 +405,8 @@ showInventoryMenu()
     llMessageLinked(LINK_SET, CHAN_INVENTORY, "REQUEST_INVENTORY", NULL_KEY);
     g_lisInv = llListen(DCHAN_INVENTORY, "", g_ownerKey, "");
     string invMsg = "=== INVENTORY ===\n" + g_inventoryDisplay + "\n\n" +
-        "Load Jar  — touch a weed jar to fill it\n" +
-        "Fill Bag  — touch a bagging table";
+        "Load Jar   -  touch a weed jar to fill it\n" +
+        "Fill Bag   -  touch a bagging table";
     if (llStringLength(invMsg) > 480)
         invMsg = llGetSubString(invMsg, 0, 477) + "...";
     llDialog(g_ownerKey, invMsg, ["Load Jar", "Fill Bag", "Back"], DCHAN_INVENTORY);
@@ -457,7 +457,7 @@ startSession()
 
 
 // ================================================================
-//  ITEM REMOVAL — called once strain/quality confirmed
+//  ITEM REMOVAL  -  called once strain/quality confirmed
 // ================================================================
 
 executeRemove()
@@ -487,7 +487,7 @@ onRemoveSuccess()
         llMessageLinked(LINK_SET, CHAN_IDENTITY,
             "UPDATE_SMOKED|" + g_pendingStrain, NULL_KEY);
 
-        llOwnerSay("🌿 Enjoying " + qualLabel(g_pendingQuality) +
+        llOwnerSay("? Enjoying " + qualLabel(g_pendingQuality) +
                    " " + g_pendingStrain + ".");
 
         g_isSmoking    = TRUE;
@@ -507,7 +507,7 @@ onRemoveSuccess()
         llMessageLinked(LINK_SET, CHAN_ANIMATION, "PLAY_PASS_GIVE", NULL_KEY);
 
         llOwnerSay("Passed " + g_pendingQuality + " " +
-                   g_pendingStrain + " to " + g_passTargetName + ". ✊");
+                   g_pendingStrain + " to " + g_passTargetName + ". ?");
     }
 
     // Clear flow state
@@ -564,7 +564,7 @@ default
 
 
     // ----------------------------------------------------------------
-    // TOUCH — route each named button
+    // TOUCH  -  route each named button
     // ----------------------------------------------------------------
     touch_start(integer nd)
     {
@@ -608,7 +608,7 @@ default
             else if (msg == "Store")
                 llLoadURL(g_ownerKey, "The Cultivar Store",
                           "https://marketplace.secondlife.com");
-            // "Close" — do nothing
+            // "Close"  -  do nothing
         }
 
         // ---- SMOKE TYPE ----
@@ -618,7 +618,7 @@ default
             if (msg == "Edible") { showEdibleTypeMenu(); return; }
 
             g_pendingItemType = menuToItemType(msg);
-            // Request matching inventory — response handled in link_message
+            // Request matching inventory  -  response handled in link_message
             llMessageLinked(LINK_SET, CHAN_INVENTORY,
                 "REQUEST_RAW_INVENTORY|" + g_pendingItemType + "|ui_smoke",
                 NULL_KEY);
@@ -664,7 +664,7 @@ default
                     return;
                 }
             }
-            // No match (label collision) — redisplay
+            // No match (label collision)  -  redisplay
             showItemPickMenu();
         }
 
@@ -691,7 +691,7 @@ default
             return;
             @found_target;
 
-            // Now pick what to pass — request all passable inventory types
+            // Now pick what to pass  -  request all passable inventory types
             llMessageLinked(LINK_SET, CHAN_INVENTORY,
                 "REQUEST_RAW_INVENTORY|all|ui_pass", NULL_KEY);
         }
@@ -716,7 +716,7 @@ default
                 llOwnerSay("Session hosted by: " + g_sessionHost);
             else if (msg == "End Session")
                 llMessageLinked(LINK_SET, CHAN_COMMS, "LEAVE_SESSION", NULL_KEY);
-            // "Close" — do nothing
+            // "Close"  -  do nothing
         }
 
         // ---- SESSION ITEM SELECTION (what to spark) ----
@@ -767,7 +767,7 @@ default
                     "JOIN_SESSION|" + (string)g_inviteSessKey + "|" +
                     g_inviteHostName, NULL_KEY);
             }
-            // "No Thanks" — just clear state
+            // "No Thanks"  -  just clear state
             g_inviteSessKey  = NULL_KEY;
             g_inviteHostName = "";
             g_inviteStrain   = "";
@@ -793,7 +793,7 @@ default
                 llMessageLinked(LINK_SET, CHAN_IDENTITY, "REQUEST_ACHIEVEMENTS", NULL_KEY);
             else if (msg == "Set Brand Name")
                 showBrandNameTextBox();
-            // "Close" — do nothing
+            // "Close"  -  do nothing
         }
 
         // ---- BRAND NAME TEXTBOX RESPONSE ----
@@ -813,7 +813,7 @@ default
 
 
     // ----------------------------------------------------------------
-    // LINK MESSAGES — updates from sibling scripts
+    // LINK MESSAGES  -  updates from sibling scripts
     // ----------------------------------------------------------------
     link_message(integer sender, integer num, string msg, key id)
     {
@@ -823,7 +823,7 @@ default
         // ---- Messages addressed to CHAN_UI ----
         if (num == CHAN_UI)
         {
-            // Identity data — cache for menus
+            // Identity data  -  cache for menus
             // Payload format: IDENTITY_DATA|name|uuid|smoked|grown|passed|sold|fav|rep|joinDate
             if (cmd == "IDENTITY_DATA")
             {
@@ -843,11 +843,11 @@ default
             else if (cmd == "UPDATE_INVENTORY_DISPLAY")
                 g_inventoryDisplay = llList2String(parts, 1);
 
-            // Stats card — output to owner chat
+            // Stats card  -  output to owner chat
             else if (cmd == "SHOW_STATS")
                 llOwnerSay(llList2String(parts, 1));
 
-            // Item consumed successfully — trigger animation (HUD-menu smoke flow)
+            // Item consumed successfully  -  trigger animation (HUD-menu smoke flow)
             else if (cmd == "ITEM_USED")
                 onRemoveSuccess();
 
@@ -855,7 +855,7 @@ default
             else if (cmd == "ITEM_FAILED")
                 onRemoveFail();
 
-            // World object (jar, weed piece, session) fired TC_SMOKED —
+            // World object (jar, weed piece, session) fired TC_SMOKED  - 
             // Comms already started the animation, we just update state + glow
             else if (cmd == "SMOKE_STARTED")
             {
@@ -876,7 +876,7 @@ default
 
             // ---- SESSION EVENTS ----
 
-            // Session object rezzed — show item picker
+            // Session object rezzed  -  show item picker
             else if (cmd == "SESSION_OBJECT_READY")
             {
                 g_pendingSessionObjKey = (key)llList2String(parts, 1);
@@ -892,7 +892,7 @@ default
                 g_sessionObjKey = (key)llList2String(parts, 2);
                 g_inSession     = TRUE;
                 setButtonGlow(LINK_BTN_SESSION, 0.1);
-                llOwnerSay("Joined " + g_sessionHost + "'s circle. 🌿");
+                llOwnerSay("Joined " + g_sessionHost + "'s circle. ?");
             }
 
             // We started a session as host
@@ -941,7 +941,7 @@ default
                 if (inviteBrand != "" && inviteBrand != g_inviteHostName)
                     brandDisplay = inviteBrand + " (" + g_inviteHostName + ")";
                 llDialog(g_ownerKey,
-                    "🌿 " + brandDisplay + " is sparking a session!\n" +
+                    "? " + brandDisplay + " is sparking a session!\n" +
                     g_inviteQuality + " " + g_inviteStrain + "\nJoin the circle?",
                     ["Join!", "No Thanks"],
                     DCHAN_SESSION_INVITE);
@@ -954,7 +954,7 @@ default
                 string strain   = llList2String(parts, 2);
                 string quality  = llList2String(parts, 3);
                 llOwnerSay(fromName + " passed you " + quality +
-                           " " + strain + ". ✊");
+                           " " + strain + ". ?");
             }
 
             // Cypher mode: it's our turn with X seconds remaining
@@ -963,7 +963,7 @@ default
             {
                 integer remaining = (integer)llList2String(parts, 1);
                 string  strain    = llList2String(parts, 2);
-                llOwnerSay("⏱ " + strain + " — " + (string)remaining + "s remaining!");
+                llOwnerSay("? " + strain + "  -  " + (string)remaining + "s remaining!");
             }
 
             // Cypher mode toggled on/off
@@ -971,19 +971,19 @@ default
             else if (cmd == "CYPHER_MODE_CHANGE")
             {
                 if (llList2String(parts, 1) == "1")
-                    llOwnerSay("⏱ Cypher mode ON — " +
+                    llOwnerSay("? Cypher mode ON  -  " +
                         llList2String(parts, 2) + "s per turn. Pass it quick!");
                 else
-                    llOwnerSay("Cypher mode OFF — back to free flow.");
+                    llOwnerSay("Cypher mode OFF  -  back to free flow.");
             }
 
             // XP level-up announcement from Identity script
             else if (cmd == "XP_LEVEL_UP")
             {
-                // Already shown as llOwnerSay in Identity — nothing extra needed here
+                // Already shown as llOwnerSay in Identity  -  nothing extra needed here
             }
 
-            // Achievement unlocked — Identity script already shows it via llOwnerSay;
+            // Achievement unlocked  -  Identity script already shows it via llOwnerSay;
             // title will update on next IDENTITY_DATA broadcast. Nothing extra needed.
             else if (cmd == "ACHIEVEMENT_UNLOCKED")
             {
@@ -992,7 +992,7 @@ default
         }
 
         // ---- RAW_INVENTORY data coming back via CHAN_COMMS ----
-        // Comms relays inventory responses — we filter by the reqKey tag
+        // Comms relays inventory responses  -  we filter by the reqKey tag
         else if (num == CHAN_COMMS && cmd == "RAW_INVENTORY")
         {
             string rawData = llList2String(parts, 1);

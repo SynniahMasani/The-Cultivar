@@ -1,5 +1,5 @@
 // ================================================================
-// THE CULTIVAR — Smokeable Object Script
+// THE CULTIVAR  -  Smokeable Object Script
 // Version: 1.0
 // Lives inside: TC_Smoke_Joint_Reggie, TC_Smoke_Joint_Mids,
 //               TC_Smoke_Joint_Loud, TC_Smoke_Joint_Exotic,
@@ -39,11 +39,11 @@ vector qualityColor(string quality)
     if (quality == "mids")   return <0.9, 0.85, 0.5>;
     if (quality == "loud")   return <0.6, 0.9,  0.5>;
     if (quality == "exotic") return <0.8, 0.6,  1.0>;
-    return <0.75, 0.7, 0.6>; // reggie — pale grey-tan
+    return <0.75, 0.7, 0.6>; // reggie  -  pale grey-tan
 }
 
 // ----------------------------------------------------------------
-// Smoke particle system — tip of the joint/blunt
+// Smoke particle system  -  tip of the joint/blunt
 // ----------------------------------------------------------------
 startSmokeParticles()
 {
@@ -105,7 +105,7 @@ default
 {
     state_entry()
     {
-        // Object was just rezzed — listen on start_param channel
+        // Object was just rezzed  -  listen on start_param channel
         // for attach instructions from the jar's attach script
         g_listenChan  = llGetStartParameter();
         if (g_listenChan != 0)
@@ -113,12 +113,12 @@ default
             g_listenAttach = llListen(g_listenChan, "", NULL_KEY, "");
             // Confirm we're listening
             llRegionSay(g_listenChan, "TC_ATTACH_CONFIRMED");
-            // Safety timeout — die if no instructions arrive
+            // Safety timeout  -  die if no instructions arrive
             llSetTimerEvent(10.0);
         }
         else
         {
-            // No channel — probably rezzed manually for testing
+            // No channel  -  probably rezzed manually for testing
             // Just attach to owner's hand
             g_targetAvatar = llGetOwner();
             attachToHand();
@@ -129,13 +129,13 @@ default
     {
         if (attachedTo == NULL_KEY)
         {
-            // Detached — clean up and die
+            // Detached  -  clean up and die
             llParticleSystem([]);
             llDie();
         }
         else
         {
-            // Just attached — start particles
+            // Just attached  -  start particles
             if (!g_attached)
             {
                 g_attached = TRUE;
@@ -150,13 +150,13 @@ default
     {
         if (!g_attached)
         {
-            // Setup timeout — no attach instructions received
+            // Setup timeout  -  no attach instructions received
             llListenRemove(g_listenAttach);
             llDie();
         }
         else
         {
-            // Attach duration expired — time to go
+            // Attach duration expired  -  time to go
             llParticleSystem([]);
             llDetachFromAvatar();
             // llDie() is called in attach(NULL_KEY)
@@ -190,13 +190,13 @@ default
             }
             else
             {
-                // Smoker is someone else — temp-attach across owners isn't
+                // Smoker is someone else  -  temp-attach across owners isn't
                 // possible in LSL. WeedJar_Attach should have caught this
                 // case and called giveToInventory() before ever rezzing us,
                 // but as a safety fallback we give the object by name.
                 llGiveInventory(g_targetAvatar, llGetObjectName());
                 llRegionSayTo(g_targetAvatar, 0,
-                    "✓ Smokeable in your inventory — wear it to light up!");
+                    "? Smokeable in your inventory  -  wear it to light up!");
                 llDie();
             }
         }

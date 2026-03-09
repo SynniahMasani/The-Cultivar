@@ -1,15 +1,15 @@
 // ================================================================
-// THE CULTIVAR — HUD Comms Script
+// THE CULTIVAR  -  HUD Comms Script
 // Version: 1.0
 // Handles: ALL external communication between the HUD and world
 //          objects (plants, jars, crafting tables, session objects,
 //          other player HUDs). The switchboard.
 //
 // Channel Strategy:
-//   g_privateChannel — derived from owner UUID, used for all
+//   g_privateChannel  -  derived from owner UUID, used for all
 //                      direct HUD<->object communication. Private
 //                      per player so objects can target the right HUD.
-//   PUBLIC_SESSION_CHAN — used to broadcast/receive session invites
+//   PUBLIC_SESSION_CHAN  -  used to broadcast/receive session invites
 //                         in the region. Known channel, but messages
 //                         carry UUID for verification.
 // ================================================================
@@ -27,7 +27,7 @@ integer PUBLIC_SESSION_CHAN = -987654321;
 // World objects ping on this channel when touched, HUD responds with TC_REGISTER
 integer TC_OBJECT_PING_CHAN = -111222333;
 
-// Derived private channel — unique per owner, hard to guess
+// Derived private channel  -  unique per owner, hard to guess
 integer g_privateChannel;
 integer g_listenPrivate;
 integer g_listenSession;
@@ -61,7 +61,7 @@ startListening()
     g_listenPrivate = llListen(g_privateChannel, "", NULL_KEY, "");
     // Public session channel for nearby invite broadcasts
     g_listenSession = llListen(PUBLIC_SESSION_CHAN, "", NULL_KEY, "");
-    // World object ping channel — objects announce themselves here when touched
+    // World object ping channel  -  objects announce themselves here when touched
     llListen(TC_OBJECT_PING_CHAN, "", NULL_KEY, "");
 }
 
@@ -117,7 +117,7 @@ default
             registerWithObject((key)llList2String(parts, 1));
         }
 
-        // Player initiated a session as host — update state, notify UI
+        // Player initiated a session as host  -  update state, notify UI
         else if (cmd == "START_SESSION")
         {
             key sessionObj = (key)llList2String(parts, 1);
@@ -130,7 +130,7 @@ default
                 "SESSION_STARTED|" + (string)sessionObj, NULL_KEY);
         }
 
-        // Player accepted an invite — join the session object
+        // Player accepted an invite  -  join the session object
         else if (cmd == "JOIN_SESSION")
         {
             // JOIN_SESSION|sessionObjectKey|hostName
@@ -179,7 +179,7 @@ default
         }
 
         // Relay any remove success/fail back to UI for feedback
-        // If id is set, a world object is waiting — notify it on our private channel
+        // If id is set, a world object is waiting  -  notify it on our private channel
         else if (cmd == "REMOVE_SUCCESS")
         {
             llMessageLinked(LINK_SET, CHAN_UI, "ITEM_USED|" + msg, NULL_KEY);
@@ -193,13 +193,13 @@ default
                 llRegionSayTo(id, g_privateChannel, "TC_REMOVE_FAIL");
         }
 
-        // Inventory manager responds with raw data — forward to requesting world object
+        // Inventory manager responds with raw data  -  forward to requesting world object
         else if (cmd == "RAW_INVENTORY")
         {
             // RAW_INVENTORY|serializedData|filterType|requestingObjectKey
             string rawData   = llList2String(parts, 1);
             key    reqObject = (key)llList2String(parts, 3);
-            // Send on our private channel — world objects listen on g_hudChannel
+            // Send on our private channel  -  world objects listen on g_hudChannel
             // which equals g_privateChannel. Channel 0 is unreliable to objects.
             if (reqObject != NULL_KEY)
                 llRegionSayTo(reqObject, g_privateChannel, "TC_INVENTORY_DATA|" + rawData);
@@ -227,7 +227,7 @@ default
                 llLinksetDataRead("id_brand"));
         }
 
-        // ---- Session object rezzed — it announces itself so HUD can fire TC_SESSION_START ----
+        // ---- Session object rezzed  -  it announces itself so HUD can fire TC_SESSION_START ----
         else if (channel == TC_OBJECT_PING_CHAN && cmd == "TC_SESSION_REZZED")
         {
             // TC_SESSION_REZZED|sessionObjectKey|sessionChannel
@@ -290,7 +290,7 @@ default
                 string quality = llList2String(parts, 2);
                 llMessageLinked(LINK_SET, CHAN_ANIMATION,
                     "START_SMOKE_ANIM|" + strain + "|" + quality, NULL_KEY);
-                llOwnerSay("Session started — passing the " + strain + ".");
+                llOwnerSay("Session started  -  passing the " + strain + ".");
             }
 
             // Session ended by host or item ran out
@@ -326,11 +326,11 @@ default
                 llMessageLinked(LINK_SET, CHAN_UI,
                     "SESSION_JOINED|" + g_sessionHost + "|" +
                     (string)g_sessionObjectKey, NULL_KEY);
-                llOwnerSay("Joined " + g_sessionHost + "'s session — " +
+                llOwnerSay("Joined " + g_sessionHost + "'s session  -  " +
                            quality + " " + strain + " is going around.");
             }
 
-            // Someone passed to us — trigger receive animation
+            // Someone passed to us  -  trigger receive animation
             else if (cmd == "TC_PASS_RECEIVED")
             {
                 // TC_PASS_RECEIVED|strain|quality
@@ -341,7 +341,7 @@ default
                     "UPDATE_SMOKED|" + strain, NULL_KEY);
             }
 
-            // We passed to someone — trigger give animation
+            // We passed to someone  -  trigger give animation
             else if (cmd == "TC_PASS_GIVEN")
             {
                 llMessageLinked(LINK_SET, CHAN_ANIMATION, "PLAY_PASS_GIVE", NULL_KEY);
@@ -520,7 +520,7 @@ default
                 string strain    = llList2String(parts, 4);
                 string quality   = llList2String(parts, 5);
 
-                // Don't invite ourselves — compare by key, not name (names aren't unique)
+                // Don't invite ourselves  -  compare by key, not name (names aren't unique)
                 if (hostKey == g_ownerKey) return;
                 // Don't invite if already in a session
                 if (g_inSession) return;

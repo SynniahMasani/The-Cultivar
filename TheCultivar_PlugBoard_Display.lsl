@@ -1,13 +1,13 @@
 // ================================================================
-// THE CULTIVAR — Plug Board Display Script
+// THE CULTIVAR  -  Plug Board Display Script
 // Version: 1.0
 // Handles: Visual updates for each listing slot prim.
 //          Kept separate from main so visual glitches never
 //          interrupt payment processing or buyer menus.
 //
 // PRIM LINK STRUCTURE:
-//   Link 1 (root)  : Board frame body — main script lives here
-//   Links 2–9      : Listing slot prims (up to 8 slots)
+//   Link 1 (root)  : Board frame body  -  main script lives here
+//   Links 2 - 9      : Listing slot prims (up to 8 slots)
 //   Link 10        : Open/Closed sign prim
 //
 // SLOT PRIM VISUAL STATES:
@@ -17,10 +17,10 @@
 //   Sold out slot  : grey, no glow, "Sold Out" hover (brief)
 //
 // QUALITY COLORS:
-//   Reggie  → muted brown/tan    <0.55, 0.45, 0.3>
-//   Mids    → amber              <1.0,  0.85, 0.2>
-//   Loud    → green              <0.2,  0.85, 0.3>
-//   Exotic  → purple             <0.7,  0.3,  1.0>
+//   Reggie  -> muted brown/tan    <0.55, 0.45, 0.3>
+//   Mids    -> amber              <1.0,  0.85, 0.2>
+//   Loud    -> green              <0.2,  0.85, 0.3>
+//   Exotic  -> purple             <0.7,  0.3,  1.0>
 // ================================================================
 
 integer PCHAN_DISPLAY = 4000;
@@ -54,14 +54,14 @@ vector qualColor(string quality)
 // ----------------------------------------------------------------
 string qualLabel(string quality)
 {
-    if (quality == "mids")   return "Mids ★";
-    if (quality == "loud")   return "Loud ★★";
-    if (quality == "exotic") return "Exotic ✨";
+    if (quality == "mids")   return "Mids ?";
+    if (quality == "loud")   return "Loud ??";
+    if (quality == "exotic") return "Exotic ?";
     return "Reggie";
 }
 
 // ----------------------------------------------------------------
-// Update a single slot prim (links 2–9)
+// Update a single slot prim (links 2 - 9)
 // ----------------------------------------------------------------
 updateSlot(integer slot, string strain, string quality,
            string packager, integer weight, integer price)
@@ -81,7 +81,7 @@ updateSlot(integer slot, string strain, string quality,
     if (price > 0) priceStr = "L$" + (string)price;
     string hoverText =
         qualLabel(quality) + "  " + strain + "\n" +
-        (string)weight + "g  •  by " + packager + "\n" +
+        (string)weight + "g  ?  by " + packager + "\n" +
         priceStr;
 
     llSetLinkPrimitiveParamsFast(linkNum, [

@@ -1,6 +1,6 @@
 // ================================================================
-// THE CULTIVAR — Plant Grow Script
-// Version: 1.0  *** DEPRECATED — use TheCultivar_Plant_Grow_v1.1.lsl ***
+// THE CULTIVAR  -  Plant Grow Script
+// Version: 1.0  *** DEPRECATED  -  use TheCultivar_Plant_Grow_v1.1.lsl ***
 //
 // v1.1 adds grow-light bonus support (GROW_LIGHT_CHAN listener,
 // g_lightBonusApplied flag, once-per-stage time reduction).
@@ -8,7 +8,7 @@
 // ================================================================
 //
 // ================================================================
-// THE CULTIVAR — Plant Grow Script
+// THE CULTIVAR  -  Plant Grow Script
 // Version: 1.0
 // Handles: Growth timer, stage progression, strain data,
 //          yield and quality calculation, visual stage updates
@@ -87,7 +87,7 @@ string  g_ownerName       = "";
 key     g_ownerKey        = NULL_KEY;
 integer g_hudChannel      = 0;
 
-// Timer tick rate — check every 30 seconds to balance responsiveness vs lag
+// Timer tick rate  -  check every 30 seconds to balance responsiveness vs lag
 float TIMER_INTERVAL = 30.0;
 
 // ----------------------------------------------------------------
@@ -138,7 +138,7 @@ updateVisuals()
     // Stage 1: tiny sprout
     // Stage 2: medium veg plant
     // Stage 3: full flowering plant
-    // Stage 4: harvest ready — add sparkle glow
+    // Stage 4: harvest ready  -  add sparkle glow
 
     // Hide/show plant link based on stage
     if (g_stage == 0)
@@ -148,23 +148,23 @@ updateVisuals()
     }
     else if (g_stage == 1)
     {
-        // Seedling — small
+        // Seedling  -  small
         llSetLinkPrimitiveParamsFast(2, [PRIM_SIZE, <0.1, 0.1, 0.15>]);
         llSetLinkAlpha(2, 1.0, ALL_SIDES);
     }
     else if (g_stage == 2)
     {
-        // Veg — medium
+        // Veg  -  medium
         llSetLinkPrimitiveParamsFast(2, [PRIM_SIZE, <0.2, 0.2, 0.3>]);
     }
     else if (g_stage == 3)
     {
-        // Flowering — full size
+        // Flowering  -  full size
         llSetLinkPrimitiveParamsFast(2, [PRIM_SIZE, <0.3, 0.3, 0.45>]);
     }
     else if (g_stage == 4)
     {
-        // Harvest ready — full size + sparkle particles + glow
+        // Harvest ready  -  full size + sparkle particles + glow
         llSetLinkPrimitiveParamsFast(2, [PRIM_SIZE, <0.3, 0.3, 0.5>,
                                          PRIM_GLOW, ALL_SIDES, 0.05]);
         // Sparkle particle system on link 3
@@ -190,14 +190,14 @@ updateVisuals()
         llPlaySound("harvest_ready", 0.5); // sound asset name
     }
 
-    // Water indicator — link 4
+    // Water indicator  -  link 4
     vector waterColor = <0.2, 0.8, 0.2>; // green = watered
     if (!g_isWatered && g_stage > 0 && g_stage < 4)
         waterColor = <0.8, 0.2, 0.2>; // red = needs water
     llSetLinkPrimitiveParamsFast(4, [PRIM_COLOR, ALL_SIDES, waterColor, 1.0,
                                      PRIM_GLOW,  ALL_SIDES, 0.1]);
 
-    // Fertilizer indicator — link 5
+    // Fertilizer indicator  -  link 5
     float fertGlow = 0.0;
     if (g_fertApplied) fertGlow = 0.15;
     llSetLinkPrimitiveParamsFast(5, [PRIM_COLOR, ALL_SIDES, <1.0, 0.9, 0.1>, 1.0,
@@ -219,12 +219,12 @@ updateVisuals()
         if (hrs > 0) timeStr = (string)hrs + "h " + (string)mins + "m";
         else         timeStr = (string)mins + "m";
         hoverText += "Next stage: " + timeStr + "\n";
-        if (!g_isWatered) hoverText += "⚠ Needs water!\n";
-        if (g_fertApplied) hoverText += "✓ Fertilized\n";
+        if (!g_isWatered) hoverText += "? Needs water!\n";
+        if (g_fertApplied) hoverText += "? Fertilized\n";
     }
     else if (g_stage == 4)
     {
-        hoverText += "✨ Click to harvest! ✨\n";
+        hoverText += "? Click to harvest! ?\n";
     }
     hoverText += "[" + g_potType + " pot";
     if (g_potType == "basic") hoverText += " | " + (string)g_potUsesLeft + " uses left";
@@ -242,7 +242,7 @@ advanceStage()
     g_stageStartTime = llGetUnixTime();
     g_stageDuration  = calcStageDuration();
 
-    // Water resets each stage — must water again for the next one
+    // Water resets each stage  -  must water again for the next one
     g_isWatered = FALSE;
 
     string stageName;
@@ -251,13 +251,13 @@ advanceStage()
 
     if (g_stage == 4)
     {
-        // Done — stop timer, update visuals, notify
+        // Done  -  stop timer, update visuals, notify
         llSetTimerEvent(0.0);
         updateVisuals();
         // Notify interaction script to show harvest option
         llMessageLinked(LINK_SET, PCHAN_GROW, "STAGE_READY|4", NULL_KEY);
         llRegionSayTo(g_ownerKey, 0,
-            "🌿 Your " + g_strainName + " is ready to harvest!");
+            "? Your " + g_strainName + " is ready to harvest!");
     }
     else
     {
@@ -328,7 +328,7 @@ string qualityName(integer tier)
 }
 
 // ----------------------------------------------------------------
-// Perform harvest — calculate results, send to HUD, reset plant
+// Perform harvest  -  calculate results, send to HUD, reset plant
 // ----------------------------------------------------------------
 doHarvest()
 {
@@ -348,7 +348,7 @@ doHarvest()
     llRegionSayTo(g_ownerKey, g_hudChannel, harvestMsg);
 
     llRegionSayTo(g_ownerKey, 0,
-        "🌿 Harvested " + (string)finalYield + "g of " +
+        "? Harvested " + (string)finalYield + "g of " +
         qualName + " " + g_strainName + "!");
 
     // Decrement pot uses if basic
@@ -357,7 +357,7 @@ doHarvest()
         g_potUsesLeft--;
         if (g_potUsesLeft <= 0)
         {
-            // Pot is spent — visual break effect, notify
+            // Pot is spent  -  visual break effect, notify
             llSetLinkPrimitiveParamsFast(1, [PRIM_COLOR, ALL_SIDES, <0.4, 0.3, 0.2>, 1.0]);
             llPlaySound("pot_crack", 0.7);
             llRegionSayTo(g_ownerKey, 0,
@@ -420,21 +420,21 @@ default
         // Check if current stage is complete
         if (elapsed >= g_stageDuration)
         {
-            // Stage is done — but only advance if watered
+            // Stage is done  -  but only advance if watered
             if (g_isWatered || g_stage == 1) // seedling doesn't need water to sprout
             {
                 advanceStage();
             }
             else
             {
-                // Overdue and not watered — yield penalty accrues silently
+                // Overdue and not watered  -  yield penalty accrues silently
                 // Plant just waits. No death, just diminishing returns if ignored too long.
                 // Notify once when first overdue
                 integer overdueBy = elapsed - g_stageDuration;
                 if (overdueBy < (integer)(TIMER_INTERVAL * 1.5))
                 {
                     llRegionSayTo(g_ownerKey, 0,
-                        "⚠ Your " + g_strainName +
+                        "? Your " + g_strainName +
                         " needs water before it can progress!");
                 }
             }
@@ -482,7 +482,7 @@ default
             list flavorData = getStrainData(g_strainName);
             string flavor   = llList2String(flavorData, 4);
             llRegionSayTo(g_ownerKey, 0,
-                "🌱 Planted " + g_strainName + ". \"" + flavor + "\"");
+                "? Planted " + g_strainName + ". \"" + flavor + "\"");
         }
 
         // Player watered the plant
@@ -496,7 +496,7 @@ default
             g_isWatered = TRUE;
             updateVisuals();
             llMessageLinked(LINK_SET, PCHAN_PERSIST, "SAVE_STATE", NULL_KEY);
-            llRegionSayTo(g_ownerKey, 0, "✓ Watered your " + g_strainName + ".");
+            llRegionSayTo(g_ownerKey, 0, "? Watered your " + g_strainName + ".");
         }
 
         // Player applied fertilizer
@@ -532,7 +532,7 @@ default
 
             list fertNames = ["Basic", "Premium", "Exotic"];
             llRegionSayTo(g_ownerKey, 0,
-                "✓ " + llList2String(fertNames, g_fertTier) +
+                "? " + llList2String(fertNames, g_fertTier) +
                 " fertilizer applied to " + g_strainName + ".");
         }
 

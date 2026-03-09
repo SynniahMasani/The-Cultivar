@@ -1,9 +1,9 @@
 // ================================================================
-// THE CULTIVAR — Weed Jar Attach Script
+// THE CULTIVAR  -  Weed Jar Attach Script
 // Version: 1.0
 // Handles: Temp-attach system for auto-attaching a smokeable
 //          to the avatar's right hand when they take from the jar.
-//          No inventory clutter — the item is temp-attached and
+//          No inventory clutter  -  the item is temp-attached and
 //          auto-detaches after the smoke animation runs.
 //          Falls back to inventory give in no-rez zones.
 //
@@ -38,7 +38,7 @@ integer ATTACH_DURATION = 120;
 string  g_smokeType = "Joint"; // Joint | Blunt
 
 // Track active attachments: [smokerKey, tempChan, listenHandle, expireTime, ...]
-// Stride 4 — listenHandle stored so it can be removed on confirmation or expiry
+// Stride 4  -  listenHandle stored so it can be removed on confirmation or expiry
 list    g_attachments;
 integer ATTACH_STRIDE = 4;
 
@@ -84,7 +84,7 @@ rezSmokeable(key smoker, string strain, string quality)
 
     if (smokerPos == ZERO_VECTOR)
     {
-        // Couldn't get position — fall back to inventory give
+        // Couldn't get position  -  fall back to inventory give
         giveToInventory(smoker, quality);
         return;
     }
@@ -93,11 +93,11 @@ rezSmokeable(key smoker, string strain, string quality)
     vector rezPos = smokerPos + <0.0, 0.0, 0.3>;
 
     // Encode smoker key and duration in start_param
-    // We can only pass an integer — use a temp listener channel instead
+    // We can only pass an integer  -  use a temp listener channel instead
     integer tempChan   = (integer)(llFrand(2000000.0) + 1000000.0) * -1;
     integer tempListen = llListen(tempChan, "", NULL_KEY, "");
 
-    // Rez the smokeable — its script will listen for attach instructions
+    // Rez the smokeable  -  its script will listen for attach instructions
     llRezObject(assetName, rezPos, ZERO_VECTOR, ZERO_ROTATION, tempChan);
 
     // Send attach instruction once it rezzes
@@ -106,7 +106,7 @@ rezSmokeable(key smoker, string strain, string quality)
         "TC_ATTACH_TO|" + (string)smoker + "|" +
         (string)ATTACH_DURATION + "|" + strain + "|" + quality);
 
-    // Track this attachment — store listen handle so we can remove it later
+    // Track this attachment  -  store listen handle so we can remove it later
     integer expireTime = llGetUnixTime() + ATTACH_DURATION + 5;
     g_attachments += [smoker, tempChan, tempListen, expireTime];
 }
@@ -126,7 +126,7 @@ giveToInventory(key smoker, string quality)
         llGiveInventory(smoker, assetName);
         llRegionSayTo(smoker, 0,
             "Smokeable added to your inventory " +
-            "(can't auto-attach here — rez disabled in this area).");
+            "(can't auto-attach here  -  rez disabled in this area).");
     }
 }
 
@@ -180,7 +180,7 @@ default
             // llAttachToAvatarTemp only works when the object is owned by the
             // smoker. Since the jar is owned by its owner, only the jar owner
             // can use the temp-attach path. For anyone else, give the asset
-            // directly from the jar's inventory — no rez needed.
+            // directly from the jar's inventory  -  no rez needed.
             if (smoker != llGetOwner())
                 giveToInventory(smoker, quality);
             else
@@ -196,7 +196,7 @@ default
 
     listen(integer channel, string name, key id, string msg)
     {
-        // We opened temp listeners for each rez — close them after
+        // We opened temp listeners for each rez  -  close them after
         // the smokeable object has confirmed it received attach instructions
         list   parts = llParseString2List(msg, ["|"], []);
         string cmd   = llList2String(parts, 0);

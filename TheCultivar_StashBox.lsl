@@ -1,5 +1,5 @@
 // ================================================================
-// THE CULTIVAR — Stash Box Script
+// THE CULTIVAR  -  Stash Box Script
 // Version: 1.0
 //
 // A lockable display container for weed jars and bags.
@@ -12,23 +12,23 @@
 //   display of what's inside, organized by item type and quality.
 //   Visitors can browse. If unlocked, they can request items
 //   (owner gets a notification and can approve or decline).
-//   Owner can lock the box — no visitor interaction at all.
+//   Owner can lock the box  -  no visitor interaction at all.
 //
 // DISPLAY MODE:
 //   The box shows a visual summary via hover text and slot prims.
-//   Slot prims (links 2–5) light up with quality colors as items
+//   Slot prims (links 2 - 5) light up with quality colors as items
 //   are stocked, giving it a jewel-box feel on a shelf.
 //
 // PRIM LINK STRUCTURE:
 //   Link 1 (root)   : Box body
-//   Links 2–5       : Display window prims (4 visible slots)
+//   Links 2 - 5       : Display window prims (4 visible slots)
 //   Link 6          : Lock indicator prim (green=open, red=locked)
 //   Link 7          : Particle emitter (faint ambient wisp when stocked)
 //
 // PERMISSIONS NOTE:
 //   Items inside need Transfer permissions if you want to give
 //   them to visitors. Copy permissions let you give without losing
-//   your own copy — good for personal display boxes.
+//   your own copy  -  good for personal display boxes.
 // ================================================================
 
 integer TC_OBJECT_PING_CHAN = -111222333;
@@ -113,7 +113,7 @@ list parseItemName(string invName)
         return [invName, "reggie", "bag"];
     }
 
-    // Jar: TC_WeedJar or TC_Jar — read description for strain data
+    // Jar: TC_WeedJar or TC_Jar  -  read description for strain data
     if (llSubStringIndex(invName, "TC_Jar") == 0 ||
         llSubStringIndex(invName, "TC_WeedJar") == 0)
     {
@@ -150,7 +150,7 @@ rebuildContents()
 }
 
 // ----------------------------------------------------------------
-// Update display slot prims (links 2–5) and ambient particles
+// Update display slot prims (links 2 - 5) and ambient particles
 // ----------------------------------------------------------------
 updateDisplay()
 {
@@ -167,8 +167,8 @@ updateDisplay()
             vector  col     = qualColor(quality);
             string  dname   = llList2String(g_contents, i * CONT_STRIDE + 1);
             string  cat     = llList2String(g_contents, i * CONT_STRIDE + 3);
-            string  catIcon = "📦";
-            if (cat == "jar") catIcon = "🫙";
+            string  catIcon = "?";
+            if (cat == "jar") catIcon = "?";
 
             llSetLinkPrimitiveParamsFast(linkNum, [
                 PRIM_COLOR, ALL_SIDES, col, 1.0,
@@ -200,13 +200,13 @@ updateDisplay()
         llSetLinkPrimitiveParamsFast(6, [
             PRIM_COLOR, ALL_SIDES, <0.9, 0.2, 0.2>, 1.0,
             PRIM_GLOW,  ALL_SIDES, 0.05,
-            PRIM_TEXT,  "🔒", <0.9, 0.2, 0.2>, 1.0
+            PRIM_TEXT,  "?", <0.9, 0.2, 0.2>, 1.0
         ]);
     else
         llSetLinkPrimitiveParamsFast(6, [
             PRIM_COLOR, ALL_SIDES, <0.2, 0.9, 0.3>, 1.0,
             PRIM_GLOW,  ALL_SIDES, 0.04,
-            PRIM_TEXT,  "🔓", <0.2, 0.9, 0.3>, 1.0
+            PRIM_TEXT,  "?", <0.2, 0.9, 0.3>, 1.0
         ]);
 
     // Ambient particles when stocked (link 7)
@@ -256,7 +256,7 @@ updateHoverText()
 {
     integer count = llGetListLength(g_contents) / CONT_STRIDE;
     string  lockStr = "";
-    if (g_locked) lockStr = " 🔒";
+    if (g_locked) lockStr = " ?";
     if (count == 0)
     {
         llSetText("THE CULTIVAR\nStash Box [Empty]" + lockStr +
@@ -284,7 +284,7 @@ updateHoverText()
     }
     if (jars > 0)
     {
-        if (contents != "") contents += "  •  ";
+        if (contents != "") contents += "  ?  ";
         string jarPl = "";
         if (jars > 1) jarPl = "s";
         contents += (string)jars + " jar" + jarPl;
@@ -306,8 +306,8 @@ showOwnerMenu()
     integer count = llGetListLength(g_contents) / CONT_STRIDE;
     string itemPl = "";
     if (count != 1) itemPl = "s";
-    string lockStatus = "UNLOCKED — visitors can view";
-    if (g_locked) lockStatus = "LOCKED — visitors can't browse";
+    string lockStatus = "UNLOCKED  -  visitors can view";
+    if (g_locked) lockStatus = "LOCKED  -  visitors can't browse";
     string lockBtn = "Lock";
     if (g_locked) lockBtn = "Unlock";
     llDialog(g_ownerKey,
@@ -320,7 +320,7 @@ showOwnerMenu()
 }
 
 // ----------------------------------------------------------------
-// CONTENTS LIST — shown to owner or visitor
+// CONTENTS LIST  -  shown to owner or visitor
 // ----------------------------------------------------------------
 showContentsList(key viewer, integer ownerView)
 {
@@ -338,8 +338,8 @@ showContentsList(key viewer, integer ownerView)
         string dname   = llList2String(g_contents, i * CONT_STRIDE + 1);
         string quality = llList2String(g_contents, i * CONT_STRIDE + 2);
         string cat     = llList2String(g_contents, i * CONT_STRIDE + 3);
-        string catIcon = "📦";
-        if (cat == "jar") catIcon = "🫙";
+        string catIcon = "?";
+        if (cat == "jar") catIcon = "?";
         msg += catIcon + " " + quality + " " + dname + "\n";
     }
 
@@ -367,7 +367,7 @@ showContentsList(key viewer, integer ownerView)
 }
 
 // ----------------------------------------------------------------
-// VISITOR MENU — only shown if unlocked
+// VISITOR MENU  -  only shown if unlocked
 // ----------------------------------------------------------------
 showVisitorMenu(key visitor)
 {
@@ -494,7 +494,7 @@ default
                 g_locked = FALSE;
                 updateDisplay();
                 updateHoverText();
-                llOwnerSay("Stash box unlocked — visitors can browse.");
+                llOwnerSay("Stash box unlocked  -  visitors can browse.");
             }
             else if (msg == "View Contents" || msg == "Take Item")
                 showContentsList(g_ownerKey, TRUE);

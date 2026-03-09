@@ -1,5 +1,5 @@
 // ================================================================
-// THE CULTIVAR — Weed Jar Main Script
+// THE CULTIVAR  -  Weed Jar Main Script
 // Version: 1.1
 // Handles: Touch menus, HUD registration, smoke events, loading,
 //          session integration, access control, visuals
@@ -17,12 +17,12 @@
 //   Link 5         : Quality glow ring (color changes by tier)
 //
 // FILL LEVEL STAGES (visual thresholds):
-//   100–75% : Full    — packed, visible buds at top
-//   74–50%  : Half    — mid level
-//   49–25%  : Low     — getting thin
-//   24–10%  : Almost  — nearly empty, color shift
-//   9–1%    : Last    — just a little left
-//   0%      : Empty   — no fill mesh, idle particle gone
+//   100 - 75% : Full     -  packed, visible buds at top
+//   74 - 50%  : Half     -  mid level
+//   49 - 25%  : Low      -  getting thin
+//   24 - 10%  : Almost   -  nearly empty, color shift
+//   9 - 1%    : Last     -  just a little left
+//   0%      : Empty    -  no fill mesh, idle particle gone
 //
 // CAPACITY: 28g default (one oz). Premium jar = 56g.
 //
@@ -112,7 +112,7 @@ pingHUD()
 }
 
 // ----------------------------------------------------------------
-// Fill percentage as float 0.0–1.0
+// Fill percentage as float 0.0 - 1.0
 // ----------------------------------------------------------------
 float fillPct()
 {
@@ -260,7 +260,7 @@ updateHoverText()
         "THE CULTIVAR\n" +
         g_strain + "  [" + qualLabel + "]\n" +
         fillStr + "  " + (string)g_grams + "g / " + (string)g_capacity + "g\n" +
-        "Packed by " + g_packager + "  •  " + accessStr,
+        "Packed by " + g_packager + "  ?  " + accessStr,
         qualityColor(), 1.0);
 }
 
@@ -276,7 +276,7 @@ integer hasAccess(key who)
 }
 
 // ----------------------------------------------------------------
-// Request a smoke — sends TAKE_FROM_JAR to Storage.
+// Request a smoke  -  sends TAKE_FROM_JAR to Storage.
 // The actual effects happen when TAKE_OK arrives via link_message.
 // ----------------------------------------------------------------
 requestSmoke(key smoker)
@@ -286,7 +286,7 @@ requestSmoke(key smoker)
     {
         integer wait = SMOKE_COOLDOWN - (now - g_lastSmoke);
         llRegionSayTo(smoker, 0,
-            "Easy there — wait " + (string)wait + " more seconds.");
+            "Easy there  -  wait " + (string)wait + " more seconds.");
         return;
     }
 
@@ -329,7 +329,7 @@ showOwnerMenu()
 }
 
 // ----------------------------------------------------------------
-// VISITOR MENU — for non-owners with access
+// VISITOR MENU  -  for non-owners with access
 // ----------------------------------------------------------------
 showVisitorMenu(key visitor)
 {
@@ -345,7 +345,7 @@ showVisitorMenu(key visitor)
 }
 
 // ----------------------------------------------------------------
-// LOAD FLOWER MENU — choose from available flower in HUD
+// LOAD FLOWER MENU  -  choose from available flower in HUD
 // ----------------------------------------------------------------
 showLoadMenu(string invData)
 {
@@ -375,7 +375,7 @@ showLoadMenu(string invData)
         string  qLabel = llList2String(qualLabels, qIdx);
 
         buttons += [llGetSubString(strain, 0, 10)];
-        menuText += qLabel + " " + strain + " — " + qty + "g\n";
+        menuText += qLabel + " " + strain + "  -  " + qty + "g\n";
         @skip_slot;
     }
     buttons += ["Cancel"];
@@ -400,9 +400,9 @@ showAccessMenu()
     list modes = ["Owner Only", "Group", "Open", "Back"];
     llDialog(g_ownerKey,
         "=== ACCESS MODE ===\nWho can take from this jar?\n\n" +
-        "Owner Only — just you\n" +
-        "Group — your SL group members\n" +
-        "Open — anyone on your land",
+        "Owner Only  -  just you\n" +
+        "Group  -  your SL group members\n" +
+        "Open  -  anyone on your land",
         modes, DCHAN_ACCESS);
     llSetTimerEvent(30.0);
 }
@@ -440,7 +440,7 @@ default
 
     timer()
     {
-        // Smoke burst ended — restore idle particles
+        // Smoke burst ended  -  restore idle particles
         if (g_burstUntil > 0 && llGetUnixTime() >= g_burstUntil)
         {
             g_burstUntil = 0;
@@ -568,7 +568,7 @@ default
             }
         }
 
-        // LOAD FLOWER response — player picked a strain
+        // LOAD FLOWER response  -  player picked a strain
         else if (channel == DCHAN_LOAD)
         {
             if (id != g_ownerKey) return;
@@ -710,7 +710,7 @@ default
             // Low jar warnings
             if (remaining == 5)
                 llRegionSayTo(g_ownerKey, 0,
-                    "Your " + strain + " jar is getting low — only 5g left.");
+                    "Your " + strain + " jar is getting low  -  only 5g left.");
             else if (remaining == 0)
                 llRegionSayTo(g_ownerKey, 0,
                     "Your " + strain + " jar is empty.");

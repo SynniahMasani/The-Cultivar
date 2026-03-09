@@ -1,16 +1,16 @@
 // ================================================================
-// THE CULTIVAR — Breeding Station Script
+// THE CULTIVAR  -  Breeding Station Script
 // Version: 1.0
-// Handles: Strain hybridization — combines two parent strains to
+// Handles: Strain hybridization  -  combines two parent strains to
 //          create a new hybrid seed with grow bonuses.
 //
 // HOW IT WORKS:
-//   Owner touches the station → sees parent selection menus
-//   → picks Parent A and Parent B (must be different)
-//   → station consumes 1 of each seed from HUD inventory
-//   → creates 3 hybrid seeds with name "ParentA x ParentB"
-//   → if both parents are exotic: marks hybrid [LEGENDARY]
-//   → grants 3 grower XP for each successful breed
+//   Owner touches the station -> sees parent selection menus
+//   -> picks Parent A and Parent B (must be different)
+//   -> station consumes 1 of each seed from HUD inventory
+//   -> creates 3 hybrid seeds with name "ParentA x ParentB"
+//   -> if both parents are exotic: marks hybrid [LEGENDARY]
+//   -> grants 3 grower XP for each successful breed
 //
 // HYBRID BONUSES (detected by Plant_Grow_v1.1.lsl):
 //   Standard hybrid (contains " x "):
@@ -54,7 +54,7 @@ integer g_parentAQuality = 0; // quality tier (0-3)
 string  g_parentBName    = "";
 integer g_parentBQuality = 0;
 
-// Available seeds from HUD inventory — populated on breed start
+// Available seeds from HUD inventory  -  populated on breed start
 // Format: [strainName, qualityTier, ...]  (stride 2)
 list    g_availableSeeds;
 integer SEED_STRIDE = 2;
@@ -107,7 +107,7 @@ integer qualityTierOf(string strain)
     if (llListFindList(EXOTIC_STRAINS, [strain]) != -1) return 3;
     if (llListFindList(LOUD_STRAINS,   [strain]) != -1) return 2;
     if (llListFindList(MIDS_STRAINS,   [strain]) != -1) return 1;
-    // Hybrid strains — extract from [LEGENDARY] suffix or default to loud
+    // Hybrid strains  -  extract from [LEGENDARY] suffix or default to loud
     if (llSubStringIndex(strain, "[LEGENDARY]") != -1) return 3;
     if (llSubStringIndex(strain, " x ") != -1) return 2;
     return 0; // reggie fallback
@@ -239,7 +239,7 @@ showBreedConfirm()
     string hybridName   = g_parentAName + " x " + g_parentBName;
     if (isLegendary) hybridName += " [LEGENDARY]";
     string tierHint = "Loud baseline, +10% yield, -8% grow time";
-    if (isLegendary) tierHint = "Exotic baseline, +20% yield, -15% grow time — LEGENDARY!";
+    if (isLegendary) tierHint = "Exotic baseline, +20% yield, -15% grow time  -  LEGENDARY!";
 
     g_listenConfirm = llListen(DCHAN_BREED_CONFIRM, "", g_ownerKey, "");
     llDialog(g_ownerKey,
@@ -256,7 +256,7 @@ showBreedConfirm()
 }
 
 // ----------------------------------------------------------------
-// Perform the actual breed — consume parents, create hybrid
+// Perform the actual breed  -  consume parents, create hybrid
 // ----------------------------------------------------------------
 performBreed()
 {
@@ -285,7 +285,7 @@ performBreed()
     string msg = "Bred " + g_parentAName + " x " + g_parentBName +
                  "! You now have 3 hybrid seeds: \"" + hybridName + "\"";
     if (isLegendary)
-        msg += "\n✨ LEGENDARY cross! This one has exceptional grow bonuses.";
+        msg += "\n? LEGENDARY cross! This one has exceptional grow bonuses.";
     llRegionSayTo(g_ownerKey, 0, msg);
 
     // Play a particle effect to celebrate
@@ -370,7 +370,7 @@ default
             llLinksetDataDelete("station_intent");
             if (intent == "breed")
             {
-                // Keep g_listenRegister open — TC_INVENTORY_DATA arrives on channel 0
+                // Keep g_listenRegister open  -  TC_INVENTORY_DATA arrives on channel 0
                 llRegionSayTo(g_ownerKey, g_hudChannel,
                     "TC_REQUEST_RAW_INVENTORY|seed_raw");
                 llSetTimerEvent(8.0); // wait for inventory response
@@ -404,7 +404,7 @@ default
             llSetTimerEvent(0.0);
             if (g_listenMain) { llListenRemove(g_listenMain); g_listenMain = 0; }
             if (msg == "Breed") showParentAMenu();
-            // "Close" — do nothing
+            // "Close"  -  do nothing
         }
 
         // ---- PARENT A SELECTION ----
