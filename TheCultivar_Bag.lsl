@@ -235,7 +235,6 @@ default
         g_ownerName = llKey2Name(g_ownerKey);
         parseDescription();
         updateHoverText();
-        if (g_forSale && g_price > 0) llSetForSale(1, g_price);
         updateSaleState(g_forSale, g_price);
         if (g_listenRegister) llListenRemove(g_listenRegister);
         g_listenRegister = llListen(0, "", NULL_KEY, "");
