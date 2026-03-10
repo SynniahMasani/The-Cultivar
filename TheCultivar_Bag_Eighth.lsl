@@ -17,7 +17,6 @@ integer DCHAN_BUYER   = -77003;
 integer g_listenOwner;
 integer g_listenPrice;
 integer g_listenBuyer;
-integer g_listenHUD;
 integer g_listenRegister;
 integer g_bagConfigChan   = 0;
 integer g_listenBagConfig = 0;

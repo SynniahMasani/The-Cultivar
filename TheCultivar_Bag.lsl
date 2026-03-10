@@ -42,7 +42,6 @@ integer DCHAN_BUYER   = -77003;
 integer g_listenOwner;
 integer g_listenPrice;
 integer g_listenBuyer;
-integer g_listenHUD;
 integer g_listenRegister;
 integer g_bagConfigChan   = 0;  // start_param channel when rezzed by bagging table
 integer g_listenBagConfig = 0;  // listens for TC_BAG_CONFIG from the table
@@ -266,17 +265,6 @@ default
         parseDescription();
         updateHoverText();
         updateSaleState(g_forSale, g_price);
-        updateSaleState();
-        if (g_forSale && g_price > 0)
-        {
-            llSetForSale(1, g_price); // 1 = SALE_ORIGINAL
-            llSetPayPrice(PAY_HIDE, [g_price, PAY_HIDE, PAY_HIDE, PAY_HIDE]);
-        }
-        else
-        {
-            llSetPayPrice(PAY_HIDE, [PAY_HIDE, PAY_HIDE, PAY_HIDE, PAY_HIDE]);
-        }
-        // Restore for-sale state so the SL Buy flow works after a re-rez
         if (g_listenRegister) llListenRemove(g_listenRegister);
         g_listenRegister = llListen(0, "", NULL_KEY, "");
     }
