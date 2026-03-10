@@ -214,7 +214,7 @@ default
         // Rezzed from inventory by player  -  read stored description
         parseDescription();
         updateHoverText();
-        if (g_forSale && g_price > 0) llSetForSale(1, g_price);
+        if (g_forSale && g_price > 0) llSetPrimitiveParams([PRIM_SALE_INFO, SALE_ORIGINAL, g_price]);
         updateSaleState(g_forSale, g_price);
         if (g_listenRegister) llListenRemove(g_listenRegister);
         g_listenRegister = llListen(0, "", NULL_KEY, "");
@@ -374,7 +374,7 @@ default
             g_forSale = TRUE;
             saveDescription();
             updateHoverText();
-            llSetForSale(1, g_price);
+            llSetPrimitiveParams([PRIM_SALE_INFO, SALE_ORIGINAL, g_price]);
             updateSaleState(g_forSale, g_price);
             llRegionSayTo(g_ownerKey, 0,
                 g_strain + " is now for sale at L$" + (string)g_price + ".");
