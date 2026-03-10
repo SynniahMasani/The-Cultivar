@@ -42,7 +42,6 @@ integer DCHAN_BUYER   = -77003;
 integer g_listenOwner;
 integer g_listenPrice;
 integer g_listenBuyer;
-integer g_listenHUD;
 integer g_listenRegister;
 integer g_bagConfigChan   = 0;  // start_param channel when rezzed by bagging table
 integer g_listenBagConfig = 0;  // listens for TC_BAG_CONFIG from the table
