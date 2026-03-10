@@ -112,14 +112,9 @@ pingHUD()
 updateSaleState(integer pForSale, integer pPrice)
 {
     if (pForSale && pPrice > 0)
-    {
-        llSetForSale(1, pPrice); // 1 = SALE_ORIGINAL
         llSetPayPrice(PAY_HIDE, [pPrice, PAY_HIDE, PAY_HIDE, PAY_HIDE]);
-    }
     else
-    {
         llSetPayPrice(PAY_HIDE, [PAY_HIDE, PAY_HIDE, PAY_HIDE, PAY_HIDE]);
-    }
 }
 
 showOwnerMenu()
@@ -177,6 +172,7 @@ default
         g_ownerName = llKey2Name(g_ownerKey);
         parseDescription();
         updateHoverText();
+        if (g_forSale && g_price > 0) llSetForSale(1, g_price);
         updateSaleState(g_forSale, g_price);
         if (g_listenRegister) llListenRemove(g_listenRegister);
         g_listenRegister = llListen(0, "", NULL_KEY, "");
@@ -199,6 +195,7 @@ default
 
         parseDescription();
         updateHoverText();
+        if (g_forSale && g_price > 0) llSetForSale(1, g_price);
         updateSaleState(g_forSale, g_price);
         if (g_listenRegister) llListenRemove(g_listenRegister);
         g_listenRegister = llListen(0, "", NULL_KEY, "");
@@ -357,6 +354,7 @@ default
             g_forSale = TRUE;
             saveDescription();
             updateHoverText();
+            llSetForSale(1, g_price);
             updateSaleState(g_forSale, g_price);
             llRegionSayTo(g_ownerKey, 0,
                 g_strain + " is now for sale at L$" + (string)g_price + ".");
