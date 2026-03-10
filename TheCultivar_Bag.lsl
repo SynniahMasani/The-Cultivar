@@ -51,8 +51,8 @@ string  g_strain    = "Unknown";
 string  g_quality   = "reggie";
 string  g_packager  = "Unknown";
 integer g_weight    = 0;   // grams
-integer g_forSale   = FALSE;
 integer g_price     = 0;   // L$
+integer g_forSale   = FALSE;
 
 key     g_ownerKey;
 string  g_ownerName;
