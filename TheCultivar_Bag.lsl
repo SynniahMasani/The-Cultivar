@@ -122,7 +122,7 @@ updateHoverText()
     string line2 = (string)g_weight + "g  *  Packed by " + g_packager;
     string line3;
     if (g_forSale)
-        line3 = "FOR SALE  -  L$" + (string)g_price + "  -  Click to buy";
+        line3 = "FOR SALE  -  L$" + (string)g_price + "  -  Right-click > Buy";
     else
         line3 = "Personal stash";
 
@@ -158,18 +158,13 @@ pingHUD()
     llSetTimerEvent(8.0);
 }
 
+// SALE_ORIGINAL helper: configure Buy price
 updateSaleState(integer pForSale, integer pPrice)
 {
     if (pForSale && pPrice > 0)
-    {
-        llSetForSale(1, llList2Integer([pPrice, PAY_HIDE, PAY_HIDE, PAY_HIDE], 0));
-        llSetPayPrice(PAY_HIDE, [PAY_HIDE, PAY_HIDE, PAY_HIDE, PAY_HIDE]);
-    }
+        llSetPayPrice(PAY_HIDE, [pPrice, PAY_HIDE, PAY_HIDE, PAY_HIDE]);
     else
-    {
-        llSetForSale(0, 0);
         llSetPayPrice(PAY_HIDE, [PAY_HIDE, PAY_HIDE, PAY_HIDE, PAY_HIDE]);
-    }
 }
 
 // ----------------------------------------------------------------
@@ -210,8 +205,9 @@ showBuyerMenu(key buyer)
         "=== FOR SALE ===\n" +
         g_strain + " [" + qualLabel() + "]\n" +
         (string)g_weight + "g\nPacked by: " + g_packager + "\n\n" +
-        "Price: L$" + (string)g_price,
-        ["Buy Now", "No Thanks"], DCHAN_BUYER);
+        "Price: L$" + (string)g_price +
+        "\nTo purchase: right-click this bag and choose 'Buy'.",
+        ["OK"], DCHAN_BUYER);
     llSetTimerEvent(30.0);
 }
 
@@ -291,7 +287,7 @@ default
             g_price     = 0;
             saveDescription();
             updateHoverText();
-            updateSaleState(FALSE, 0);
+            llSetPayPrice(PAY_HIDE, [PAY_HIDE, PAY_HIDE, PAY_HIDE, PAY_HIDE]);
             g_registered = FALSE;
         }
     }
@@ -331,29 +327,7 @@ default
         }
     }
 
-    // Direct L$ payment from a buyer
-    money(key buyer, integer amount)
-    {
-        // Direct Pay received. Bags should be purchased via right-click -> Buy
-        // (SALE_ORIGINAL). That flow handles L$ and object transfer automatically
-        // without needing PERMISSION_DEBIT. If someone used Pay instead, attempt
-        // a refund if we have PERMISSION_DEBIT (granted when "Put For Sale" chosen).
-        if (llGetPermissions() & PERMISSION_DEBIT)
-        {
-            llGiveMoney(buyer, amount);
-            llRegionSayTo(buyer, 0,
-                "Refunded L$" + (string)amount +
-                ". Please right-click this bag and choose 'Buy' to purchase it.");
-        }
-        else
-        {
-            llRegionSayTo(buyer, 0,
-                "Please right-click this bag and choose 'Buy' to purchase it.");
-            llOwnerSay(llKey2Name(buyer) + " paid L$" + (string)amount +
-                " via Pay. Tell them to use 'Buy' instead.");
-        }
-    }
-
+    // No money() needed for SALE_ORIGINAL
     listen(integer channel, string name, key id, string msg)
     {
         list   parts = llParseString2List(msg, ["|"], []);
@@ -374,7 +348,7 @@ default
             llSetTimerEvent(0.0);
             saveDescription();
             updateHoverText();
-            updateSaleState(FALSE, 0);
+            llSetPayPrice(PAY_HIDE, [PAY_HIDE, PAY_HIDE, PAY_HIDE, PAY_HIDE]);
         }
         else if (channel == 0 && cmd == "TC_REGISTER")
         {
@@ -395,8 +369,6 @@ default
 
             if (msg == "Put For Sale")
             {
-                // Request PERMISSION_DEBIT now so refunds work if buyer uses Pay instead of Buy
-                llRequestPermissions(g_ownerKey, PERMISSION_DEBIT);
                 showPriceMenu();
             }
             else if (msg == "Remove From Sale")
@@ -405,7 +377,7 @@ default
                 g_price   = 0;
                 saveDescription();
                 updateHoverText();
-                updateSaleState(FALSE, 0);
+                llSetPayPrice(PAY_HIDE, [PAY_HIDE, PAY_HIDE, PAY_HIDE, PAY_HIDE]);
                 llRegionSayTo(g_ownerKey, 0, "Bag removed from sale.");
             }
             else if (msg == "Change Price")
@@ -462,13 +434,7 @@ default
         {
             llSetTimerEvent(0.0);
             if (g_listenBuyer) { llListenRemove(g_listenBuyer); g_listenBuyer = 0; }
-
-            if (msg == "Buy Now")
-            {
-                llRegionSayTo(id, 0,
-                    "To purchase: right-click this bag and choose 'Buy' (L$" +
-                    (string)g_price + ").");
-            }
+            // Only "OK" button; dialog already explained how to buy
             g_pendingBuyer = NULL_KEY;
         }
     }
