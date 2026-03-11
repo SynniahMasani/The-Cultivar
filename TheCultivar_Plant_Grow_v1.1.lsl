@@ -1,9 +1,10 @@
 // ================================================================
 // THE CULTIVAR  -  Plant Grow Script
-// Version: 1.1
+// Version: 1.2
 // Handles: Growth timer, stage progression, strain data,
 //          yield and quality calculation, visual stage updates,
-//          grow-light bonus (GROW_LIGHT_CHAN listener)
+//          grow-light bonus (GROW_LIGHT_CHAN listener),
+//          icon-based status indicator prim
 //
 // GROWTH STAGES:
 //   0 = Empty pot (no seed planted)
@@ -19,16 +20,29 @@
 //   Link 3           : Flowering mesh
 //   Link 2           : Harvest-ready mesh
 //   Link 6           : Harvest glow / sparkle emitter (optional, unused here)
-//   Link 7           : Water indicator light (green = watered, red = needs water)
-//   Link 8           : Fertilizer indicator light (yellow = applied)
+//   Link 7           : Status indicator (transparent icon prim)
+//                      Textures in root inventory:
+//                        icon_water      f23ddfdc-776f-c296-d1bc-c7b1a0d9bb2a
+//                        icon_fertilizer b150f9a0-953b-fb2c-c640-4dbf7b17f3b6
+//                        icon_ready      d131fff9-e2d3-176f-c0e2-d31bdabf0767
 //
 // ================================================================
-integer LINK_SEEDLING = 5;
-integer LINK_VEG      = 4;
-integer LINK_FLOWER   = 3;
-integer LINK_HARVEST  = 2;
-integer LINK_WATER    = 7;
-integer LINK_FERT     = 8;
+integer LINK_SEEDLING  = 5;
+integer LINK_VEG       = 4;
+integer LINK_FLOWER    = 3;
+integer LINK_HARVEST   = 2;
+integer LINK_INDICATOR = 7;   // transparent icon prim (set to correct link number)
+
+// ---- Indicator states ----
+integer STATE_NONE  = 0;
+integer STATE_WATER = 1;
+integer STATE_FERT  = 2;
+integer STATE_READY = 3;
+
+// ---- Icon texture UUIDs (also add these textures to the root prim's inventory) ----
+string TEX_ICON_WATER = "f23ddfdc-776f-c296-d1bc-c7b1a0d9bb2a"; // icon_water
+string TEX_ICON_FERT  = "b150f9a0-953b-fb2c-c640-4dbf7b17f3b6"; // icon_fertilizer
+string TEX_ICON_READY = "d131fff9-e2d3-176f-c0e2-d31bdabf0767"; // icon_ready
 
 // Internal channels (match across all plant scripts)
 integer PCHAN_GROW    = 1000; // Grow <-> Interaction
@@ -127,6 +141,77 @@ integer calcStageDuration()
 }
 
 // ----------------------------------------------------------------
+// Show or hide the status indicator icon prim.
+// Pass STATE_NONE to hide it completely.
+// ----------------------------------------------------------------
+setIndicator(integer state)
+{
+    if (state == STATE_NONE)
+    {
+        llSetLinkAlpha(LINK_INDICATOR, 0.0, ALL_SIDES);
+        llSetLinkPrimitiveParamsFast(LINK_INDICATOR,
+            [PRIM_TEXT,  "", ZERO_VECTOR, 0.0,
+             PRIM_OMEGA, ZERO_VECTOR, 0.0, 0.0]);
+        llLinkParticleSystem(LINK_INDICATOR, []);
+        return;
+    }
+
+    string tex;
+    string tipText;
+    if (state == STATE_WATER)
+    {
+        tex     = TEX_ICON_WATER;
+        tipText = "💧 Thirsty! 💧";
+    }
+    else if (state == STATE_FERT)
+    {
+        tex     = TEX_ICON_FERT;
+        tipText = "🌿 Needs fertilizer";
+    }
+    else // STATE_READY
+    {
+        tex     = TEX_ICON_READY;
+        tipText = "✨ Ready to harvest!";
+    }
+
+    llSetLinkPrimitiveParamsFast(LINK_INDICATOR, [
+        PRIM_TEXTURE, ALL_SIDES, tex, <1.0, 1.0, 0.0>, ZERO_VECTOR, 0.0,
+        PRIM_TEXT,    tipText, <0.3, 0.8, 1.0>, 1.0,
+        PRIM_OMEGA,   <0.0, 0.0, 1.0>, 0.25, 1.0
+    ]);
+    llSetLinkAlpha(LINK_INDICATOR, 1.0, ALL_SIDES);
+
+    // Drip particles only while the water icon is active
+    if (state == STATE_WATER)
+        llLinkParticleSystem(LINK_INDICATOR, [
+            PSYS_SRC_TEXTURE,          TEX_ICON_WATER,
+            PSYS_SRC_BURST_PART_COUNT, 2,
+            PSYS_SRC_BURST_RATE,       3.0,
+            PSYS_PART_START_SCALE,     <0.03, 0.03, 0.0>,
+            PSYS_PART_END_SCALE,       <0.01, 0.01, 0.0>,
+            PSYS_PART_START_ALPHA,     0.8,
+            PSYS_PART_END_ALPHA,       0.0,
+            PSYS_SRC_ACCEL,            <0.0, 0.0, -0.2>,
+            PSYS_PART_MAX_AGE,         1.2
+        ]);
+    else
+        llLinkParticleSystem(LINK_INDICATOR, []);
+}
+
+// ----------------------------------------------------------------
+// Rotate the indicator to face the owner's camera.
+// Call from timer() while the indicator is visible.
+// Requires the owner to have granted PERMISSION_TRACK_CAMERA.
+// ----------------------------------------------------------------
+updateIndicatorFacing()
+{
+    vector toCamera = llVecNorm(llGetCameraPos() - llGetPos());
+    if (toCamera == ZERO_VECTOR) return;
+    llSetLinkPrimitiveParamsFast(LINK_INDICATOR,
+        [PRIM_ROTATION, llRotBetween(<1.0, 0.0, 0.0>, toCamera)]);
+}
+
+// ----------------------------------------------------------------
 // Update plant visuals for current stage
 // ----------------------------------------------------------------
 updateVisuals()
@@ -182,20 +267,15 @@ updateVisuals()
         llPlaySound("harvest_ready", 0.5);
     }
 
-    // Water indicator on LINK_WATER
-    vector waterColor = <0.2, 0.8, 0.2>; // green = watered
-    if (!g_isWatered && g_stage > 0 && g_stage < 4)
-        waterColor = <0.8, 0.2, 0.2>; // red = needs water
-    llSetLinkPrimitiveParamsFast(LINK_WATER,
-        [PRIM_COLOR, ALL_SIDES, waterColor, 1.0,
-         PRIM_GLOW,  ALL_SIDES, 0.1]);
-
-    // Fertilizer indicator on LINK_FERT
-    float fertGlow = 0.0;
-    if (g_fertApplied) fertGlow = 0.15;
-    llSetLinkPrimitiveParamsFast(LINK_FERT,
-        [PRIM_COLOR, ALL_SIDES, <1.0, 0.9, 0.1>, 1.0,
-         PRIM_GLOW,  ALL_SIDES, fertGlow]);
+    // Status indicator icon prim  -  show only when action is needed
+    if (g_stage == 4)
+        setIndicator(STATE_READY);
+    else if (g_stage > 0 && !g_isWatered)
+        setIndicator(STATE_WATER);
+    else if (g_stage == 2 && !g_fertApplied)
+        setIndicator(STATE_FERT);
+    else
+        setIndicator(STATE_NONE);
 
     // Hover text
     string hoverText = g_strainName + "\n";
@@ -260,6 +340,10 @@ advanceStage()
             "STAGE_CHANGED|" + (string)g_stage, NULL_KEY);
         llRegionSayTo(g_ownerKey, 0,
             "Your " + g_strainName + " has entered the " + stageName + " stage.");
+        // Notify owner when fertilizer window opens (veg stage, one IM per cycle)
+        if (g_stage == 2)
+            llInstantMessage(g_ownerKey,
+                g_strainName + " is in the vegetative stage. Now's the time to fertilize!");
     }
     llMessageLinked(LINK_SET, PCHAN_PERSIST, "SAVE_STATE", NULL_KEY);
 }
@@ -391,15 +475,20 @@ default
             else
             {
                 integer overdueBy = elapsed - g_stageDuration;
+                // Fire once when the plant first goes overdue (within one extra tick)
                 if (overdueBy < (integer)(TIMER_INTERVAL * 1.5))
                 {
                     llRegionSayTo(g_ownerKey, 0,
                         "Your " + g_strainName +
                         " needs water before it can progress!");
+                    llInstantMessage(g_ownerKey,
+                        g_strainName + " needs water again!");
                 }
             }
         }
         updateVisuals();
+        if (g_stage > 0 && g_stage < 4)
+            updateIndicatorFacing();
     }
 
     link_message(integer sender_num, integer num, string msg, key id)
