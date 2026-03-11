@@ -101,6 +101,10 @@ string fastForward(string stateStr)
     if (stage == 0 || stage == 4) return stateStr;
     if (strainName == "")         return stateStr;
 
+    // Detect hybrid/legendary from strain name (matches calcStageDuration in Grow script)
+    integer isHybrid    = (llSubStringIndex(strainName, " x ") != -1);
+    integer isLegendary = isHybrid && (llSubStringIndex(strainName, "[LEGENDARY]") != -1);
+
     integer now       = llGetUnixTime();
     integer stagesAdvanced = 0;
 
@@ -116,16 +120,15 @@ string fastForward(string stateStr)
             stageStartTime = stageStartTime + stageDuration; // advance start
             // Reset water (new stage)
             isWatered = FALSE;
-            // Recalculate stage duration for next stage
+            // Recalculate stage duration for next stage (must match calcStageDuration)
             integer fullCycle = llList2Integer(GROW_TIMES, qualityTier);
             stageDuration = fullCycle / 4;
             if (potType == "premium")
                 stageDuration = (integer)((float)stageDuration * 0.95);
-            if (fertApplied && fertTier >= 1 && stage == 3)
-            {
-                // Fert time reduction already baked in during veg
-                // Don't double-apply here
-            }
+            if (isLegendary)
+                stageDuration = (integer)((float)stageDuration * 0.85);
+            else if (isHybrid)
+                stageDuration = (integer)((float)stageDuration * 0.92);
         }
         else
         {
