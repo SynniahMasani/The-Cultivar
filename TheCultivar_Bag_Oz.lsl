@@ -107,9 +107,10 @@ pingHUD()
 updateSaleState(integer pForSale, integer pPrice)
 {
     if (pForSale && pPrice > 0)
-        llSetPayPrice(PAY_HIDE, [pPrice, PAY_HIDE, PAY_HIDE, PAY_HIDE]);
+        llSetForSale(1, pPrice);   // SALE_ORIGINAL via local param (avoids Mono scope bug)
     else
-        llSetPayPrice(PAY_HIDE, [PAY_HIDE, PAY_HIDE, PAY_HIDE, PAY_HIDE]);
+        llSetForSale(0, 0);
+    llSetPayPrice(PAY_HIDE, [PAY_HIDE, PAY_HIDE, PAY_HIDE, PAY_HIDE]); // suppress Pay dialog
 }
 
 showOwnerMenu()
@@ -191,7 +192,6 @@ default
         // Rezzed from inventory by player  -  read stored description
         parseDescription();
         updateHoverText();
-        if (g_forSale && g_price > 0) llSetForSale(1, g_price);
         updateSaleState(g_forSale, g_price);
         if (g_listenRegister) llListenRemove(g_listenRegister);
         g_listenRegister = llListen(0, "", NULL_KEY, "");
@@ -218,8 +218,7 @@ default
             g_price     = 0;
             saveDescription();
             updateHoverText();
-            llSetForSale(0, 0);
-            llSetPayPrice(PAY_HIDE, [PAY_HIDE, PAY_HIDE, PAY_HIDE, PAY_HIDE]);
+            updateSaleState(FALSE, 0);
             g_registered = FALSE;
         }
     }
@@ -294,7 +293,7 @@ default
             llSetTimerEvent(0.0);
             saveDescription();
             updateHoverText();
-            llSetPayPrice(PAY_HIDE, [PAY_HIDE, PAY_HIDE, PAY_HIDE, PAY_HIDE]);
+            updateSaleState(FALSE, 0);
         }
         else if (channel == 0 && cmd == "TC_REGISTER")
         {
@@ -323,8 +322,7 @@ default
                 g_price   = 0;
                 saveDescription();
                 updateHoverText();
-                llSetForSale(0, 0);
-                llSetPayPrice(PAY_HIDE, [PAY_HIDE, PAY_HIDE, PAY_HIDE, PAY_HIDE]);
+                updateSaleState(FALSE, 0);
                 llRegionSayTo(g_ownerKey, 0, "Bag removed from sale.");
             }
             else if (msg == "Change Price")
@@ -359,7 +357,6 @@ default
             g_forSale = TRUE;
             saveDescription();
             updateHoverText();
-            llSetForSale(1, g_price);
             updateSaleState(g_forSale, g_price);
             llRegionSayTo(g_ownerKey, 0,
                 g_strain + " is now for sale at L$" + (string)g_price + ".");
