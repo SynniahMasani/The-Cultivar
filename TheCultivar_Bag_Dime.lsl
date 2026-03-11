@@ -124,10 +124,15 @@ pingHUD()
 updateSaleState(integer pForSale, integer pPrice)
 {
     if (pForSale && pPrice > 0)
-        llSetForSale(1, llList2Integer([pPrice], 0)); // Mono scope bug workaround: wrap in list
+    {
+        llSetForSale(1, llList2Integer([pPrice, PAY_HIDE, PAY_HIDE, PAY_HIDE], 0));
+        llSetPayPrice(PAY_HIDE, [PAY_HIDE, PAY_HIDE, PAY_HIDE, PAY_HIDE]);
+    }
     else
+    {
         llSetForSale(0, 0);
-    llSetPayPrice(PAY_HIDE, [PAY_HIDE, PAY_HIDE, PAY_HIDE, PAY_HIDE]); // suppress Pay dialog
+        llSetPayPrice(PAY_HIDE, [PAY_HIDE, PAY_HIDE, PAY_HIDE, PAY_HIDE]);
+    }
 }
 
 showOwnerMenu()
