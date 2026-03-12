@@ -1,98 +1,100 @@
 // ================================================================
-// THE CULTIVAR  -  Rolling Table Main Script
+// THE CULTIVAR  -  Rolling Tray Script
 // Version: 1.0
-// Handles: Crafting joints, blunts, and spliffs from flower_raw.
-//          Uses the same TC_PING/REGISTER flow as all other tables.
+// Lives inside: any TC rolling tray variant (all designs, one script)
 //
-// CRAFTING RATIOS:
-//   Joint   : 1g flower -> 1 joint    (single, clean, classic)
-//   Blunt   : 2g flower -> 1 blunt    (thicker, longer burn)
-//   Spliff   : 1g flower -> 1 spliff  (mixed, light touch)
+// WHAT IT DOES:
+//   Players touch the tray to roll harvested flower into smokeable
+//   items. Registers with the player's worn HUD via the standard
+//   TC ping/register handshake, then walks through:
+//     strain → roll type → quantity → confirm
+//   On confirmation, removes flower from HUD inventory and adds the
+//   rolled items in return. No physical objects are given.
 //
-// BATCH CRAFTING:
-//   Players can craft 1, 3, 5, or fill  -  "fill" crafts as many
-//   as their flower stock allows (up to 20 at once).
+// ROLL COSTS:
+//   Joint  : 1g per item
+//   Blunt  : 2g per item
+//   Spliff : 1g per item
 //
-// OUTPUT:
-//   Items are added to HUD inventory as itemType=joint/blunt/spliff
-//   with the same strain, quality, and packager as the source flower.
-//   The player's name is stamped as packager on crafted items.
+// COMMUNICATION:
+//   Ping broadcast : TC_OBJECT_PING_CHAN  (-111222333)
+//   HUD private    : channel received in TC_REGISTER parts[2]
 //
-// PRIM LINK STRUCTURE:
-//   Link 1 (root) : Table body
-//   Link 2        : Rolling surface / mat prim (color by quality tier)
-//   Link 3        : Particle emitter (rolling cloud of resin wisps)
-//   Link 4        : Completed item display prim (shows after craft)
+// PING / REGISTER FLOW:
+//   1. Touch → pingHUD() → llRegionSay(TC_OBJECT_PING_CHAN,
+//        "TC_PING|key|rolling_tray|replyChannel")
+//   2. HUD_Comms responds on replyChannel:
+//        "TC_REGISTER|ownerKey|hudChannel|ownerName|brandName"
+//   3. Tray stores g_hudChannel, opens listen, requests inventory:
+//        "TC_INVENTORY_REQUEST|flower_raw|trayKey"
+//   4. HUD responds: "TC_INVENTORY_DATA|rawInventory"
+//   5. Menus shown → confirm → "TC_REMOVE_ITEM|..." → wait for OK
+//   6. "TC_REMOVE_OK" → "TC_ADD_ITEM|..." + particle burst + notify
 //
+// DIALOG CHANNELS  (negative, distinct from BaggingTable -66001-66004):
+//   DCHAN_STRAIN   = -77001
+//   DCHAN_ROLLTYPE = -77002
+//   DCHAN_QTY      = -77003
+//   DCHAN_CONFIRM  = -77004
 // ================================================================
 
 integer TC_OBJECT_PING_CHAN = -111222333;
 
-integer DCHAN_TYPE    = -112001;
-integer DCHAN_STRAIN  = -112002;
-integer DCHAN_BATCH   = -112003;
-integer DCHAN_CONFIRM = -112004;
+integer DCHAN_STRAIN   = -77001;
+integer DCHAN_ROLLTYPE = -77002;
+integer DCHAN_QTY      = -77003;
+integer DCHAN_CONFIRM  = -77004;
 
-integer g_listenRegister;
-integer g_listenHUD;       // opened on g_hudChannel after TC_REGISTER
-integer g_listenType;
-integer g_listenStrain;
-integer g_listenBatch;
-integer g_listenConfirm;
+integer g_replyChannel   = 0;
+integer g_listenRegister = 0;
+integer g_listenHUD      = 0;
+integer g_listenStrain   = 0;
+integer g_listenRollType = 0;
+integer g_listenQty      = 0;
+integer g_listenConfirm  = 0;
 
 key     g_ownerKey    = NULL_KEY;
 string  g_ownerName   = "";
-string  g_brandName   = "";   // brand name received from HUD (used as packager)
+string  g_brandName   = "";
 integer g_hudChannel  = 0;
 integer g_registered  = FALSE;
 integer g_busy        = FALSE;
-integer g_craftDisplayActive = FALSE; // TRUE while post-craft visuals are showing
+integer g_particleClear = FALSE;   // TRUE while post-craft 3s timer is running
 
-// Available flower from HUD  -  parsed on each session
-// Stride 4: [strain, quality, qty, packager]
 list    g_availableFlower;
-integer FLOWER_STRIDE = 4;
+integer FLOWER_STRIDE = 4;         // stride: strainName, quality, qty, packager
 
-// Transaction state
-string  g_selectedType     = "";  // joint | blunt | spliff
 string  g_selectedStrain   = "";
 string  g_selectedQuality  = "";
 string  g_selectedPackager = "";
-integer g_selectedFlowerQty = 0;
-integer g_batchCount       = 0;
-integer g_costPerItem      = 0;
-integer g_totalCost        = 0;
-
-// Craft cost per item in grams
-list ITEM_TYPES  = ["Joint",  "Blunt", "Spliff"];
-list ITEM_COSTS  = [1,        2,       1      ];
-list ITEM_IDS    = ["joint",  "blunt", "spliff"];
+integer g_selectedQty      = 0;   // grams of selected strain available
+string  g_selectedRollType = "";  // "joint" | "blunt" | "spliff"
+integer g_selectedCount    = 0;   // number of items to roll
+integer g_rollCost         = 0;   // grams per item
+integer g_totalCost        = 0;   // g_selectedCount * g_rollCost
 
 // ----------------------------------------------------------------
-// Derive HUD channel from UUID
-// ----------------------------------------------------------------
-integer deriveHUDChannel(key id)
-{
-    string h = llGetSubString((string)id, 0, 6);
-    h = llDumpList2String(llParseString2List(h, ["-"], []), "");
-    return (integer)("0x" + h) * -1;
-}
-
-// ----------------------------------------------------------------
-// Ping HUD
+// Ping the HUD using a random private reply channel.
+// HUD_Comms listens on TC_OBJECT_PING_CHAN and sends TC_REGISTER
+// back on the reply channel.
 // ----------------------------------------------------------------
 pingHUD()
 {
     g_registered = FALSE;
     if (g_listenRegister) llListenRemove(g_listenRegister);
-    g_listenRegister = llListen(0, "", NULL_KEY, "");
+    g_replyChannel   = (integer)(llFrand(1000000.0) + 1000000) * -1;
+    g_listenRegister = llListen(g_replyChannel, "", NULL_KEY, "");
     llRegionSay(TC_OBJECT_PING_CHAN,
-        "TC_PING|" + (string)llGetKey() + "|rolling_table");
+        "TC_PING|" + (string)llGetKey() + "|rolling_tray|" +
+        (string)g_replyChannel);
     llSetTimerEvent(10.0);
 }
 
 // ----------------------------------------------------------------
-// Parse flower inventory data from HUD
+// Parse raw HUD inventory string; keep only flower_raw entries.
+// Input format per slot: itemType~strainName~quality~qty~packager
+// Slots separated by ^
+// Stored as stride-4 list: strainName, quality, qty, packager
 // ----------------------------------------------------------------
 parseFlowerInventory(string rawData)
 {
@@ -117,51 +119,51 @@ parseFlowerInventory(string rawData)
 }
 
 // ----------------------------------------------------------------
-// Close all dialog listens
+// Close all active dialog listeners
 // ----------------------------------------------------------------
 closeAllListens()
 {
-    if (g_listenType)    { llListenRemove(g_listenType);    g_listenType    = 0; }
-    if (g_listenStrain)  { llListenRemove(g_listenStrain);  g_listenStrain  = 0; }
-    if (g_listenBatch)   { llListenRemove(g_listenBatch);   g_listenBatch   = 0; }
-    if (g_listenConfirm) { llListenRemove(g_listenConfirm); g_listenConfirm = 0; }
+    if (g_listenStrain)   { llListenRemove(g_listenStrain);   g_listenStrain   = 0; }
+    if (g_listenRollType) { llListenRemove(g_listenRollType); g_listenRollType = 0; }
+    if (g_listenQty)      { llListenRemove(g_listenQty);      g_listenQty      = 0; }
+    if (g_listenConfirm)  { llListenRemove(g_listenConfirm);  g_listenConfirm  = 0; }
 }
 
 // ----------------------------------------------------------------
-// STEP 1: Pick item type
+// Clear all transaction state variables
 // ----------------------------------------------------------------
-showTypeMenu()
+resetTransaction()
 {
-    closeAllListens();
-    g_listenType = llListen(DCHAN_TYPE, "", g_ownerKey, "");
-    llDialog(g_ownerKey,
-        "=== ROLLING TABLE ===\nWhat are you rolling?\n\n" +
-        "Joint    -  1g each, clean burn\n" +
-        "Blunt    -  2g each, slow and thick\n" +
-        "Spliff    -  1g each, light mix",
-        ["Joint", "Blunt", "Spliff", "Cancel"], DCHAN_TYPE);
-    llSetTimerEvent(30.0);
+    g_selectedStrain   = "";
+    g_selectedQuality  = "";
+    g_selectedPackager = "";
+    g_selectedQty      = 0;
+    g_selectedRollType = "";
+    g_selectedCount    = 0;
+    g_rollCost         = 0;
+    g_totalCost        = 0;
 }
 
 // ----------------------------------------------------------------
-// STEP 2: Pick strain
+// STEP 1 — Show the flower (strain) selection menu.
+// Lists up to 9 strains with quality label and gram count.
 // ----------------------------------------------------------------
-showStrainMenu()
+showFlowerMenu()
 {
     closeAllListens();
+
     if (llGetListLength(g_availableFlower) == 0)
     {
         llRegionSayTo(g_ownerKey, 0,
-            "No flower to roll with. Harvest a plant first.");
+            "No flower available to roll. Harvest a plant first.");
         g_busy = FALSE;
         return;
     }
 
-    list qualNames  = ["reggie","mids","loud","exotic"];
-    list qualLabels = ["[R]","[M]","[L]","[E]"];
-    list buttons;
-    string menuText = "=== SELECT FLOWER ===\n" +
-                      "Rolling: " + g_selectedType + "\n\n";
+    list   qualNames  = ["reggie", "mids", "loud", "exotic"];
+    list   qualLabels = ["[R]", "[M]", "[L]", "[E]"];
+    list   buttons;
+    string menuText = "=== SELECT FLOWER ===\nChoose a strain to roll:\n\n";
 
     integer i;
     for (i = 0; i < llGetListLength(g_availableFlower) && i < FLOWER_STRIDE * 9;
@@ -171,198 +173,189 @@ showStrainMenu()
         string  quality = llList2String(g_availableFlower, i + 1);
         string  qty     = llList2String(g_availableFlower, i + 2);
         integer qIdx    = llListFindList(qualNames, [quality]);
-        string  qLabel  = llList2String(qualLabels, qIdx);
+        string  qLabel  = "[R]";
+        if (qIdx >= 0) qLabel = llList2String(qualLabels, qIdx);
 
-        buttons   += [llGetSubString(strain, 0, 10)];
-        menuText  += qLabel + " " + strain + "  -  " + qty + "g\n";
+        buttons  += [llGetSubString(strain, 0, 10)];
+        menuText += qLabel + " " + strain + "  -  " + qty + "g\n";
     }
-    buttons += ["Back", "Cancel"];
+    buttons += ["Cancel"];
+
+    if (llStringLength(menuText) > 480)
+        menuText = llGetSubString(menuText, 0, 477) + "...";
+
     g_listenStrain = llListen(DCHAN_STRAIN, "", g_ownerKey, "");
     llDialog(g_ownerKey, menuText, buttons, DCHAN_STRAIN);
     llSetTimerEvent(30.0);
 }
 
 // ----------------------------------------------------------------
-// STEP 3: Pick batch size
+// STEP 2 — Show the roll type menu.
+// Blunt (2g) button is omitted if the player has less than 2g.
 // ----------------------------------------------------------------
-showBatchMenu()
+showRollTypeMenu()
 {
     closeAllListens();
 
-    // How many can they afford?
-    integer maxBatch = g_selectedFlowerQty / g_costPerItem;
-    if (maxBatch <= 0)
+    if (g_selectedQty < 1)
     {
         llRegionSayTo(g_ownerKey, 0,
-            "Not enough flower. You need at least " +
-            (string)g_costPerItem + "g for one " +
-            llToLower(g_selectedType) + ".");
+            "Not enough flower to roll anything. You need at least 1g.");
         g_busy = FALSE;
+        resetTransaction();
         return;
     }
 
-    list   buttons;
-    string menuText = "=== HOW MANY? ===\n" +
-                      g_selectedType + "  -  " + g_selectedStrain +
-                      " [" + g_selectedQuality + "]\n" +
-                      (string)g_selectedFlowerQty + "g available " +
-                      "(" + (string)g_costPerItem + "g each)\n\n" +
-                      "Max you can roll: " + (string)maxBatch + "\n";
+    string menuText =
+        "=== ROLL TYPE ===\n" +
+        "Rolling: " + g_selectedStrain + "\n" +
+        "Quality: " + g_selectedQuality + "\n" +
+        "Available: " + (string)g_selectedQty + "g\n\n" +
+        "Select what to roll:";
 
-    list counts = [1, 3, 5, 10, 20];
+    if (g_selectedQty < 2)
+        menuText += "\n(Blunt requires 2g — not enough)";
+
+    list buttons;
+    buttons += ["Joint (1g)"];
+    if (g_selectedQty >= 2)
+        buttons += ["Blunt (2g)"];
+    buttons += ["Spliff (1g)"];
+    buttons += ["Back", "Cancel"];
+
+    g_listenRollType = llListen(DCHAN_ROLLTYPE, "", g_ownerKey, "");
+    llDialog(g_ownerKey, menuText, buttons, DCHAN_ROLLTYPE);
+    llSetTimerEvent(30.0);
+}
+
+// ----------------------------------------------------------------
+// STEP 3 — Show the quantity menu.
+// Offers 1 / 2 / 5 / 10, capped by floor(available / cost).
+// ----------------------------------------------------------------
+showQuantityMenu()
+{
+    closeAllListens();
+
+    integer maxCount = g_selectedQty / g_rollCost;
+    if (maxCount <= 0)
+    {
+        llRegionSayTo(g_ownerKey, 0,
+            "Not enough flower. You need " + (string)g_rollCost +
+            "g per " + g_selectedRollType + ".");
+        g_busy = FALSE;
+        resetTransaction();
+        return;
+    }
+
+    string menuText =
+        "=== HOW MANY? ===\n" +
+        g_selectedRollType + "  -  " + g_selectedQuality + " " + g_selectedStrain + "\n" +
+        "Cost: " + (string)g_rollCost + "g each\n" +
+        "Available: " + (string)g_selectedQty + "g\n" +
+        "Max you can roll: " + (string)maxCount + "\n";
+
+    list counts = [1, 2, 5, 10];
+    list buttons;
     integer c;
     for (c = 0; c < llGetListLength(counts); c++)
     {
         integer n = llList2Integer(counts, c);
-        if (n <= maxBatch)
+        if (n <= maxCount)
             buttons += [(string)n];
     }
-    // "Fill"  -  roll as many as possible up to 20
-    if (maxBatch > 20) maxBatch = 20;
-    if (!~llListFindList(buttons, [(string)maxBatch]))
-        buttons += [(string)maxBatch + " (max)"];
-    buttons += ["Back", "Cancel"];
+    buttons += ["Cancel"];
 
-    g_listenBatch = llListen(DCHAN_BATCH, "", g_ownerKey, "");
-    llDialog(g_ownerKey, menuText, buttons, DCHAN_BATCH);
+    g_listenQty = llListen(DCHAN_QTY, "", g_ownerKey, "");
+    llDialog(g_ownerKey, menuText, buttons, DCHAN_QTY);
     llSetTimerEvent(30.0);
 }
 
 // ----------------------------------------------------------------
-// STEP 4: Confirm
+// STEP 4 — Show confirmation summary before committing.
 // ----------------------------------------------------------------
-showConfirm()
+showConfirmMenu()
 {
     closeAllListens();
+
+    string confirmMsg =
+        "=== CONFIRM ROLL ===\n" +
+        (string)g_selectedCount + "x " + g_selectedRollType +
+        "  -  " + g_selectedQuality + " " + g_selectedStrain + "\n" +
+        "Flower used: " + (string)g_totalCost + "g\n" +
+        "Rolled by: " + g_brandName + "\n" +
+        "Confirm?";
+
     g_listenConfirm = llListen(DCHAN_CONFIRM, "", g_ownerKey, "");
-    llDialog(g_ownerKey,
-        "=== CONFIRM ROLL ===\n\n" +
-        "Crafting: " + (string)g_batchCount + "x " + g_selectedType + "\n" +
-        "Strain:   " + g_selectedQuality + " " + g_selectedStrain + "\n" +
-        "Cost:     " + (string)g_totalCost + "g of flower",
-        ["Roll It!", "Cancel"], DCHAN_CONFIRM);
+    llDialog(g_ownerKey, confirmMsg, ["Roll It!", "Cancel"], DCHAN_CONFIRM);
     llSetTimerEvent(30.0);
 }
 
 // ----------------------------------------------------------------
-// Execute the craft  -  remove flower, add items, trigger effects
+// Send TC_REMOVE_ITEM to HUD and wait for TC_REMOVE_OK / FAIL.
 // ----------------------------------------------------------------
-executeCraft()
+sendRemoveRequest()
 {
-    g_busy = TRUE;
-    // Tell HUD to remove the flower
     llRegionSayTo(g_ownerKey, g_hudChannel,
         "TC_REMOVE_ITEM|flower_raw|" + g_selectedStrain + "|" +
         g_selectedQuality + "|" + (string)g_totalCost + "|" +
         g_selectedPackager);
-    llSetTimerEvent(10.0); // wait for TC_REMOVE_OK
+    llSetTimerEvent(10.0);
 }
 
 // ----------------------------------------------------------------
-// Craft confirmed by HUD  -  add items and play effects
+// HUD confirmed the removal — add rolled items, fire effects.
 // ----------------------------------------------------------------
 finishCraft()
 {
-    string itemID = llList2String(ITEM_IDS,
-                   llListFindList(ITEM_TYPES, [g_selectedType]));
-
-    // Add crafted items to HUD inventory
+    // Add rolled items to HUD inventory
     llRegionSayTo(g_ownerKey, g_hudChannel,
-        "TC_ADD_ITEM|" + itemID + "|" + g_selectedStrain + "|" +
-        g_selectedQuality + "|" + (string)g_batchCount + "|" + g_brandName);
+        "TC_ADD_ITEM|" + g_selectedRollType + "|" + g_selectedStrain + "|" +
+        g_selectedQuality + "|" + (string)g_selectedCount + "|" +
+        g_brandName);
 
-    // Grant roller XP (1 XP per rolled item)
-    llRegionSayTo(g_ownerKey, g_hudChannel,
-        "TC_XP_UPDATE|roller|" + (string)g_batchCount);
-
-    // Visual effects  -  quality-tinted particle burst from table surface
-    vector col = qualColor(g_selectedQuality);
-    llLinkParticleSystem(3, [
-        PSYS_PART_FLAGS,           PSYS_PART_INTERP_COLOR_MASK |
-                                   PSYS_PART_INTERP_SCALE_MASK |
-                                   PSYS_PART_EMISSIVE_MASK,
-        PSYS_SRC_PATTERN,          PSYS_SRC_PATTERN_ANGLE_CONE,
-        PSYS_PART_START_COLOR,     col,
-        PSYS_PART_END_COLOR,       <1.0, 1.0, 1.0>,
-        PSYS_PART_START_ALPHA,     0.7,
+    // Celebration particle burst
+    llParticleSystem([
+        PSYS_PART_FLAGS,           PSYS_PART_INTERP_COLOR_MASK | PSYS_PART_EMISSIVE_MASK,
+        PSYS_SRC_PATTERN,          PSYS_SRC_PATTERN_EXPLODE,
+        PSYS_PART_START_COLOR,     <0.9, 0.9, 0.7>,
+        PSYS_PART_END_COLOR,       <0.6, 0.4, 0.1>,
+        PSYS_PART_START_ALPHA,     0.9,
         PSYS_PART_END_ALPHA,       0.0,
         PSYS_PART_START_SCALE,     <0.04, 0.04, 0.0>,
-        PSYS_PART_END_SCALE,       <0.1, 0.1, 0.0>,
-        PSYS_PART_MAX_AGE,         3.0,
+        PSYS_PART_END_SCALE,       <0.01, 0.01, 0.0>,
+        PSYS_PART_MAX_AGE,         1.5,
         PSYS_SRC_BURST_RATE,       0.05,
-        PSYS_SRC_BURST_PART_COUNT, 8,
-        PSYS_SRC_BURST_SPEED_MIN,  0.03,
-        PSYS_SRC_BURST_SPEED_MAX,  0.08,
-        PSYS_SRC_MAX_AGE,          1.2
+        PSYS_SRC_BURST_PART_COUNT, 12,
+        PSYS_SRC_MAX_AGE,          0.3
     ]);
-
-    // Light up rolling mat (link 2) briefly
-    llSetLinkPrimitiveParamsFast(2, [
-        PRIM_COLOR, ALL_SIDES, col, 1.0,
-        PRIM_GLOW,  ALL_SIDES, 0.15
-    ]);
-
-    // Show completed item on display prim (link 4) briefly
-    llSetLinkPrimitiveParamsFast(4, [
-        PRIM_COLOR, ALL_SIDES, col, 1.0,
-        PRIM_TEXT,
-            (string)g_batchCount + "x " + g_selectedType + "\n" +
-            g_selectedStrain,
-        col, 1.0
-    ]);
-
-    llPlaySound("rolling_done", 0.6);
+    llPlaySound("roll_complete", 0.6);
 
     // Notify player
-    string rollPl = "";
-    if (g_batchCount > 1) rollPl = "s";
+    string plural = "";
+    if (g_selectedCount > 1) plural = "s";
     llRegionSayTo(g_ownerKey, 0,
-        "? Rolled " + (string)g_batchCount + "x " +
+        "Rolled " + (string)g_selectedCount + "x " +
         g_selectedQuality + " " + g_selectedStrain + " " +
-        llToLower(g_selectedType) + rollPl +
-        " (" + (string)g_totalCost + "g used)");
+        g_selectedRollType + plural +
+        " (" + (string)g_totalCost + "g used).");
 
-    // Schedule visual fade-down  -  g_craftDisplayActive flag is checked in timer()
-    // so we never call llSleep() inside a listen handler
-    g_craftDisplayActive = TRUE;
+    // Mark for particle clear after 3s; reset transaction now
+    g_particleClear = TRUE;
+    resetTransaction();
     llSetTimerEvent(3.0);
 }
 
 // ----------------------------------------------------------------
-// Quality color helper
-// ----------------------------------------------------------------
-vector qualColor(string quality)
-{
-    if (quality == "mids")   return <1.0, 0.85, 0.2>;
-    if (quality == "loud")   return <0.2, 0.85, 0.3>;
-    if (quality == "exotic") return <0.7, 0.3,  1.0>;
-    return <0.55, 0.45, 0.3>;
-}
-
-// ----------------------------------------------------------------
-// Clear transaction state
-// ----------------------------------------------------------------
-resetTransaction()
-{
-    g_selectedType      = "";
-    g_selectedStrain    = "";
-    g_selectedQuality   = "";
-    g_selectedPackager  = "";
-    g_selectedFlowerQty = 0;
-    g_batchCount        = 0;
-    g_costPerItem       = 0;
-    g_totalCost         = 0;
-}
-
-// ----------------------------------------------------------------
-// Hover text
+// Update hover text based on registration state
 // ----------------------------------------------------------------
 updateHoverText()
 {
-    string status = "Touch to begin";
-    if (g_registered) status = "Touch to roll";
-    llSetText("THE CULTIVAR\nRolling Table\n" + status,
-              <0.55, 0.45, 0.3>, 1.0);
+    if (g_registered)
+        llSetText("THE CULTIVAR\nRolling Tray\nTouch to roll your flower",
+                  <0.9, 0.85, 0.5>, 1.0);
+    else
+        llSetText("THE CULTIVAR\nRolling Tray\nTouch to roll",
+                  <0.8, 0.7, 0.4>, 1.0);
 }
 
 // ================================================================
@@ -372,12 +365,13 @@ default
     {
         g_ownerKey  = llGetOwner();
         g_ownerName = llKey2Name(g_ownerKey);
-        if (g_listenRegister) llListenRemove(g_listenRegister);
-        g_listenRegister = llListen(0, "", NULL_KEY, "");
         updateHoverText();
     }
 
-    on_rez(integer start_param) { llResetScript(); }
+    on_rez(integer start_param)
+    {
+        llResetScript();
+    }
 
     changed(integer change)
     {
@@ -386,33 +380,26 @@ default
 
     timer()
     {
-        // Post-craft visual fade  -  fires 3s after finishCraft()
-        if (g_craftDisplayActive)
+        llSetTimerEvent(0.0);
+
+        // Post-craft particle clear fires 3s after finishCraft()
+        if (g_particleClear)
         {
-            g_craftDisplayActive = FALSE;
-            llLinkParticleSystem(3, []);
-            llSetLinkPrimitiveParamsFast(2, [
-                PRIM_COLOR, ALL_SIDES, <0.3, 0.25, 0.2>, 1.0,
-                PRIM_GLOW,  ALL_SIDES, 0.0
-            ]);
-            llSetLinkPrimitiveParamsFast(4, [
-                PRIM_COLOR, ALL_SIDES, <0.3, 0.25, 0.2>, 0.0,
-                PRIM_TEXT, "", ZERO_VECTOR, 0.0
-            ]);
+            g_particleClear = FALSE;
+            llParticleSystem([]);
             g_busy = FALSE;
-            resetTransaction();
-            llSetTimerEvent(0.0);
             return;
         }
 
-        // Dialog / HUD-registration timeout
+        // General timeout: HUD not found, or player abandoned a menu
         closeAllListens();
-        llSetTimerEvent(0.0);
         g_busy = FALSE;
 
         if (!g_registered)
+        {
             llRegionSayTo(g_ownerKey, 0,
-                "Couldn't reach your HUD. Make sure your Cultivar HUD is worn.");
+                "Couldn't connect to your HUD. Make sure your Cultivar HUD is worn.");
+        }
         else if (g_selectedStrain != "")
         {
             llRegionSayTo(g_ownerKey, 0, "Rolling session timed out.");
@@ -422,14 +409,24 @@ default
 
     touch_start(integer nd)
     {
-        if (llDetectedKey(0) != llGetOwner()) return;
-        if (g_busy)
+        key toucher = llDetectedKey(0);
+
+        if (toucher != llGetOwner())
         {
-            llRegionSayTo(g_ownerKey, 0, "Still working...");
+            llRegionSayTo(toucher, 0,
+                "This rolling tray belongs to " + llKey2Name(llGetOwner()) + ".");
             return;
         }
-        g_ownerKey  = llDetectedKey(0);
-        g_ownerName = llKey2Name(g_ownerKey);
+
+        if (g_busy)
+        {
+            llRegionSayTo(g_ownerKey, 0, "Hold on  -  finishing previous action...");
+            return;
+        }
+
+        g_busy      = TRUE;
+        g_ownerKey  = toucher;
+        g_ownerName = llKey2Name(toucher);
         pingHUD();
     }
 
@@ -438,68 +435,59 @@ default
         list   parts = llParseString2List(msg, ["|"], []);
         string cmd   = llList2String(parts, 0);
 
-        // HUD registration
-        if (channel == 0 && cmd == "TC_REGISTER")
+        // ---- HUD registration response (private reply channel) ----
+        if (channel == g_replyChannel && cmd == "TC_REGISTER")
         {
             key regOwner = (key)llList2String(parts, 1);
             if (regOwner != g_ownerKey) return;
+
             g_hudChannel = (integer)llList2String(parts, 2);
             g_ownerName  = llList2String(parts, 3);
             g_brandName  = llList2String(parts, 4);
             if (g_brandName == "") g_brandName = g_ownerName;
             g_registered = TRUE;
+
             if (g_listenRegister) { llListenRemove(g_listenRegister); g_listenRegister = 0; }
-            // Open listener on the derived HUD channel so TC_INVENTORY_DATA /
-            // TC_REMOVE_OK / TC_REMOVE_FAIL can be received
-            if (g_listenHUD) { llListenRemove(g_listenHUD); g_listenHUD = 0; }
+            if (g_listenHUD)      { llListenRemove(g_listenHUD);      g_listenHUD      = 0; }
             g_listenHUD = llListen(g_hudChannel, "", NULL_KEY, "");
+
             llSetTimerEvent(0.0);
             updateHoverText();
+
             // Request flower inventory
             llRegionSayTo(g_ownerKey, g_hudChannel,
                 "TC_INVENTORY_REQUEST|flower_raw|" + (string)llGetKey());
         }
 
-        // HUD sends flower inventory
+        // ---- HUD sends inventory data ----
         else if (channel == g_hudChannel && cmd == "TC_INVENTORY_DATA")
         {
             parseFlowerInventory(llList2String(parts, 1));
-            showTypeMenu();
+            showFlowerMenu();
         }
 
-        // HUD confirms flower removed
+        // ---- HUD confirmed flower removal ----
         else if (channel == g_hudChannel && cmd == "TC_REMOVE_OK")
         {
             llSetTimerEvent(0.0);
             finishCraft();
         }
 
-        // HUD says not enough flower
+        // ---- HUD refused removal (not enough flower) ----
         else if (channel == g_hudChannel && cmd == "TC_REMOVE_FAIL")
         {
             llSetTimerEvent(0.0);
             g_busy = FALSE;
-            llRegionSayTo(g_ownerKey, 0, "Not enough flower. Check your inventory.");
+            llRegionSayTo(g_ownerKey, 0,
+                "Not enough flower. Check your inventory and try again.");
             resetTransaction();
         }
 
-        // TYPE SELECTION
-        else if (channel == DCHAN_TYPE && id == g_ownerKey)
-        {
-            llSetTimerEvent(0.0);
-            if (msg == "Cancel") { g_busy = FALSE; return; }
-            g_selectedType  = msg;
-            integer typeIdx = llListFindList(ITEM_TYPES, [msg]);
-            g_costPerItem   = llList2Integer(ITEM_COSTS, typeIdx);
-            showStrainMenu();
-        }
-
-        // STRAIN SELECTION
+        // ---- Strain selection ----
         else if (channel == DCHAN_STRAIN && id == g_ownerKey)
         {
             llSetTimerEvent(0.0);
-            if (msg == "Cancel") { g_busy = FALSE; return; }
-            if (msg == "Back")   { showTypeMenu(); return; }
+            if (msg == "Cancel") { g_busy = FALSE; resetTransaction(); return; }
 
             integer i;
             for (i = 0; i < llGetListLength(g_availableFlower); i += FLOWER_STRIDE)
@@ -507,52 +495,94 @@ default
                 string strain = llList2String(g_availableFlower, i);
                 if (llGetSubString(strain, 0, 10) == msg)
                 {
-                    g_selectedStrain    = strain;
-                    g_selectedQuality   = llList2String(g_availableFlower, i + 1);
-                    g_selectedFlowerQty = (integer)llList2String(g_availableFlower, i + 2);
-                    g_selectedPackager  = llList2String(g_availableFlower, i + 3);
-                    jump found;
+                    g_selectedStrain   = strain;
+                    g_selectedQuality  = llList2String(g_availableFlower, i + 1);
+                    g_selectedQty      = (integer)llList2String(g_availableFlower, i + 2);
+                    g_selectedPackager = llList2String(g_availableFlower, i + 3);
+                    jump found_strain;
                 }
             }
-            llRegionSayTo(g_ownerKey, 0, "Couldn't match that strain. Try again.");
-            showStrainMenu();
+            llRegionSayTo(g_ownerKey, 0, "Couldn't match that strain. Please try again.");
+            showFlowerMenu();
             return;
-            @found;
-            showBatchMenu();
+            @found_strain;
+            showRollTypeMenu();
         }
 
-        // BATCH SELECTION
-        else if (channel == DCHAN_BATCH && id == g_ownerKey)
-        {
-            llSetTimerEvent(0.0);
-            if (msg == "Cancel") { g_busy = FALSE; return; }
-            if (msg == "Back")   { showStrainMenu(); return; }
-
-            // Strip " (max)" suffix if present
-            string numStr = msg;
-            integer spaceIdx = llSubStringIndex(msg, " ");
-            if (spaceIdx != -1) numStr = llGetSubString(msg, 0, spaceIdx - 1);
-
-            g_batchCount = (integer)numStr;
-            g_totalCost  = g_batchCount * g_costPerItem;
-
-            if (g_totalCost > g_selectedFlowerQty)
-            {
-                llRegionSayTo(g_ownerKey, 0,
-                    "Not enough flower for " + (string)g_batchCount +
-                    ". Max: " + (string)(g_selectedFlowerQty / g_costPerItem));
-                showBatchMenu();
-                return;
-            }
-            showConfirm();
-        }
-
-        // CONFIRM
-        else if (channel == DCHAN_CONFIRM && id == g_ownerKey)
+        // ---- Roll type selection ----
+        else if (channel == DCHAN_ROLLTYPE && id == g_ownerKey)
         {
             llSetTimerEvent(0.0);
             if (msg == "Cancel") { g_busy = FALSE; resetTransaction(); return; }
-            if (msg == "Roll It!") executeCraft();
+            if (msg == "Back")   { showFlowerMenu(); return; }
+
+            // Button labels are "Joint (1g)", "Blunt (2g)", "Spliff (1g)"
+            // Extract the type name before the space
+            string typePart = llToLower(llList2String(
+                llParseString2List(msg, [" "], []), 0));
+
+            if (typePart == "joint")
+            {
+                g_selectedRollType = "joint";
+                g_rollCost         = 1;
+            }
+            else if (typePart == "blunt")
+            {
+                g_selectedRollType = "blunt";
+                g_rollCost         = 2;
+            }
+            else if (typePart == "spliff")
+            {
+                g_selectedRollType = "spliff";
+                g_rollCost         = 1;
+            }
+            else
+            {
+                llRegionSayTo(g_ownerKey, 0, "Unknown roll type. Please try again.");
+                showRollTypeMenu();
+                return;
+            }
+            showQuantityMenu();
+        }
+
+        // ---- Quantity selection ----
+        else if (channel == DCHAN_QTY && id == g_ownerKey)
+        {
+            llSetTimerEvent(0.0);
+            if (msg == "Cancel") { g_busy = FALSE; resetTransaction(); return; }
+
+            g_selectedCount = (integer)msg;
+            if (g_selectedCount <= 0)
+            {
+                llRegionSayTo(g_ownerKey, 0, "Invalid quantity. Please try again.");
+                showQuantityMenu();
+                return;
+            }
+
+            g_totalCost = g_selectedCount * g_rollCost;
+            if (g_totalCost > g_selectedQty)
+            {
+                llRegionSayTo(g_ownerKey, 0,
+                    "Not enough flower for " + (string)g_selectedCount +
+                    ". Max: " + (string)(g_selectedQty / g_rollCost) + ".");
+                showQuantityMenu();
+                return;
+            }
+            showConfirmMenu();
+        }
+
+        // ---- Confirmation ----
+        else if (channel == DCHAN_CONFIRM && id == g_ownerKey)
+        {
+            llSetTimerEvent(0.0);
+            if (msg == "Cancel")
+            {
+                g_busy = FALSE;
+                resetTransaction();
+                return;
+            }
+            if (msg == "Roll It!")
+                sendRemoveRequest();
         }
     }
 }
