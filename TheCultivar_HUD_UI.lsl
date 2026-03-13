@@ -115,9 +115,6 @@ integer ITEM_STRIDE = 5;
 // ---- Session object waiting for spark selection ----
 key     g_pendingSessionObjKey = NULL_KEY;
 
-// ---- Stored private HUD channel (written by Comms on startup) ----
-integer g_privateChannel = 0;
-
 
 // ================================================================
 //  UTILITY
@@ -562,7 +559,6 @@ default
         if (g_flowContext != "none") g_flowContext = "none";
     }
 
-
     // ----------------------------------------------------------------
     // TOUCH  -  route each named button
     // ----------------------------------------------------------------
@@ -977,18 +973,6 @@ default
                     llOwnerSay("Cypher mode OFF  -  back to free flow.");
             }
 
-            // XP level-up announcement from Identity script
-            else if (cmd == "XP_LEVEL_UP")
-            {
-                // Already shown as llOwnerSay in Identity  -  nothing extra needed here
-            }
-
-            // Achievement unlocked  -  Identity script already shows it via llOwnerSay;
-            // title will update on next IDENTITY_DATA broadcast. Nothing extra needed.
-            else if (cmd == "ACHIEVEMENT_UNLOCKED")
-            {
-                // aLabel is parts[2]; announcements handled by HUD_Identity llOwnerSay
-            }
         }
 
         // ---- RAW_INVENTORY data coming back via CHAN_COMMS ----
