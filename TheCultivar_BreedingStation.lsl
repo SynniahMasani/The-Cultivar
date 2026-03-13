@@ -1,473 +1,786 @@
-// ================================================================
-// THE CULTIVAR  -  Breeding Station Script
-// Version: 1.0
-// Handles: Strain hybridization  -  combines two parent strains to
-//          create a new hybrid seed with grow bonuses.
+// ============================================================
+// TheCultivar_BreedingStation.lsl
+// Version 1.0
+// The Cultivar — Cannabis Roleplay Game
 //
-// HOW IT WORKS:
-//   Owner touches the station -> sees parent selection menus
-//   -> picks Parent A and Parent B (must be different)
-//   -> station consumes 1 of each seed from HUD inventory
-//   -> creates 3 hybrid seeds with name "ParentA x ParentB"
-//   -> if both parents are exotic: marks hybrid [LEGENDARY]
-//   -> grants 3 grower XP for each successful breed
+// World object allowing players to cross two seed strains from
+// their HUD inventory into a new hybrid. Inherits averaged
+// parent genetics with a 5% mutation chance. Exotic x Exotic
+// crosses with high post-mutation potency yield Legendary
+// phenotypes, announced region-wide.
 //
-// HYBRID BONUSES (detected by Plant_Grow_v1.1.lsl):
-//   Standard hybrid (contains " x "):
-//     Quality baseline = Loud (tier 2), +10% yield, -8% grow time
-//   Legendary hybrid (both exotic parents, suffix [LEGENDARY]):
-//     Quality baseline = Exotic (tier 3), +20% yield, -15% grow time
+// Hybrid names detected by Plant_Grow via " x " substring.
+// Legendary names detected via "[LEGENDARY]" substring.
+// Seeds go to HUD via TC_ADD_ITEM — no physical delivery.
 //
-// SEED INVENTORY:
-//   Reads HUD inventory via TC_REQUEST_INVENTORY / TC_INVENTORY_DATA
-//   Consumes seeds via TC_CONSUME_ITEM
-//   Adds hybrid seeds via TC_ADD_ITEM on harvest result protocol
-//
-// HUD REGISTRATION:
-//   Listens for TC_REGISTER response on channel 0, then stores
-//   the owner's HUD private channel for direct communication.
-// ================================================================
+// Communication pattern matches BaggingTable / RollingTable:
+//   1. Touch -> pingHUD() broadcasts TC_PING on world channel
+//   2. HUD_Comms replies TC_REGISTER on random reply channel
+//   3. Station requests TC_INVENTORY_REQUEST|seed_raw
+//   4. HUD replies TC_INVENTORY_DATA|rawSeeds
+//   5. Player selects Parent 1, Parent 2, confirms
+//   6. TC_REMOVE_ITEM x2 (sequential, wait for TC_REMOVE_OK)
+//   7. calculateHybrid() -> TC_ADD_ITEM to HUD
+// ============================================================
 
 integer TC_OBJECT_PING_CHAN = -111222333;
 
-// Dialog channels
-integer DCHAN_BREED_MAIN   = -202001;
-integer DCHAN_PARENT_A     = -202002;
-integer DCHAN_PARENT_B     = -202003;
-integer DCHAN_BREED_CONFIRM = -202004;
+integer DCHAN_PARENT1 = -88001;
+integer DCHAN_PARENT2 = -88002;
+integer DCHAN_CONFIRM = -88003;
+integer DCHAN_NAME    = -88004;
 
-integer g_listenMain;
-integer g_listenParentA;
-integer g_listenParentB;
-integer g_listenConfirm;
+integer SEED_STRIDE = 4;
+integer GENE_STRIDE = 5;
+
+// Stride-5 gene table: strainName, potency, yieldMod*100, speedMod*100, rarity
+list STRAIN_GENES = [
+    "Schwag",              10,  80, 100,  1,
+    "Ditch Weed",          12,  70, 100,  1,
+    "Brown Frown",         11,  70, 100,  1,
+    "Blue Dream",          35, 100, 100,  3,
+    "Green Crack",         38, 105, 110,  3,
+    "Gorilla Glue",        40, 100,  95,  3,
+    "Sour Diesel",         42, 105, 105,  4,
+    "OG Kush",             65, 110, 100,  6,
+    "Wedding Cake",        68, 115, 100,  6,
+    "Zkittlez",            64, 110, 105,  6,
+    "Gelato",              70, 115,  95,  7,
+    "Runtz",               85, 120, 100,  8,
+    "Biscotti",            88, 125,  95,  9,
+    "Jealousy",            84, 120, 100,  8,
+    "Lemon Cherry Gelato", 92, 130,  90, 10
+];
+
+// ── Global state ─────────────────────────────────────────
+key     g_ownerKey;
+string  g_ownerName;
+string  g_brandName;
+integer g_hudChannel;
+integer g_registered;
+integer g_busy;
+
+// Stride-4 seed list parsed from HUD: strainName, quality, qty, packager
+list    g_availableSeeds;
+
+// Current transaction
+string  g_parent1Name;
+string  g_parent1Quality;
+string  g_parent1Packager;
+string  g_parent2Name;
+string  g_parent2Quality;
+string  g_parent2Packager;
+integer g_removeStep;
+string  g_hybridName;
+integer g_isLegendary;
+integer g_isMutation;
+
+// Calculated child genes (stored for reference)
+integer g_childPotency;
+integer g_childYieldMod;
+integer g_childSpeedMod;
+integer g_childRarity;
+
+// Listeners
+integer g_registerChannel;
 integer g_listenRegister;
+integer g_listenParent1;
+integer g_listenParent2;
+integer g_listenConfirm;
+integer g_listenName;
 integer g_listenHUD;
 
-key     g_ownerKey    = NULL_KEY;
-string  g_ownerName   = "";
-integer g_hudChannel  = 0;
-integer g_registered  = FALSE;
-
-// Pending breed selections
-string  g_parentAName    = "";
-integer g_parentAQuality = 0; // quality tier (0-3)
-string  g_parentBName    = "";
-integer g_parentBQuality = 0;
-
-// Available seeds from HUD inventory  -  populated on breed start
-// Format: [strainName, qualityTier, ...]  (stride 2)
-list    g_availableSeeds;
-integer SEED_STRIDE = 2;
-
-// Known exotic strains for quality tier detection
-list EXOTIC_STRAINS = ["Runtz", "Biscotti", "Jealousy", "Lemon Cherry Gelato"];
-list LOUD_STRAINS   = ["OG Kush", "Wedding Cake", "Zkittlez", "Gelato"];
-list MIDS_STRAINS   = ["Blue Dream", "Green Crack", "Gorilla Glue", "Sour Diesel"];
-
-// ----------------------------------------------------------------
-// Derive HUD channel from UUID
-// ----------------------------------------------------------------
-integer deriveHUDChannel(key ownerID)
-{
-    string h = llGetSubString((string)ownerID, 0, 6);
-    h = llDumpList2String(llParseString2List(h, ["-"], []), "");
-    return (integer)("0x" + h) * -1;
-}
-
-// ----------------------------------------------------------------
-// Ping HUD for registration
-// ----------------------------------------------------------------
-pingHUD()
-{
-    g_registered = FALSE;
-    if (g_listenRegister) llListenRemove(g_listenRegister);
-    g_listenRegister = llListen(0, "", NULL_KEY, "");
-    llRegionSay(TC_OBJECT_PING_CHAN,
-        "TC_PING|" + (string)llGetKey() + "|breed_station");
-    llSetTimerEvent(8.0);
-}
-
-// ----------------------------------------------------------------
-// Close all open dialog listens
-// ----------------------------------------------------------------
+// ─────────────────────────────────────────────────────────
+// Helper: close all active listeners
+// ─────────────────────────────────────────────────────────
 closeAllListens()
 {
-    if (g_listenMain)     { llListenRemove(g_listenMain);     g_listenMain    = 0; }
-    if (g_listenParentA)  { llListenRemove(g_listenParentA);  g_listenParentA = 0; }
-    if (g_listenParentB)  { llListenRemove(g_listenParentB);  g_listenParentB = 0; }
-    if (g_listenConfirm)  { llListenRemove(g_listenConfirm);  g_listenConfirm = 0; }
     if (g_listenRegister) { llListenRemove(g_listenRegister); g_listenRegister = 0; }
+    if (g_listenParent1)  { llListenRemove(g_listenParent1);  g_listenParent1  = 0; }
+    if (g_listenParent2)  { llListenRemove(g_listenParent2);  g_listenParent2  = 0; }
+    if (g_listenConfirm)  { llListenRemove(g_listenConfirm);  g_listenConfirm  = 0; }
+    if (g_listenName)     { llListenRemove(g_listenName);      g_listenName     = 0; }
+    if (g_listenHUD)      { llListenRemove(g_listenHUD);       g_listenHUD      = 0; }
+    g_registerChannel = 0;
 }
 
-// ----------------------------------------------------------------
-// Detect quality tier from strain name
-// ----------------------------------------------------------------
-integer qualityTierOf(string strain)
+// ─────────────────────────────────────────────────────────
+// Helper: reset per-transaction state
+// ─────────────────────────────────────────────────────────
+resetTransaction()
 {
-    if (llListFindList(EXOTIC_STRAINS, [strain]) != -1) return 3;
-    if (llListFindList(LOUD_STRAINS,   [strain]) != -1) return 2;
-    if (llListFindList(MIDS_STRAINS,   [strain]) != -1) return 1;
-    // Hybrid strains  -  extract from [LEGENDARY] suffix or default to loud
-    if (llSubStringIndex(strain, "[LEGENDARY]") != -1) return 3;
-    if (llSubStringIndex(strain, " x ") != -1) return 2;
-    return 0; // reggie fallback
+    g_parent1Name     = "";
+    g_parent1Quality  = "";
+    g_parent1Packager = "";
+    g_parent2Name     = "";
+    g_parent2Quality  = "";
+    g_parent2Packager = "";
+    g_removeStep      = 0;
+    g_hybridName      = "";
+    g_isLegendary     = FALSE;
+    g_isMutation      = FALSE;
+    g_childPotency    = 0;
+    g_childYieldMod   = 0;
+    g_childSpeedMod   = 0;
+    g_childRarity     = 0;
+    g_busy            = FALSE;
 }
 
-// ----------------------------------------------------------------
-// Build available seeds list from raw inventory data
-// Only includes seed_raw items (and seed_hybrid)
-// ----------------------------------------------------------------
-parseSeeds(string rawData)
+// ─────────────────────────────────────────────────────────
+// Helper: quality display tag
+// ─────────────────────────────────────────────────────────
+string getQualityLabel(string quality)
+{
+    if (quality == "reggie") return "[R]";
+    if (quality == "mids")   return "[M]";
+    if (quality == "loud")   return "[L]";
+    if (quality == "exotic") return "[E]";
+    return "[?]";
+}
+
+// ─────────────────────────────────────────────────────────
+// Helper: look up strain genes by name
+// Returns [potency, yieldMod*100, speedMod*100, rarity]
+// Falls back to mid-tier defaults for unknown / hybrid strains
+// ─────────────────────────────────────────────────────────
+list getStrainGenes(string strainName)
+{
+    integer count = llGetListLength(STRAIN_GENES);
+    integer i;
+    for (i = 0; i < count; i += GENE_STRIDE)
+    {
+        if (llList2String(STRAIN_GENES, i) == strainName)
+        {
+            return [
+                llList2Integer(STRAIN_GENES, i + 1),
+                llList2Integer(STRAIN_GENES, i + 2),
+                llList2Integer(STRAIN_GENES, i + 3),
+                llList2Integer(STRAIN_GENES, i + 4)
+            ];
+        }
+    }
+    return [50, 100, 100, 5];
+}
+
+// ─────────────────────────────────────────────────────────
+// Helper: broadcast TC_PING and open registration listener
+// ─────────────────────────────────────────────────────────
+pingHUD()
+{
+    g_registerChannel = (integer)((llFrand(1000000.0) + 1000000.0) * -1.0);
+    if (g_listenRegister) llListenRemove(g_listenRegister);
+    g_listenRegister = llListen(g_registerChannel, "", NULL_KEY, "");
+    llRegionSay(TC_OBJECT_PING_CHAN,
+        "TC_PING|" + (string)llGetKey() + "|breeding_station|" +
+        (string)g_registerChannel);
+    llSetTimerEvent(10.0);
+}
+
+// ─────────────────────────────────────────────────────────
+// Helper: fill g_availableSeeds from TC_INVENTORY_DATA string
+// Keeps only seed_raw items; stride 4: name, quality, qty, packager
+// ─────────────────────────────────────────────────────────
+parseInventoryData(string raw)
 {
     g_availableSeeds = [];
-    if (rawData == "" || rawData == "EMPTY") return;
-    list slots = llParseString2List(rawData, ["^"], []);
+    list slots = llParseString2List(raw, ["^"], []);
+    integer count = llGetListLength(slots);
     integer i;
-    for (i = 0; i < llGetListLength(slots); i++)
+    for (i = 0; i < count; i++)
     {
-        list f = llParseString2List(llList2String(slots, i), ["~"], []);
-        if (llGetListLength(f) < 5) jump skip_seed;
-        string iType = llList2String(f, 0);
-        if (iType == "seed_raw" || iType == "seed_hybrid")
+        list fields = llParseString2List(llList2String(slots, i), ["~"], []);
+        if (llGetListLength(fields) >= 5)
         {
-            string  strain = llList2String(f, 1);
-            integer qty    = (integer)llList2String(f, 3);
-            // Need at least 1 to use as parent
-            if (qty < 1) jump skip_seed;
-            // Skip duplicates
-            if (llListFindList(g_availableSeeds, [strain]) == -1)
-                g_availableSeeds += [strain, qualityTierOf(strain)];
+            string itemType   = llList2String(fields, 0);
+            string strainName = llList2String(fields, 1);
+            string quality    = llList2String(fields, 2);
+            integer qty       = (integer)llList2String(fields, 3);
+            string packager   = llList2String(fields, 4);
+            if (itemType == "seed_raw")
+                g_availableSeeds += [strainName, quality, qty, packager];
         }
-        @skip_seed;
     }
 }
 
-// ----------------------------------------------------------------
-// MAIN BREED MENU
-// ----------------------------------------------------------------
-showBreedMenu()
+// ─────────────────────────────────────────────────────────
+// Helper: list of unique strain names in g_availableSeeds
+// ─────────────────────────────────────────────────────────
+list getUniqueStrains()
 {
-    closeAllListens();
-    integer seedCount = llGetListLength(g_availableSeeds) / SEED_STRIDE;
-    g_listenMain = llListen(DCHAN_BREED_MAIN, "", g_ownerKey, "");
-    llDialog(g_ownerKey,
-        "=== BREEDING STATION ===\n" +
-        "Available strains: " + (string)seedCount + "\n\n" +
-        "Combine two strains to create a hybrid seed.\n" +
-        "Exotic x Exotic = Legendary hybrid!\n" +
-        "Costs: 1 seed of each parent.",
-        ["Breed", "Close"],
-        DCHAN_BREED_MAIN);
-    llSetTimerEvent(30.0);
+    list unique = [];
+    integer count = llGetListLength(g_availableSeeds);
+    integer i;
+    for (i = 0; i < count; i += SEED_STRIDE)
+    {
+        string name = llList2String(g_availableSeeds, i);
+        if (llListFindList(unique, (list)name) == -1)
+            unique += [name];
+    }
+    return unique;
 }
 
-// ----------------------------------------------------------------
-// PARENT A SELECTION
-// ----------------------------------------------------------------
-showParentAMenu()
+// ─────────────────────────────────────────────────────────
+// Helper: quality string for first seed entry of a strain
+// ─────────────────────────────────────────────────────────
+string getSeedQuality(string strainName)
 {
-    closeAllListens();
-    integer count = llGetListLength(g_availableSeeds) / SEED_STRIDE;
-    if (count == 0)
+    integer count = llGetListLength(g_availableSeeds);
+    integer i;
+    for (i = 0; i < count; i += SEED_STRIDE)
+    {
+        if (llList2String(g_availableSeeds, i) == strainName)
+            return llList2String(g_availableSeeds, i + 1);
+    }
+    return "mids";
+}
+
+// ─────────────────────────────────────────────────────────
+// Helper: total quantity across all entries for a strain
+// ─────────────────────────────────────────────────────────
+integer getSeedQty(string strainName)
+{
+    integer count = llGetListLength(g_availableSeeds);
+    integer i;
+    integer total = 0;
+    for (i = 0; i < count; i += SEED_STRIDE)
+    {
+        if (llList2String(g_availableSeeds, i) == strainName)
+            total += llList2Integer(g_availableSeeds, i + 2);
+    }
+    return total;
+}
+
+// ─────────────────────────────────────────────────────────
+// Helper: packager for first matching seed entry
+// ─────────────────────────────────────────────────────────
+string getSeedPackager(string strainName)
+{
+    integer count = llGetListLength(g_availableSeeds);
+    integer i;
+    for (i = 0; i < count; i += SEED_STRIDE)
+    {
+        if (llList2String(g_availableSeeds, i) == strainName)
+            return llList2String(g_availableSeeds, i + 3);
+    }
+    return "";
+}
+
+// ─────────────────────────────────────────────────────────
+// Helper: resolve full strain name from 11-char dialog button
+// Skips excludeName (pass "" to skip nothing)
+// ─────────────────────────────────────────────────────────
+string resolveStrainName(string btnText, string excludeName)
+{
+    list unique = getUniqueStrains();
+    integer count = llGetListLength(unique);
+    integer i;
+    for (i = 0; i < count; i++)
+    {
+        string name = llList2String(unique, i);
+        if (name != excludeName)
+        {
+            if (llGetSubString(name, 0, 10) == btnText)
+                return name;
+        }
+    }
+    return btnText;
+}
+
+// ─────────────────────────────────────────────────────────
+// Menu: Parent 1 selection
+// ─────────────────────────────────────────────────────────
+showParent1Menu()
+{
+    if (g_listenParent1) llListenRemove(g_listenParent1);
+    g_listenParent1 = llListen(DCHAN_PARENT1, "", g_ownerKey, "");
+
+    list unique = getUniqueStrains();
+    integer count = llGetListLength(unique);
+
+    if (count < 2)
     {
         llRegionSayTo(g_ownerKey, 0,
-            "No seeds in your inventory to breed with.");
+            "You need at least 2 different strains to breed. Grow more plants first.");
+        g_busy = FALSE;
         return;
     }
 
-    list   buttons;
-    string menuText = "=== SELECT PARENT A ===\nChoose the first strain:\n\n";
-    list qualNames = ["Reggie", "Mids", "Loud", "Exotic"];
+    string msg = "=== BREEDING STATION ===\nSelect Parent 1:\n(This seed will be consumed)\n";
+    list buttons = [];
+    integer shown = 0;
     integer i;
-    for (i = 0; i < count && llGetListLength(buttons) < 9; i++)
+    for (i = 0; i < count && shown < 9; i++)
     {
-        string  strain  = llList2String(g_availableSeeds, i * SEED_STRIDE);
-        integer tier    = llList2Integer(g_availableSeeds, i * SEED_STRIDE + 1);
-        string  qLabel  = llList2String(qualNames, tier);
-        buttons  += [llGetSubString(strain, 0, 11)];
-        menuText += "[" + qLabel + "] " + strain + "\n";
+        string name = llList2String(unique, i);
+        string qual = getSeedQuality(name);
+        integer qty = getSeedQty(name);
+        msg += getQualityLabel(qual) + " " + name + " — " + (string)qty + " available\n";
+        buttons += [llGetSubString(name, 0, 10)];
+        shown++;
     }
-    buttons += ["Back"];
-    g_listenParentA = llListen(DCHAN_PARENT_A, "", g_ownerKey, "");
-    llDialog(g_ownerKey, menuText, buttons, DCHAN_PARENT_A);
+    buttons += ["Cancel"];
+
+    if (llStringLength(msg) > 480)
+        msg = llGetSubString(msg, 0, 479);
+
     llSetTimerEvent(30.0);
+    llDialog(g_ownerKey, msg, buttons, DCHAN_PARENT1);
 }
 
-// ----------------------------------------------------------------
-// PARENT B SELECTION
-// ----------------------------------------------------------------
-showParentBMenu()
+// ─────────────────────────────────────────────────────────
+// Menu: Parent 2 selection (excludes parent 1)
+// ─────────────────────────────────────────────────────────
+showParent2Menu()
 {
-    closeAllListens();
-    integer count = llGetListLength(g_availableSeeds) / SEED_STRIDE;
+    if (g_listenParent2) llListenRemove(g_listenParent2);
+    g_listenParent2 = llListen(DCHAN_PARENT2, "", g_ownerKey, "");
 
-    list   buttons;
-    string menuText = "=== SELECT PARENT B ===\nChoose the second strain:\n" +
-                      "Parent A: " + g_parentAName + "\n\n";
-    list qualNames = ["Reggie", "Mids", "Loud", "Exotic"];
+    list unique = getUniqueStrains();
+    integer count = llGetListLength(unique);
+
+    string msg = "=== BREEDING STATION ===\nParent 1: " + g_parent1Name +
+                 "\nSelect Parent 2:\n(This seed will also be consumed)\n";
+    list buttons = [];
+    integer shown = 0;
     integer i;
-    for (i = 0; i < count && llGetListLength(buttons) < 9; i++)
+    for (i = 0; i < count && shown < 9; i++)
     {
-        string  strain = llList2String(g_availableSeeds, i * SEED_STRIDE);
-        integer tier   = llList2Integer(g_availableSeeds, i * SEED_STRIDE + 1);
-        if (strain == g_parentAName) jump skip_a; // can't breed with itself
-        string qLabel  = llList2String(qualNames, tier);
-        buttons  += [llGetSubString(strain, 0, 11)];
-        menuText += "[" + qLabel + "] " + strain + "\n";
-        @skip_a;
+        string name = llList2String(unique, i);
+        if (name != g_parent1Name)
+        {
+            string qual = getSeedQuality(name);
+            integer qty = getSeedQty(name);
+            msg += getQualityLabel(qual) + " " + name + " — " + (string)qty + " available\n";
+            buttons += [llGetSubString(name, 0, 10)];
+            shown++;
+        }
     }
-    if (llGetListLength(buttons) == 0)
-    {
-        llRegionSayTo(g_ownerKey, 0,
-            "Need at least two different strains to breed.");
-        showParentAMenu();
-        return;
-    }
-    buttons += ["Back"];
-    g_listenParentB = llListen(DCHAN_PARENT_B, "", g_ownerKey, "");
-    llDialog(g_ownerKey, menuText, buttons, DCHAN_PARENT_B);
+    buttons += ["Cancel"];
+
+    if (llStringLength(msg) > 480)
+        msg = llGetSubString(msg, 0, 479);
+
     llSetTimerEvent(30.0);
+    llDialog(g_ownerKey, msg, buttons, DCHAN_PARENT2);
 }
 
-// ----------------------------------------------------------------
-// BREED CONFIRM
-// ----------------------------------------------------------------
-showBreedConfirm()
+// ─────────────────────────────────────────────────────────
+// Menu: Breeding confirmation
+// ─────────────────────────────────────────────────────────
+showBreedConfirmMenu()
 {
-    closeAllListens();
-    integer isLegendary = (g_parentAQuality == 3 && g_parentBQuality == 3);
-    string hybridName   = g_parentAName + " x " + g_parentBName;
-    if (isLegendary) hybridName += " [LEGENDARY]";
-    string tierHint = "Loud baseline, +10% yield, -8% grow time";
-    if (isLegendary) tierHint = "Exotic baseline, +20% yield, -15% grow time  -  LEGENDARY!";
+    if (g_listenConfirm) llListenRemove(g_listenConfirm);
+    g_listenConfirm = llListen(DCHAN_CONFIRM, "", g_ownerKey, "");
 
-    g_listenConfirm = llListen(DCHAN_BREED_CONFIRM, "", g_ownerKey, "");
-    llDialog(g_ownerKey,
-        "=== CONFIRM BREED ===\n" +
-        "Parent A: " + g_parentAName + "\n" +
-        "Parent B: " + g_parentBName + "\n\n" +
-        "Hybrid: " + hybridName + "\n" +
-        tierHint + "\n\n" +
-        "Costs 1 seed of each parent.\n" +
-        "Yields 3 hybrid seeds.",
-        ["Breed!", "Cancel"],
-        DCHAN_BREED_CONFIRM);
+    string q1 = getQualityLabel(g_parent1Quality);
+    string q2 = getQualityLabel(g_parent2Quality);
+
+    string msg = "=== CONFIRM BREEDING ===\n" +
+                 "Parent 1: " + q1 + " " + g_parent1Name + "\n" +
+                 "Parent 2: " + q2 + " " + g_parent2Name + "\n" +
+                 "Result: " + g_parent1Name + " x " + g_parent2Name + " hybrid seed\n" +
+                 "WARNING: Both seeds will be consumed.\n" +
+                 "Success is guaranteed but legendary\n" +
+                 "phenotypes are extremely rare.\n" +
+                 "Proceed?";
+
+    if (llStringLength(msg) > 480)
+        msg = llGetSubString(msg, 0, 479);
+
     llSetTimerEvent(30.0);
+    llDialog(g_ownerKey, msg, ["Breed!", "Cancel"], DCHAN_CONFIRM);
 }
 
-// ----------------------------------------------------------------
-// Perform the actual breed  -  consume parents, create hybrid
-// ----------------------------------------------------------------
-performBreed()
+// ─────────────────────────────────────────────────────────
+// Send TC_REMOVE_ITEM for parent 1 seed
+// ─────────────────────────────────────────────────────────
+removeParent1()
 {
-    integer isLegendary = (g_parentAQuality == 3 && g_parentBQuality == 3);
-    string hybridName   = g_parentAName + " x " + g_parentBName;
-    if (isLegendary) hybridName += " [LEGENDARY]";
-
-    // Consume 1 seed of each parent from HUD inventory
+    g_removeStep = 1;
     llRegionSayTo(g_ownerKey, g_hudChannel,
-        "TC_CONSUME_ITEM|seed_raw|" + g_parentAName + "|1");
+        "TC_REMOVE_ITEM|seed_raw|" + g_parent1Name + "|" +
+        g_parent1Quality + "|1|" + g_parent1Packager);
+    llSetTimerEvent(15.0);
+}
+
+// ─────────────────────────────────────────────────────────
+// Send TC_REMOVE_ITEM for parent 2 seed
+// ─────────────────────────────────────────────────────────
+removeParent2()
+{
+    g_removeStep = 2;
     llRegionSayTo(g_ownerKey, g_hudChannel,
-        "TC_CONSUME_ITEM|seed_raw|" + g_parentBName + "|1");
+        "TC_REMOVE_ITEM|seed_raw|" + g_parent2Name + "|" +
+        g_parent2Quality + "|1|" + g_parent2Packager);
+}
 
-    // Add 3 hybrid seeds to HUD inventory
-    string hybridQuality = "loud";
-    if (isLegendary) hybridQuality = "exotic";
+// ─────────────────────────────────────────────────────────
+// Calculate hybrid genetics, mutation, and legendary check
+// Sets g_hybridName, g_isLegendary, g_isMutation, child genes
+// ─────────────────────────────────────────────────────────
+calculateHybrid()
+{
+    list genes1 = getStrainGenes(g_parent1Name);
+    list genes2 = getStrainGenes(g_parent2Name);
+
+    integer p1Potency = llList2Integer(genes1, 0);
+    integer p1Yield   = llList2Integer(genes1, 1);
+    integer p1Speed   = llList2Integer(genes1, 2);
+    integer p1Rarity  = llList2Integer(genes1, 3);
+
+    integer p2Potency = llList2Integer(genes2, 0);
+    integer p2Yield   = llList2Integer(genes2, 1);
+    integer p2Speed   = llList2Integer(genes2, 2);
+    integer p2Rarity  = llList2Integer(genes2, 3);
+
+    g_childPotency  = (p1Potency + p2Potency) / 2;
+    g_childYieldMod = (p1Yield   + p2Yield)   / 2;
+    g_childSpeedMod = (p1Speed   + p2Speed)   / 2;
+    g_childRarity   = (p1Rarity  + p2Rarity)  / 2;
+
+    g_isMutation = FALSE;
+    if (llFrand(1.0) < 0.05)
+    {
+        g_isMutation = TRUE;
+        integer boost = (integer)(llFrand(20.0)) + 1;
+        if (llFrand(1.0) < 0.5)
+            g_childPotency += boost;
+        else
+            g_childPotency -= boost;
+        if (g_childPotency < 1)   g_childPotency = 1;
+        if (g_childPotency > 100) g_childPotency = 100;
+    }
+
+    g_isLegendary = FALSE;
+    if (g_isMutation &&
+        p1Rarity >= 8 && p2Rarity >= 8 &&
+        g_childPotency >= 90)
+    {
+        g_isLegendary = TRUE;
+    }
+
+    g_hybridName = g_parent1Name + " x " + g_parent2Name;
+}
+
+// ─────────────────────────────────────────────────────────
+// Add the hybrid seed to the HUD, fire particles and announce
+// ─────────────────────────────────────────────────────────
+finalizeBreeding()
+{
+    string seedQuality;
+    if (g_isLegendary)
+        seedQuality = "exotic";
+    else
+        seedQuality = "loud";
+
     llRegionSayTo(g_ownerKey, g_hudChannel,
-        "TC_ADD_ITEM|seed_hybrid|" + hybridName + "|" +
-        hybridQuality + "|3|" + g_ownerName);
+        "TC_ADD_ITEM|seed_raw|" + g_hybridName + "|" +
+        seedQuality + "|1|" + g_brandName);
 
-    // Grant grower XP for breeding (3 XP)
-    llRegionSayTo(g_ownerKey, g_hudChannel,
-        "TC_XP_UPDATE|grower|3");
+    vector burstColor;
+    if (g_isLegendary)
+        burstColor = <0.8, 0.3, 1.0>;
+    else
+        burstColor = <0.4, 0.9, 0.4>;
 
-    // Announce result
-    string msg = "Bred " + g_parentAName + " x " + g_parentBName +
-                 "! You now have 3 hybrid seeds: \"" + hybridName + "\"";
-    if (isLegendary)
-        msg += "\n? LEGENDARY cross! This one has exceptional grow bonuses.";
-    llRegionSayTo(g_ownerKey, 0, msg);
-
-    // Play a particle effect to celebrate
     llParticleSystem([
-        PSYS_PART_FLAGS,    PSYS_PART_EMISSIVE_MASK | PSYS_PART_INTERP_COLOR_MASK,
-        PSYS_SRC_PATTERN,   PSYS_SRC_PATTERN_EXPLODE,
-        PSYS_PART_START_COLOR,  <0.5, 1.0, 0.3>,
-        PSYS_PART_END_COLOR,    <1.0, 1.0, 0.5>,
-        PSYS_PART_START_ALPHA,  0.9,
-        PSYS_PART_END_ALPHA,    0.0,
-        PSYS_PART_START_SCALE,  <0.05, 0.05, 0.0>,
-        PSYS_PART_END_SCALE,    <0.02, 0.02, 0.0>,
-        PSYS_PART_MAX_AGE,      2.0,
-        PSYS_SRC_BURST_RATE,    0.1,
-        PSYS_SRC_BURST_PART_COUNT, 15,
-        PSYS_SRC_MAX_AGE,       1.0
+        PSYS_PART_FLAGS,           PSYS_PART_INTERP_COLOR_MASK | PSYS_PART_EMISSIVE_MASK,
+        PSYS_SRC_PATTERN,          PSYS_SRC_PATTERN_EXPLODE,
+        PSYS_PART_START_COLOR,     burstColor,
+        PSYS_PART_END_COLOR,       <1.0, 1.0, 1.0>,
+        PSYS_PART_START_ALPHA,     1.0,
+        PSYS_PART_END_ALPHA,       0.0,
+        PSYS_PART_START_SCALE,     <0.06, 0.06, 0.0>,
+        PSYS_PART_END_SCALE,       <0.02, 0.02, 0.0>,
+        PSYS_PART_MAX_AGE,         2.5,
+        PSYS_SRC_BURST_RATE,       0.05,
+        PSYS_SRC_BURST_PART_COUNT, 20,
+        PSYS_SRC_MAX_AGE,          0.5
     ]);
-    llSleep(1.5);
-    llParticleSystem([]);
+    llPlaySound("breed_success", 0.8);
+
+    if (g_isLegendary)
+    {
+        llRegionSay(0,
+            "⚡ LEGENDARY PHENOTYPE! " + g_ownerName +
+            " just bred a legendary " + g_hybridName +
+            "! One of a kind — this strain can never be replicated.");
+        llRegionSayTo(g_ownerKey, 0,
+            "🌿 LEGENDARY bred: " + g_hybridName +
+            " — Grows 15% faster, +20% yield. Exotic quality guaranteed.");
+    }
+    else
+    {
+        llRegionSayTo(g_ownerKey, 0,
+            "🌿 Bred: " + g_hybridName +
+            " seed added to your inventory!\nHybrid grows 8% faster with increased yields.");
+    }
+
+    resetTransaction();
+    llSetTimerEvent(3.0);
 }
 
-// ================================================================
+// ─────────────────────────────────────────────────────────
 default
 {
     state_entry()
     {
-        g_ownerKey  = llGetOwner();
-        g_ownerName = llKey2Name(g_ownerKey);
-        g_hudChannel = deriveHUDChannel(g_ownerKey);
-        if (g_listenRegister) llListenRemove(g_listenRegister);
-        g_listenRegister = llListen(0, "", NULL_KEY, "");
-        llSetText("THE CULTIVAR\nBreeding Station\nTouch to breed strains\nOwner: " +
-                  g_ownerName, <0.6, 0.9, 0.4>, 1.0);
+        g_registered      = FALSE;
+        g_busy            = FALSE;
+        g_registerChannel = 0;
+        g_hudChannel      = 0;
+        closeAllListens();
+        resetTransaction();
+        llSetText("THE CULTIVAR\nBreeding Station\nTouch to breed strains",
+            <0.6, 0.4, 0.9>, 1.0);
     }
 
-    on_rez(integer start_param) { llResetScript(); }
+    on_rez(integer start_param)
+    {
+        llResetScript();
+    }
+
     changed(integer change)
     {
-        if (change & CHANGED_OWNER) llResetScript();
+        if (change & CHANGED_OWNER)
+            llResetScript();
     }
 
     timer()
     {
-        closeAllListens();
         llSetTimerEvent(0.0);
-        g_parentAName = "";
-        g_parentBName = "";
-        if (!g_registered)
-            llRegionSayTo(g_ownerKey, 0,
-                "Couldn't reach your HUD. Make sure your Cultivar HUD is worn.");
-    }
 
-    touch_start(integer nd)
-    {
-        key toucher = llDetectedKey(0);
-        if (toucher != g_ownerKey)
+        if (!g_registered)
         {
-            llRegionSayTo(toucher, 0,
-                "This breeding station belongs to " + g_ownerName + ".");
+            closeAllListens();
+            g_busy = FALSE;
+            llRegionSayTo(g_ownerKey, 0,
+                "Couldn't connect to HUD. Make sure your Cultivar HUD is worn.");
             return;
         }
-        pingHUD();
-        llLinksetDataWrite("station_intent", "breed");
+
+        // Clear any particle burst from finalizeBreeding
+        llParticleSystem([]);
+
+        // Dialog or remove timeout — abort transaction
+        if (g_busy)
+        {
+            closeAllListens();
+            resetTransaction();
+        }
     }
 
-    listen(integer channel, string name, key id, string msg)
+    touch_start(integer num)
     {
-        list   parts = llParseString2List(msg, ["|"], []);
-        string cmd   = llList2String(parts, 0);
-
-        // ---- HUD registration ----
-        if (channel == 0 && cmd == "TC_REGISTER")
+        key toucher = llDetectedKey(0);
+        if (toucher != llGetOwner())
         {
-            key regOwner = (key)llList2String(parts, 1);
-            if (regOwner != g_ownerKey) return;
+            llRegionSayTo(toucher, 0,
+                "This breeding station belongs to " + llKey2Name(llGetOwner()) + ".");
+            return;
+        }
+        if (g_busy)
+        {
+            llRegionSayTo(toucher, 0, "Breeding station is busy. Please wait.");
+            return;
+        }
+        g_busy       = TRUE;
+        g_ownerKey   = toucher;
+        g_registered = FALSE;
+        pingHUD();
+    }
 
-            g_hudChannel = (integer)llList2String(parts, 2);
-            g_registered = TRUE;
+    listen(integer channel, string name, key id, string message)
+    {
+        list parts = llParseString2List(message, ["|"], []);
+        string cmd = llList2String(parts, 0);
+
+        // ── HUD registration reply ──────────────────────────
+        if (channel == g_registerChannel && g_registerChannel != 0)
+        {
+            if (cmd != "TC_REGISTER") return;
+
+            llListenRemove(g_listenRegister);
+            g_listenRegister  = 0;
+            g_registerChannel = 0;
             llSetTimerEvent(0.0);
 
-            string intent = llLinksetDataRead("station_intent");
-            llLinksetDataDelete("station_intent");
-            if (intent == "breed")
-            {
-                // Keep g_listenRegister open  -  TC_INVENTORY_DATA arrives on channel 0
-                llRegionSayTo(g_ownerKey, g_hudChannel,
-                    "TC_REQUEST_RAW_INVENTORY|seed_raw");
-                llSetTimerEvent(8.0); // wait for inventory response
-            }
-            else
-            {
-                // No pending intent, no further channel-0 messages expected
-                if (g_listenRegister) { llListenRemove(g_listenRegister); g_listenRegister = 0; }
-            }
+            g_ownerKey   = (key)llList2String(parts, 1);
+            g_hudChannel = (integer)llList2String(parts, 2);
+            g_ownerName  = llList2String(parts, 3);
+            g_brandName  = llList2String(parts, 4);
+            g_registered = TRUE;
+
+            llSetText("THE CULTIVAR\nBreeding Station\nTouch to cross your seeds",
+                <0.7, 0.5, 1.0>, 1.0);
+
+            if (g_listenHUD) llListenRemove(g_listenHUD);
+            g_listenHUD = llListen(g_hudChannel, "", g_ownerKey, "");
+
+            llRegionSayTo(g_ownerKey, g_hudChannel,
+                "TC_INVENTORY_REQUEST|seed_raw|" + (string)llGetKey());
+            llSetTimerEvent(10.0);
+            return;
         }
 
-        // ---- Inventory data response ----
-        else if (channel == 0 && cmd == "TC_INVENTORY_DATA")
+        // ── HUD private channel: inventory + remove responses ─
+        if (channel == g_hudChannel && g_hudChannel != 0)
         {
-            llSetTimerEvent(0.0);
-            if (g_listenRegister) { llListenRemove(g_listenRegister); g_listenRegister = 0; }
-            string rawData = llList2String(parts, 1);
-            parseSeeds(rawData);
-            if (llGetListLength(g_availableSeeds) < 4) // need at least 2 strains
+            if (cmd == "TC_INVENTORY_DATA")
             {
-                llRegionSayTo(g_ownerKey, 0,
-                    "You need at least 2 different seed types in your inventory to breed.");
+                llSetTimerEvent(0.0);
+                parseInventoryData(llList2String(parts, 1));
+
+                list unique = getUniqueStrains();
+                if (llGetListLength(unique) < 2)
+                {
+                    llRegionSayTo(g_ownerKey, 0,
+                        "You need at least 2 different strains to breed. Grow more plants first.");
+                    g_busy = FALSE;
+                    return;
+                }
+                showParent1Menu();
                 return;
             }
-            showBreedMenu();
-        }
 
-        // ---- MAIN BREED MENU ----
-        else if (channel == DCHAN_BREED_MAIN && id == g_ownerKey)
-        {
-            llSetTimerEvent(0.0);
-            if (g_listenMain) { llListenRemove(g_listenMain); g_listenMain = 0; }
-            if (msg == "Breed") showParentAMenu();
-            // "Close"  -  do nothing
-        }
-
-        // ---- PARENT A SELECTION ----
-        else if (channel == DCHAN_PARENT_A && id == g_ownerKey)
-        {
-            llSetTimerEvent(0.0);
-            if (g_listenParentA) { llListenRemove(g_listenParentA); g_listenParentA = 0; }
-            if (msg == "Back") { showBreedMenu(); return; }
-
-            // Resolve truncated name
-            integer count = llGetListLength(g_availableSeeds) / SEED_STRIDE;
-            integer i;
-            for (i = 0; i < count; i++)
+            if (cmd == "TC_REMOVE_OK")
             {
-                string strain = llList2String(g_availableSeeds, i * SEED_STRIDE);
-                if (llGetSubString(strain, 0, 11) == msg)
+                if (g_removeStep == 1)
                 {
-                    g_parentAName    = strain;
-                    g_parentAQuality = llList2Integer(g_availableSeeds, i * SEED_STRIDE + 1);
-                    showParentBMenu();
-                    return;
+                    removeParent2();
                 }
+                else if (g_removeStep == 2)
+                {
+                    g_removeStep = 0;
+                    llSetTimerEvent(0.0);
+                    calculateHybrid();
+
+                    if (g_isLegendary)
+                    {
+                        if (g_listenName) llListenRemove(g_listenName);
+                        g_listenName = llListen(DCHAN_NAME, "", g_ownerKey, "");
+                        llTextBox(g_ownerKey,
+                            "LEGENDARY PHENOTYPE!\n\n" +
+                            "This cross produced a one-of-a-kind legendary strain.\n" +
+                            "Give it a name (max 32 chars).\n" +
+                            "It will be saved as: [YourName] [LEGENDARY]\n\n" +
+                            "Enter your strain name:",
+                            DCHAN_NAME);
+                        llSetTimerEvent(30.0);
+                    }
+                    else
+                    {
+                        finalizeBreeding();
+                    }
+                }
+                return;
             }
-            llRegionSayTo(g_ownerKey, 0, "Strain not found. Try again.");
-            showParentAMenu();
-        }
 
-        // ---- PARENT B SELECTION ----
-        else if (channel == DCHAN_PARENT_B && id == g_ownerKey)
-        {
-            llSetTimerEvent(0.0);
-            if (g_listenParentB) { llListenRemove(g_listenParentB); g_listenParentB = 0; }
-            if (msg == "Back") { showParentAMenu(); return; }
-
-            integer count = llGetListLength(g_availableSeeds) / SEED_STRIDE;
-            integer i;
-            for (i = 0; i < count; i++)
+            if (cmd == "TC_REMOVE_FAIL")
             {
-                string strain = llList2String(g_availableSeeds, i * SEED_STRIDE);
-                if (strain == g_parentAName) jump skip_b;
-                if (llGetSubString(strain, 0, 11) == msg)
+                llSetTimerEvent(0.0);
+                if (g_removeStep == 1)
                 {
-                    g_parentBName    = strain;
-                    g_parentBQuality = llList2Integer(g_availableSeeds, i * SEED_STRIDE + 1);
-                    showBreedConfirm();
-                    return;
+                    llRegionSayTo(g_ownerKey, 0,
+                        "Seed not found in inventory. Try again.");
+                    resetTransaction();
                 }
-                @skip_b;
+                else if (g_removeStep == 2)
+                {
+                    llRegionSayTo(g_ownerKey, 0,
+                        "Could not remove second seed. Parent 1 was already consumed — contact support.");
+                    resetTransaction();
+                }
+                return;
             }
-            llRegionSayTo(g_ownerKey, 0, "Strain not found. Try again.");
-            showParentBMenu();
+            return;
         }
 
-        // ---- BREED CONFIRM ----
-        else if (channel == DCHAN_BREED_CONFIRM && id == g_ownerKey)
+        // ── Parent 1 strain selection ───────────────────────
+        if (channel == DCHAN_PARENT1)
         {
+            llListenRemove(g_listenParent1);
+            g_listenParent1 = 0;
             llSetTimerEvent(0.0);
-            if (g_listenConfirm) { llListenRemove(g_listenConfirm); g_listenConfirm = 0; }
-            if (msg == "Breed!")
-                performBreed();
-            // Reset parents either way
-            g_parentAName = "";
-            g_parentBName = "";
+
+            if (message == "Cancel")
+            {
+                g_busy = FALSE;
+                return;
+            }
+
+            string fullName   = resolveStrainName(message, "");
+            g_parent1Name     = fullName;
+            g_parent1Quality  = getSeedQuality(fullName);
+            g_parent1Packager = getSeedPackager(fullName);
+            showParent2Menu();
+            return;
+        }
+
+        // ── Parent 2 strain selection ───────────────────────
+        if (channel == DCHAN_PARENT2)
+        {
+            llListenRemove(g_listenParent2);
+            g_listenParent2 = 0;
+            llSetTimerEvent(0.0);
+
+            if (message == "Cancel")
+            {
+                g_busy = FALSE;
+                return;
+            }
+
+            string fullName = resolveStrainName(message, g_parent1Name);
+            if (fullName == g_parent1Name)
+            {
+                llRegionSayTo(g_ownerKey, 0,
+                    "Cannot breed a strain with itself. Select two different strains.");
+                showParent1Menu();
+                return;
+            }
+
+            g_parent2Name     = fullName;
+            g_parent2Quality  = getSeedQuality(fullName);
+            g_parent2Packager = getSeedPackager(fullName);
+            showBreedConfirmMenu();
+            return;
+        }
+
+        // ── Breeding confirmation ───────────────────────────
+        if (channel == DCHAN_CONFIRM)
+        {
+            llListenRemove(g_listenConfirm);
+            g_listenConfirm = 0;
+            llSetTimerEvent(0.0);
+
+            if (message == "Cancel")
+            {
+                g_busy = FALSE;
+                return;
+            }
+            if (message == "Breed!")
+                removeParent1();
+            return;
+        }
+
+        // ── Legendary strain naming via llTextBox ───────────
+        if (channel == DCHAN_NAME)
+        {
+            llListenRemove(g_listenName);
+            g_listenName = 0;
+            llSetTimerEvent(0.0);
+
+            string playerName = llStringTrim(message, STRING_TRIM);
+            playerName = llGetSubString(playerName, 0, 31);
+            playerName = llDumpList2String(
+                llParseString2List(playerName, ["|", "~", "^"], []), "");
+
+            if (playerName == "")
+                playerName = g_parent1Name + " x " + g_parent2Name;
+
+            g_hybridName = playerName + " [LEGENDARY]";
+            finalizeBreeding();
+            return;
         }
     }
 }
