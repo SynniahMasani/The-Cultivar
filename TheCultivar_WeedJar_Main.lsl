@@ -557,14 +557,16 @@ default
 
             else if (msg == "Jar Info")
             {
+                string contentsInfo = "Empty";
+                if (g_grams > 0)
+                    contentsInfo = "Strain: " + g_strain + " [" + g_quality + "]\n" +
+                                   "Packed by: " + g_packager;
                 llRegionSayTo(g_ownerKey, 0,
                     "=== JAR INFO ===\n" +
                     "Type: " + g_jarType + "\n" +
                     "Capacity: " + (string)g_capacity + "g\n" +
                     "Contents: " + (string)g_grams + "g\n" +
-                    (g_grams > 0 ?
-                        "Strain: " + g_strain + " [" + g_quality + "]\n" +
-                        "Packed by: " + g_packager : "Empty"));
+                    contentsInfo);
             }
         }
 
