@@ -1,6 +1,6 @@
 // ================================================================
 // THE CULTIVAR  -  Smokeable Object Script
-// Version: 1.0
+// Version: 1.1
 // Lives inside: TC_Smoke_Joint_Reggie, TC_Smoke_Joint_Mids,
 //               TC_Smoke_Joint_Loud, TC_Smoke_Joint_Exotic,
 //               TC_Smoke_Blunt_Reggie, etc.
@@ -27,6 +27,8 @@ integer g_listenChan  = 0;
 integer g_listenAttach;
 key     g_targetAvatar = NULL_KEY;
 integer g_attachDuration = 120;
+string  g_itemType = "joint";
+integer g_smokeDuration = 300;
 string  g_strain  = "";
 string  g_quality = "reggie";
 integer g_attached = FALSE;
@@ -95,9 +97,12 @@ attachToHand()
     g_attached = TRUE;
     startSmokeParticles();
     llPlaySound("smoke_inhale", 0.4);
+    llRegionSayTo(g_targetAvatar, 0,
+        "Lit. " + g_itemType + " will last " +
+        (string)(g_smokeDuration / 60) + " minutes.");
 
     // Start the detach countdown
-    llSetTimerEvent((float)g_attachDuration);
+    llSetTimerEvent((float)g_smokeDuration);
 }
 
 // ================================================================
@@ -141,7 +146,7 @@ default
                 g_attached = TRUE;
                 startSmokeParticles();
                 llPlaySound("smoke_inhale", 0.4);
-                llSetTimerEvent((float)g_attachDuration);
+                llSetTimerEvent((float)g_smokeDuration);
             }
         }
     }
@@ -172,11 +177,20 @@ default
 
         if (cmd == "TC_ATTACH_TO")
         {
-            // TC_ATTACH_TO|smokerKey|duration|strain|quality
+            // TC_ATTACH_TO|smokerKey|duration|strain|quality|itemType
             g_targetAvatar   = (key)llList2String(parts, 1);
             g_attachDuration = (integer)llList2String(parts, 2);
             g_strain         = llList2String(parts, 3);
             g_quality        = llList2String(parts, 4);
+            g_itemType       = llList2String(parts, 5);
+            if (g_itemType == "") g_itemType = "joint";
+
+            if (g_itemType == "blunt")
+                g_smokeDuration = 600;
+            else if (g_itemType == "spliff")
+                g_smokeDuration = 420;
+            else
+                g_smokeDuration = 300;
 
             llListenRemove(g_listenAttach);
             llSetTimerEvent(0.0);
