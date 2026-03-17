@@ -37,6 +37,12 @@ integer g_puffTimerActive = FALSE;
 integer g_puffCount       = 0;
 integer MAX_PUFFS         = 5; // smoke stops naturally after this many puffs (~60s)
 
+// Pending animation flags  -  used instead of llSleep() to return
+// control to the event queue while short anims play out.
+integer g_puffInProgress = FALSE; // TRUE while smoke_puff overlay is active
+integer g_passInProgress = FALSE; // TRUE while pass_give/receive is active
+string  g_passAnimName   = "";    // which pass anim is currently playing
+
 // ----------------------------------------------------------------
 // Stop whatever is currently playing
 // ----------------------------------------------------------------
@@ -108,46 +114,43 @@ startSmokeAnim(string strain, string quality, string itemType)
 }
 
 // ----------------------------------------------------------------
-// Play the short puff animation over the idle
+// Play the short puff animation over the idle.
+// Returns immediately; the timer resumes idle after 2.5 s.
 // ----------------------------------------------------------------
 playPuffAnim()
 {
-    // Puff anim is a short overlay  -  it plays then idle resumes naturally
-    if (llGetInventoryType("smoke_puff") == INVENTORY_ANIMATION)
-    {
-        llStopAnimation(g_currentAnim);
-        llStartAnimation("smoke_puff");
-        // Short delay then resume idle
-        llSleep(2.5);
-        llStopAnimation("smoke_puff");
-        if (g_currentAnim != "" &&
-            llGetInventoryType(g_currentAnim) == INVENTORY_ANIMATION)
-        {
-            llStartAnimation(g_currentAnim);
-        }
-    }
+    if (llGetInventoryType("smoke_puff") != INVENTORY_ANIMATION) return;
+
+    // If a pass is still playing, let it finish first
+    if (g_passInProgress) return;
+
+    llStopAnimation(g_currentAnim);
+    llStartAnimation("smoke_puff");
+    g_puffInProgress = TRUE;
+    llSetTimerEvent(2.5);
 }
 
 // ----------------------------------------------------------------
-// Play a pass animation (give or receive, one-shot)
+// Play a pass animation (give or receive, one-shot).
+// Returns immediately; the timer resumes idle after 2.0 s.
 // ----------------------------------------------------------------
 playPassAnim(string direction)
 {
-    string animName = "pass_" + direction; // pass_give or pass_receive
-    if (llGetInventoryType(animName) == INVENTORY_ANIMATION)
+    string animName = "pass_" + direction;
+    if (llGetInventoryType(animName) != INVENTORY_ANIMATION) return;
+
+    // Cancel any in-progress puff cleanly before starting pass
+    if (g_puffInProgress)
     {
-        // Temporarily stop idle
-        if (g_currentAnim != "") llStopAnimation(g_currentAnim);
-        llStartAnimation(animName);
-        llSleep(2.0);
-        llStopAnimation(animName);
-        // Resume idle if still smoking
-        if (g_currentAnim != "" &&
-            llGetInventoryType(g_currentAnim) == INVENTORY_ANIMATION)
-        {
-            llStartAnimation(g_currentAnim);
-        }
+        llStopAnimation("smoke_puff");
+        g_puffInProgress = FALSE;
     }
+
+    if (g_currentAnim != "") llStopAnimation(g_currentAnim);
+    llStartAnimation(animName);
+    g_passAnimName   = animName;
+    g_passInProgress = TRUE;
+    llSetTimerEvent(2.0);
 }
 
 // ================================================================
@@ -174,7 +177,40 @@ default
 
     timer()
     {
-        // Periodic puff animation while smoking
+        // ── End of puff overlay: stop puff, resume idle ──────────
+        if (g_puffInProgress)
+        {
+            g_puffInProgress = FALSE;
+            llStopAnimation("smoke_puff");
+            if (g_currentAnim != "" &&
+                llGetInventoryType(g_currentAnim) == INVENTORY_ANIMATION)
+            {
+                llStartAnimation(g_currentAnim);
+            }
+            // Restore the puff-interval countdown
+            if (g_puffTimerActive)
+                llSetTimerEvent(PUFF_INTERVAL);
+            return;
+        }
+
+        // ── End of pass animation: stop pass, resume idle ────────
+        if (g_passInProgress)
+        {
+            g_passInProgress = FALSE;
+            if (g_passAnimName != "")
+                llStopAnimation(g_passAnimName);
+            g_passAnimName = "";
+            if (g_currentAnim != "" &&
+                llGetInventoryType(g_currentAnim) == INVENTORY_ANIMATION)
+            {
+                llStartAnimation(g_currentAnim);
+            }
+            if (g_puffTimerActive)
+                llSetTimerEvent(PUFF_INTERVAL);
+            return;
+        }
+
+        // ── Periodic puff trigger ────────────────────────────────
         if (g_puffTimerActive && g_currentAnim != "")
         {
             g_puffCount++;

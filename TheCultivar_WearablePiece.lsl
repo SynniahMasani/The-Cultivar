@@ -60,7 +60,12 @@ string  g_currentQuality = "";
 integer g_inSession  = FALSE;
 
 // Effects state
-integer g_effectsOn  = TRUE;
+integer g_effectsOn     = TRUE;
+
+// Hit-particle pending state  -  used instead of llSleep() so
+// the event queue remains responsive during the hit duration.
+integer g_hitInProgress = FALSE;
+vector  g_hitCol        = <0.4, 0.4, 0.4>; // saved colour for post-hit glow restore
 
 // Attachment points per piece type
 list PIECE_ATTACH_POINTS = ["pipe",   "bong",  "dab_rig"];
@@ -174,15 +179,10 @@ playHitParticles(string quality)
     ]);
     llPlaySound("piece_hit", 0.5);
 
-    // Fade back to idle after hit duration
-    llSleep(srcAge + 1.0);
-    float idleGlow = 0.02;
-    if (g_inSession) idleGlow = 0.07;
-    llSetLinkPrimitiveParamsFast(2, [
-        PRIM_COLOR, ALL_SIDES, col, 1.0,
-        PRIM_GLOW,  ALL_SIDES, idleGlow
-    ]);
-    startIdleParticles();
+    // Schedule idle restore via timer instead of blocking with llSleep
+    g_hitCol        = col;
+    g_hitInProgress = TRUE;
+    llSetTimerEvent(srcAge + 1.0);
 }
 
 // ----------------------------------------------------------------
@@ -307,7 +307,22 @@ default
 
     timer()
     {
-        // Registration timeout or touch menu timeout
+        // ── End of hit burst: restore bowl glow and idle particles ─
+        if (g_hitInProgress)
+        {
+            g_hitInProgress = FALSE;
+            llSetTimerEvent(0.0);
+            float idleGlow = 0.02;
+            if (g_inSession) idleGlow = 0.07;
+            llSetLinkPrimitiveParamsFast(2, [
+                PRIM_COLOR, ALL_SIDES, g_hitCol, 1.0,
+                PRIM_GLOW,  ALL_SIDES, idleGlow
+            ]);
+            startIdleParticles();
+            return;
+        }
+
+        // ── Registration timeout or touch menu timeout ────────────
         if (g_listenRegister) { llListenRemove(g_listenRegister); g_listenRegister = 0; }
         if (g_listenTouch)    { llListenRemove(g_listenTouch);    g_listenTouch    = 0; }
         llSetTimerEvent(0.0);
