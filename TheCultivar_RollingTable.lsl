@@ -1,6 +1,6 @@
 // ================================================================
 // THE CULTIVAR  -  Rolling Tray Script
-// Version: 1.1
+// Version: 1.2
 // Lives inside: any TC rolling tray variant (all designs, one script)
 //
 // WHAT IT DOES:
@@ -30,6 +30,12 @@
 //   4. HUD responds: "TC_INVENTORY_DATA|rawInventory"
 //   5. Menus shown → confirm → "TC_REMOVE_ITEM|..." → wait for OK
 //   6. "TC_REMOVE_OK" → "TC_ADD_ITEM|..." + particle burst + notify
+//
+// PARTICLE DISPATCH  (llMessageLinked, num=2000):
+//   "HERB_PARTICLES|<quality>"  — green herb-drop effect (steps 0-2)
+//   "SMOKE_PARTICLES|<quality>" — quality-colored wisps   (steps 3-4)
+//   "BURST_PARTICLES|<quality>" — celebration explode     (finish)
+//   "STOP_PARTICLES"            — clear all emitters
 //
 // DIALOG CHANNELS  (negative, distinct from BaggingTable -66001-66004):
 //   DCHAN_STRAIN   = -77001
@@ -74,18 +80,6 @@ string  g_selectedRollType = "";  // "joint" | "blunt" | "spliff"
 integer g_selectedCount    = 0;   // number of items to roll
 integer g_rollCost         = 0;   // grams per item
 integer g_totalCost        = 0;   // g_selectedCount * g_rollCost
-
-// ----------------------------------------------------------------
-// Return a display color vector for a quality tier.
-// Used by rolling sequence wisp particles.
-// ----------------------------------------------------------------
-vector qualColor(string quality)
-{
-    if (quality == "mids")   return <0.9, 0.85, 0.2>;
-    if (quality == "loud")   return <0.3, 0.85, 0.2>;
-    if (quality == "exotic") return <0.7, 0.3,  1.0>;
-    return <0.7, 0.6, 0.4>;
-}
 
 // ----------------------------------------------------------------
 // Ping the HUD using a random private reply channel.
@@ -337,21 +331,7 @@ startRollingSequence()
         llOwnerSay("You pull out a fresh rolling paper.");
 
     // Steps 0-2: green herb particles (flower being packed)
-    llLinkParticleSystem(3, [
-        PSYS_SRC_PATTERN,          PSYS_SRC_PATTERN_DROP,
-        PSYS_PART_START_COLOR,     <0.2, 0.5, 0.1>,
-        PSYS_PART_END_COLOR,       <0.1, 0.3, 0.05>,
-        PSYS_PART_START_ALPHA,     0.8,
-        PSYS_PART_END_ALPHA,       0.0,
-        PSYS_PART_START_SCALE,     <0.02, 0.02, 0.0>,
-        PSYS_PART_END_SCALE,       <0.01, 0.01, 0.0>,
-        PSYS_PART_MAX_AGE,         1.5,
-        PSYS_SRC_BURST_RATE,       0.15,
-        PSYS_SRC_BURST_PART_COUNT, 4,
-        PSYS_SRC_ACCEL,            <0.0, 0.0, -0.2>,
-        PSYS_SRC_BURST_SPEED_MIN,  0.1,
-        PSYS_SRC_BURST_SPEED_MAX,  0.25
-    ]);
+    llMessageLinked(LINK_SET, 2000, "HERB_PARTICLES|" + g_selectedQuality, NULL_KEY);
 
     llSetTimerEvent(3.0);
 }
@@ -368,20 +348,7 @@ finishCraft()
         g_brandName);
 
     // Celebration particle burst
-    llParticleSystem([
-        PSYS_PART_FLAGS,           PSYS_PART_INTERP_COLOR_MASK | PSYS_PART_EMISSIVE_MASK,
-        PSYS_SRC_PATTERN,          PSYS_SRC_PATTERN_EXPLODE,
-        PSYS_PART_START_COLOR,     <0.9, 0.9, 0.7>,
-        PSYS_PART_END_COLOR,       <0.6, 0.4, 0.1>,
-        PSYS_PART_START_ALPHA,     0.9,
-        PSYS_PART_END_ALPHA,       0.0,
-        PSYS_PART_START_SCALE,     <0.04, 0.04, 0.0>,
-        PSYS_PART_END_SCALE,       <0.01, 0.01, 0.0>,
-        PSYS_PART_MAX_AGE,         1.5,
-        PSYS_SRC_BURST_RATE,       0.05,
-        PSYS_SRC_BURST_PART_COUNT, 12,
-        PSYS_SRC_MAX_AGE,          0.3
-    ]);
+    llMessageLinked(LINK_SET, 2000, "BURST_PARTICLES|" + g_selectedQuality, NULL_KEY);
     llPlaySound("roll_complete", 0.6);
 
     // Notify player
@@ -472,28 +439,7 @@ default
 
             // Switch to quality-colored wisp particles at step 3
             if (g_rollStep == 3)
-            {
-                vector wispCol = qualColor(g_selectedQuality);
-                llLinkParticleSystem(3, [
-                    PSYS_PART_FLAGS,           PSYS_PART_INTERP_COLOR_MASK |
-                                               PSYS_PART_INTERP_SCALE_MASK |
-                                               PSYS_PART_EMISSIVE_MASK,
-                    PSYS_SRC_PATTERN,          PSYS_SRC_PATTERN_ANGLE_CONE,
-                    PSYS_PART_START_COLOR,     wispCol,
-                    PSYS_PART_END_COLOR,       <0.9, 0.9, 0.9>,
-                    PSYS_PART_START_ALPHA,     0.6,
-                    PSYS_PART_END_ALPHA,       0.0,
-                    PSYS_PART_START_SCALE,     <0.015, 0.015, 0.0>,
-                    PSYS_PART_END_SCALE,       <0.03, 0.03, 0.0>,
-                    PSYS_PART_MAX_AGE,         2.5,
-                    PSYS_SRC_BURST_RATE,       0.2,
-                    PSYS_SRC_BURST_PART_COUNT, 2,
-                    PSYS_SRC_BURST_SPEED_MIN,  0.02,
-                    PSYS_SRC_BURST_SPEED_MAX,  0.06,
-                    PSYS_SRC_ANGLE_BEGIN,      0.0,
-                    PSYS_SRC_ANGLE_END,        0.25
-                ]);
-            }
+                llMessageLinked(LINK_SET, 2000, "SMOKE_PARTICLES|" + g_selectedQuality, NULL_KEY);
 
             // Start tray rotation at step 1
             if (g_rollStep == 1)
@@ -506,7 +452,7 @@ default
             // Final step: wrap up sequence and send TC_REMOVE_ITEM
             if (g_rollStep >= 5)
             {
-                llLinkParticleSystem(3, []);
+                llMessageLinked(LINK_SET, 2000, "STOP_PARTICLES", NULL_KEY);
                 llSetLinkPrimitiveParamsFast(2, [
                     PRIM_OMEGA, <0.0, 0.0, 1.0>, 0.0, 0.0
                 ]);
@@ -526,7 +472,7 @@ default
         if (g_particleClear)
         {
             g_particleClear = FALSE;
-            llParticleSystem([]);
+            llMessageLinked(LINK_SET, 2000, "STOP_PARTICLES", NULL_KEY);
             g_busy = FALSE;
             return;
         }
