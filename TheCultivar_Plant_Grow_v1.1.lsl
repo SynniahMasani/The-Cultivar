@@ -53,13 +53,13 @@ integer PCHAN_PERSIST = 1100; // Grow <-> Persistence
 // qualityTier: 0=reggie 1=mids 2=loud 3=exotic
 list STRAIN_DATA = [
     "Schwag",          0, 4,  8,  "Barely worth the effort.",
-    "Ditch Weed",      0, 3,  7,  "Old reliable. Sort of.",
+    "Zone Weed",       0, 3,  7,  "Comes through when you need it.",
     "Brown Frown",     0, 3,  6,  "It'll do.",
     "Blue Dream",      1, 8,  14, "Smooth and easy.",
-    "Green Crack",     1, 9,  15, "Gets things moving.",
+    "Green Crack",     2, 14, 20, "Gets things moving fast.",
     "Gorilla Glue",    1, 8,  14, "Heavy and sticky.",
     "Sour Diesel",     1, 9,  16, "Fuel for the soul.",
-    "OG Kush",         2, 14, 20, "The classic. No notes.",
+    "OG Kush",         1, 9,  15, "The classic. Solid mids.",
     "Wedding Cake",    2, 15, 22, "Sweet and earthy.",
     "Zkittlez",        2, 14, 21, "Fruit forward and smooth.",
     "Gelato",          2, 15, 22, "Dessert in a blunt.",
