@@ -53,28 +53,44 @@ The root prim name doesn't matter — any unlabeled touch opens the main menu.
 
 ## ANIMATIONS REQUIRED (store in HUD object inventory)
 
-The animation script looks for these by name. If a specific one is missing
-it falls back to smoke_joint_reggie_idle. You can add more anims later
-without touching the scripts — just follow the naming pattern.
+The animation script (v1.1+) is gender-aware. It detects the avatar's body
+shape type (`OBJECT_BODY_SHAPE_TYPE`) and appends `_female` or `_male` to
+every animation name before playing it. If the gendered variant is not found
+in inventory it falls back to the non-gendered base name automatically.
 
-**Idle Anims (loop while smoking):**
-- smoke_joint_reggie_idle
-- smoke_joint_mids_idle
-- smoke_joint_loud_idle
-- smoke_joint_exotic_idle
-- smoke_blunt_reggie_idle
-- smoke_blunt_mids_idle
-- smoke_blunt_loud_idle
-- smoke_blunt_exotic_idle
-- smoke_pipe_reggie_idle
-- smoke_pipe_mids_idle
-- smoke_pipe_loud_idle
-- smoke_pipe_exotic_idle
+You can ship a HUD with only one set (e.g. all `_female`) and it will work
+for everyone — players with a male body shape just get the fallback.
 
-**Action Anims (one-shot):**
-- smoke_puff       (the hit — short, ~2.5 seconds)
-- pass_give        (handing something to someone)
-- pass_receive     (receiving something)
+**Idle Anims (loop while smoking) — provide both variants per quality tier:**
+
+| Base name (fallback)         | Female variant                      | Male variant                      |
+|------------------------------|-------------------------------------|-----------------------------------|
+| smoke_joint_reggie_idle      | smoke_joint_reggie_idle_female      | smoke_joint_reggie_idle_male      |
+| smoke_joint_mids_idle        | smoke_joint_mids_idle_female        | smoke_joint_mids_idle_male        |
+| smoke_joint_loud_idle        | smoke_joint_loud_idle_female        | smoke_joint_loud_idle_male        |
+| smoke_joint_exotic_idle      | smoke_joint_exotic_idle_female      | smoke_joint_exotic_idle_male      |
+| smoke_blunt_reggie_idle      | smoke_blunt_reggie_idle_female      | smoke_blunt_reggie_idle_male      |
+| smoke_blunt_mids_idle        | smoke_blunt_mids_idle_female        | smoke_blunt_mids_idle_male        |
+| smoke_blunt_loud_idle        | smoke_blunt_loud_idle_female        | smoke_blunt_loud_idle_male        |
+| smoke_blunt_exotic_idle      | smoke_blunt_exotic_idle_female      | smoke_blunt_exotic_idle_male      |
+| smoke_pipe_reggie_idle       | smoke_pipe_reggie_idle_female       | smoke_pipe_reggie_idle_male       |
+| smoke_pipe_mids_idle         | smoke_pipe_mids_idle_female         | smoke_pipe_mids_idle_male         |
+| smoke_pipe_loud_idle         | smoke_pipe_loud_idle_female         | smoke_pipe_loud_idle_male         |
+| smoke_pipe_exotic_idle       | smoke_pipe_exotic_idle_female       | smoke_pipe_exotic_idle_male       |
+| smoke_bong_reggie_idle       | smoke_bong_reggie_idle_female       | smoke_bong_reggie_idle_male       |
+| smoke_bong_mids_idle         | smoke_bong_mids_idle_female         | smoke_bong_mids_idle_male         |
+| smoke_bong_loud_idle         | smoke_bong_loud_idle_female         | smoke_bong_loud_idle_male         |
+| smoke_bong_exotic_idle       | smoke_bong_exotic_idle_female       | smoke_bong_exotic_idle_male       |
+
+**Action Anims (one-shot) — provide both variants:**
+
+| Base name (fallback) | Female variant        | Male variant        | Duration   |
+|----------------------|-----------------------|---------------------|------------|
+| smoke_puff           | smoke_puff_female     | smoke_puff_male     | ~2.5 s     |
+| pass_give            | pass_give_female      | pass_give_male      | ~2.0 s     |
+| pass_receive         | pass_receive_female   | pass_receive_male   | ~2.0 s     |
+
+**Fallback chain:** gendered variant → base name → `smoke_joint_reggie_idle[_gender]` → `smoke_joint_reggie_idle` → owner message if still missing.
 
 ---
 
