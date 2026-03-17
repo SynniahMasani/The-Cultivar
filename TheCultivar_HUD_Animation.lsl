@@ -1,22 +1,30 @@
 // ================================================================
 // THE CULTIVAR  -  HUD Animation Script
-// Version: 1.0
+// Version: 1.1
 // Handles: All avatar animation playback triggered by smoking,
 //          passing, and session events. Kept isolated so animation
 //          bugs never affect inventory or comms.
 //
 // ANIMATION NAMING CONVENTION (animations stored in HUD object):
-//   smoke_joint_reggie_idle     -  holding joint, reggie tier
-//   smoke_joint_mids_idle       -  holding joint, mids tier
-//   smoke_joint_loud_idle       -  holding joint, loud tier
-//   smoke_joint_exotic_idle     -  holding joint, exotic tier
-//   smoke_blunt_[quality]_idle
-//   smoke_pipe_[quality]_idle
-//   smoke_bong_[quality]_idle
-//   smoke_puff                  -  the actual hit animation (short, loops back)
-//   pass_give                   -  passing to someone animation
-//   pass_receive                -  receiving from someone animation
-//   smoke_sit_[quality]_idle    -  sitting/session variant
+//
+//   Gender-aware: the script detects OBJECT_BODY_SHAPE_TYPE and
+//   appends _female or _male to every animation name. If the
+//   gendered variant is not found it falls back to the base name.
+//
+//   Idle Anims (loop while smoking):
+//     smoke_joint_[quality]_idle_female  /  smoke_joint_[quality]_idle_male
+//     smoke_blunt_[quality]_idle_female  /  smoke_blunt_[quality]_idle_male
+//     smoke_pipe_[quality]_idle_female   /  smoke_pipe_[quality]_idle_male
+//     smoke_bong_[quality]_idle_female   /  smoke_bong_[quality]_idle_male
+//     [quality] = reggie | mids | loud | exotic
+//
+//   Action Anims (one-shot, ~2-2.5 s):
+//     smoke_puff_female  /  smoke_puff_male   -  the actual hit overlay
+//     pass_give_female   /  pass_give_male    -  handing off
+//     pass_receive_female / pass_receive_male -  receiving
+//
+//   Non-gendered fallbacks (optional, used if gendered missing):
+//     smoke_joint_reggie_idle, smoke_puff, pass_give, pass_receive ...
 // ================================================================
 
 integer CHAN_UI        = 100;
@@ -42,6 +50,33 @@ integer MAX_PUFFS         = 5; // smoke stops naturally after this many puffs (~
 integer g_puffInProgress = FALSE; // TRUE while smoke_puff overlay is active
 integer g_passInProgress = FALSE; // TRUE while pass_give/receive is active
 string  g_passAnimName   = "";    // which pass anim is currently playing
+string  g_puffAnimName   = "";    // which puff anim is currently playing
+
+// Gender-aware animation suffix (_female or _male)
+string  g_genderSuffix   = "_female"; // default; updated on state_entry and on_rez
+
+// ----------------------------------------------------------------
+// Detect avatar body shape type and return the animation suffix
+// ----------------------------------------------------------------
+string getGenderSuffix()
+{
+    list details = llGetObjectDetails(llGetOwner(), [OBJECT_BODY_SHAPE_TYPE]);
+    integer bodyType = llList2Integer(details, 0);
+    if (bodyType == 1) return "_male";
+    return "_female";
+}
+
+// ----------------------------------------------------------------
+// Return the gendered variant of an animation if it exists in
+// inventory, otherwise return the base (non-gendered) name.
+// ----------------------------------------------------------------
+string resolveAnim(string baseName)
+{
+    string gendered = baseName + g_genderSuffix;
+    if (llGetInventoryType(gendered) == INVENTORY_ANIMATION)
+        return gendered;
+    return baseName;
+}
 
 // ----------------------------------------------------------------
 // Stop whatever is currently playing
@@ -90,7 +125,7 @@ startSmokeAnim(string strain, string quality, string itemType)
     g_currentStrain   = strain;
     g_currentQuality  = quality;
     g_currentItemType = itemType;
-    g_currentAnim     = buildAnimName(itemType, quality);
+    g_currentAnim     = resolveAnim(buildAnimName(itemType, quality));
     g_puffCount       = 0;
 
     // Check the animation exists in inventory before playing
@@ -101,7 +136,7 @@ startSmokeAnim(string strain, string quality, string itemType)
     else
     {
         // Fallback to basic joint animation if specific one not found
-        g_currentAnim = "smoke_joint_reggie_idle";
+        g_currentAnim = resolveAnim("smoke_joint_reggie_idle");
         if (llGetInventoryType(g_currentAnim) == INVENTORY_ANIMATION)
             llStartAnimation(g_currentAnim);
         else
@@ -119,13 +154,15 @@ startSmokeAnim(string strain, string quality, string itemType)
 // ----------------------------------------------------------------
 playPuffAnim()
 {
-    if (llGetInventoryType("smoke_puff") != INVENTORY_ANIMATION) return;
+    string animName = resolveAnim("smoke_puff");
+    if (llGetInventoryType(animName) != INVENTORY_ANIMATION) return;
 
     // If a pass is still playing, let it finish first
     if (g_passInProgress) return;
 
     llStopAnimation(g_currentAnim);
-    llStartAnimation("smoke_puff");
+    llStartAnimation(animName);
+    g_puffAnimName   = animName;
     g_puffInProgress = TRUE;
     llSetTimerEvent(2.5);
 }
@@ -136,13 +173,14 @@ playPuffAnim()
 // ----------------------------------------------------------------
 playPassAnim(string direction)
 {
-    string animName = "pass_" + direction;
+    string animName = resolveAnim("pass_" + direction);
     if (llGetInventoryType(animName) != INVENTORY_ANIMATION) return;
 
     // Cancel any in-progress puff cleanly before starting pass
     if (g_puffInProgress)
     {
-        llStopAnimation("smoke_puff");
+        llStopAnimation(g_puffAnimName);
+        g_puffAnimName   = "";
         g_puffInProgress = FALSE;
     }
 
@@ -158,11 +196,12 @@ default
 {
     state_entry()
     {
-        // Nothing to do on start  -  wait for link messages
+        g_genderSuffix = getGenderSuffix();
     }
 
     on_rez(integer start_param)
     {
+        g_genderSuffix = getGenderSuffix();
         stopCurrentAnim();
     }
 
@@ -181,7 +220,8 @@ default
         if (g_puffInProgress)
         {
             g_puffInProgress = FALSE;
-            llStopAnimation("smoke_puff");
+            llStopAnimation(g_puffAnimName);
+            g_puffAnimName = "";
             if (g_currentAnim != "" &&
                 llGetInventoryType(g_currentAnim) == INVENTORY_ANIMATION)
             {
