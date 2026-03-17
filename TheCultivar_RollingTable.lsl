@@ -1,6 +1,6 @@
 // ================================================================
 // THE CULTIVAR  -  Rolling Tray Script
-// Version: 1.0
+// Version: 1.1
 // Lives inside: any TC rolling tray variant (all designs, one script)
 //
 // WHAT IT DOES:
@@ -59,7 +59,9 @@ string  g_brandName   = "";
 integer g_hudChannel  = 0;
 integer g_registered  = FALSE;
 integer g_busy        = FALSE;
-integer g_particleClear = FALSE;   // TRUE while post-craft 3s timer is running
+integer g_particleClear     = FALSE; // TRUE while post-craft 3s timer is running
+integer g_rollStep          = 0;     // current step of the rolling sequence (0-5)
+integer g_inRollingSequence = FALSE; // TRUE while rolling animation is playing
 
 list    g_availableFlower;
 integer FLOWER_STRIDE = 4;         // stride: strainName, quality, qty, packager
@@ -72,6 +74,18 @@ string  g_selectedRollType = "";  // "joint" | "blunt" | "spliff"
 integer g_selectedCount    = 0;   // number of items to roll
 integer g_rollCost         = 0;   // grams per item
 integer g_totalCost        = 0;   // g_selectedCount * g_rollCost
+
+// ----------------------------------------------------------------
+// Return a display color vector for a quality tier.
+// Used by rolling sequence wisp particles.
+// ----------------------------------------------------------------
+vector qualColor(string quality)
+{
+    if (quality == "mids")   return <0.9, 0.85, 0.2>;
+    if (quality == "loud")   return <0.3, 0.85, 0.2>;
+    if (quality == "exotic") return <0.7, 0.3,  1.0>;
+    return <0.7, 0.6, 0.4>;
+}
 
 // ----------------------------------------------------------------
 // Ping the HUD using a random private reply channel.
@@ -303,6 +317,46 @@ sendRemoveRequest()
 }
 
 // ----------------------------------------------------------------
+// Play a 6-step rolling animation sequence (steps 0-5, 3 s apart).
+// Step 0 fires immediately; the timer advances steps 1-5.
+// TC_REMOVE_ITEM is sent only after step 5 completes.
+// ----------------------------------------------------------------
+startRollingSequence()
+{
+    g_inRollingSequence = TRUE;
+    g_busy              = TRUE;
+    g_rollStep          = 0;
+
+    // Notify HUD to start rolling idle animation
+    llRegionSayTo(g_ownerKey, g_hudChannel, "TC_PLAY_ANIM|rolling_idle");
+
+    // Step 0 message
+    if (g_selectedRollType == "blunt")
+        llOwnerSay("You split the cigar wrap carefully.");
+    else
+        llOwnerSay("You pull out a fresh rolling paper.");
+
+    // Steps 0-2: green herb particles (flower being packed)
+    llLinkParticleSystem(3, [
+        PSYS_SRC_PATTERN,          PSYS_SRC_PATTERN_DROP,
+        PSYS_PART_START_COLOR,     <0.2, 0.5, 0.1>,
+        PSYS_PART_END_COLOR,       <0.1, 0.3, 0.05>,
+        PSYS_PART_START_ALPHA,     0.8,
+        PSYS_PART_END_ALPHA,       0.0,
+        PSYS_PART_START_SCALE,     <0.02, 0.02, 0.0>,
+        PSYS_PART_END_SCALE,       <0.01, 0.01, 0.0>,
+        PSYS_PART_MAX_AGE,         1.5,
+        PSYS_SRC_BURST_RATE,       0.15,
+        PSYS_SRC_BURST_PART_COUNT, 4,
+        PSYS_SRC_ACCEL,            <0.0, 0.0, -0.2>,
+        PSYS_SRC_BURST_SPEED_MIN,  0.1,
+        PSYS_SRC_BURST_SPEED_MAX,  0.25
+    ]);
+
+    llSetTimerEvent(3.0);
+}
+
+// ----------------------------------------------------------------
 // HUD confirmed the removal — add rolled items, fire effects.
 // ----------------------------------------------------------------
 finishCraft()
@@ -380,6 +434,92 @@ default
 
     timer()
     {
+        // ── Rolling sequence: advance one step every 3 s ─────────
+        if (g_inRollingSequence)
+        {
+            g_rollStep++;
+
+            // Per-step owner messages
+            if (g_selectedRollType == "blunt")
+            {
+                if (g_rollStep == 1)
+                    llOwnerSay("You empty the tobacco and pack in the " +
+                               g_selectedStrain + ".");
+                else if (g_rollStep == 2)
+                    llOwnerSay("You load the wrap with " +
+                               g_selectedQuality + " flower.");
+                else if (g_rollStep == 3)
+                    llOwnerSay("You roll it tight, sealing the edges.");
+                else if (g_rollStep == 4)
+                    llOwnerSay("You lick and press the seam shut.");
+                else if (g_rollStep == 5)
+                    llOwnerSay("You twist both ends. That's a backwood.");
+            }
+            else
+            {
+                if (g_rollStep == 1)
+                    llOwnerSay("You grind the " + g_selectedStrain +
+                               " and spread it evenly.");
+                else if (g_rollStep == 2)
+                    llOwnerSay("You tuck the edge and start the roll.");
+                else if (g_rollStep == 3)
+                    llOwnerSay("You roll it firm and even.");
+                else if (g_rollStep == 4)
+                    llOwnerSay("You lick the edge and seal it.");
+                else if (g_rollStep == 5)
+                    llOwnerSay("You twist the tip. Perfect.");
+            }
+
+            // Switch to quality-colored wisp particles at step 3
+            if (g_rollStep == 3)
+            {
+                vector wispCol = qualColor(g_selectedQuality);
+                llLinkParticleSystem(3, [
+                    PSYS_PART_FLAGS,           PSYS_PART_INTERP_COLOR_MASK |
+                                               PSYS_PART_INTERP_SCALE_MASK |
+                                               PSYS_PART_EMISSIVE_MASK,
+                    PSYS_SRC_PATTERN,          PSYS_SRC_PATTERN_ANGLE_CONE,
+                    PSYS_PART_START_COLOR,     wispCol,
+                    PSYS_PART_END_COLOR,       <0.9, 0.9, 0.9>,
+                    PSYS_PART_START_ALPHA,     0.6,
+                    PSYS_PART_END_ALPHA,       0.0,
+                    PSYS_PART_START_SCALE,     <0.015, 0.015, 0.0>,
+                    PSYS_PART_END_SCALE,       <0.03, 0.03, 0.0>,
+                    PSYS_PART_MAX_AGE,         2.5,
+                    PSYS_SRC_BURST_RATE,       0.2,
+                    PSYS_SRC_BURST_PART_COUNT, 2,
+                    PSYS_SRC_BURST_SPEED_MIN,  0.02,
+                    PSYS_SRC_BURST_SPEED_MAX,  0.06,
+                    PSYS_SRC_ANGLE_BEGIN,      0.0,
+                    PSYS_SRC_ANGLE_END,        0.25
+                ]);
+            }
+
+            // Start tray rotation at step 1
+            if (g_rollStep == 1)
+            {
+                llSetLinkPrimitiveParamsFast(2, [
+                    PRIM_OMEGA, <0.0, 0.0, 1.0>, 0.3, 0.5
+                ]);
+            }
+
+            // Final step: wrap up sequence and send TC_REMOVE_ITEM
+            if (g_rollStep >= 5)
+            {
+                llLinkParticleSystem(3, []);
+                llSetLinkPrimitiveParamsFast(2, [
+                    PRIM_OMEGA, <0.0, 0.0, 1.0>, 0.0, 0.0
+                ]);
+                llRegionSayTo(g_ownerKey, g_hudChannel, "TC_STOP_ANIM|rolling_idle");
+                g_inRollingSequence = FALSE;
+                sendRemoveRequest();
+                return;
+            }
+
+            llSetTimerEvent(3.0);
+            return;
+        }
+
         llSetTimerEvent(0.0);
 
         // Post-craft particle clear fires 3s after finishCraft()
@@ -582,7 +722,7 @@ default
                 return;
             }
             if (msg == "Roll It!")
-                sendRemoveRequest();
+                startRollingSequence();
         }
     }
 }
