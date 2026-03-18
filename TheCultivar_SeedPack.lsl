@@ -1,105 +1,178 @@
 // ================================================================
-// THE CULTIVAR  -  Gacha Seed Pack Script
-// Version: 1.0
-// Lives inside: any TC seed pack object (e.g. "Biscotti Pack")
+// THE CULTIVAR  -  Seed Pack Script
+// Version: 2.0
+// Lives inside: all 19 TC seed pack objects
+//   - 15 strain-locked Synful Sprouts Co. packets (PACK_MODE = "strain")
+//   - 4 gacha mystery packs (PACK_MODE = "gacha")
 //
-// WHAT IT DOES:
-//   Players purchase a seed pack object and rez or use it.
-//   On touch, the script rolls random odds based on the pack type
-//   stored in the object description, determines a quality tier,
-//   sends TC_ADD_ITEM to the player's HUD, announces the result,
-//   plays a quality-colored particle burst, then calls llDie().
+// SETUP — change these three constants only:
 //
-// OBJECT SETUP:
-//   Name        : Strain name, e.g. "Biscotti" or "Biscotti Pack"
-//                 " Pack" suffix is stripped automatically.
-//   Description : Pack type — mystery | reggie | mids | loud | exotic
-//                 Defaults to "mystery" if blank.
+//   Strain-locked example:
+//     string PACK_MODE   = "strain";
+//     string PACK_STRAIN = "Lemon Cherry Gelato";
+//     string PACK_TYPE   = "";
 //
-// QUALITY ODDS BY PACK TYPE:
-//   mystery : reggie 30%  mids 35%  loud 25%  exotic 10%
-//   reggie  : reggie 70%  mids 25%  loud  5%  exotic  0%
-//   mids    : reggie 10%  mids 65%  loud 22%  exotic  3%
-//   loud    : reggie  0%  mids 15%  loud 70%  exotic 15%
-//   exotic  : reggie  0%  mids  5%  loud 35%  exotic 60%
+//   Gacha example:
+//     string PACK_MODE   = "gacha";
+//     string PACK_STRAIN = "";
+//     string PACK_TYPE   = "Hustler's Pack";
 //
-// HUD COMMUNICATION:
-//   Derives the private HUD channel from the owner UUID using the
-//   same derivation function used by all TC world objects.
-//   Sends: TC_ADD_ITEM|seed_raw|<strain>|<quality>|1|SeedPack
+// STRAIN MODE:  Always gives PACK_STRAIN. Tier auto-looked up.
+//               Rolls 1-3 seeds.
+// GACHA MODE:   Strain AND tier both randomly rolled per seed.
+//               Seed count range set by PACK_TYPE tier.
 //
-// CHANNEL:
-//   No ping/register flow — seed pack is a single-use object that
-//   derives the channel directly and fires once, then dies.
+// QUALITY ODDS (cumulative thresholds for llFrand(100.0)):
+//   Sampler's  : reggie<70  mids<95  loud<100  exotic=0%
+//   Beginner's : reggie<40  mids<80  loud<98   exotic=2%
+//   Hustler's  : reggie<20  mids<55  loud<85   exotic=15%
+//   Plug's     : reggie<5   mids<25  loud<65   exotic=35%
+//
+// HUD DELIVERY:
+//   TC_ADD_ITEM|seed|<strainName>|<qualityTier>|1
+//   Sent on TC_HUD_CHANNEL per seed.
 // ================================================================
 
-key     g_ownerKey   = NULL_KEY;
-integer g_hudChannel = 0;
-string  g_strainName = "";
-string  g_packType   = "mystery";
+// ---- Variant constants: change these per object ----
+string PACK_MODE   = "gacha";
+string PACK_STRAIN = "";
+string PACK_TYPE   = "Hustler's Pack";
+
+// ---- Channel constants ----
+integer TC_HUD_CHANNEL = -987655;
+string  TC_ADD_ITEM    = "TC_ADD_ITEM";
+
+// ---- Strain master table ----
+// Stride 3: strainName, tierString, tierIndex
+list STRAIN_DATA = [
+    "Zone Weed",           "reggie", 0,
+    "Schwag",              "reggie", 0,
+    "Brown Frown",         "reggie", 0,
+    "Blue Dream",          "mids",   1,
+    "OG Kush",             "mids",   1,
+    "Gorilla Glue",        "mids",   1,
+    "Sour Diesel",         "mids",   1,
+    "Green Crack",         "loud",   2,
+    "Wedding Cake",        "loud",   2,
+    "Zkittlez",            "loud",   2,
+    "Gelato",              "loud",   2,
+    "Runtz",               "exotic", 3,
+    "Biscotti",            "exotic", 3,
+    "Jealousy",            "exotic", 3,
+    "Lemon Cherry Gelato", "exotic", 3
+];
+integer STRAIN_STRIDE = 3;
+
+// ---- Strain pools per tier (for gacha random selection) ----
+list REGGIE_POOL = ["Zone Weed", "Schwag", "Brown Frown"];
+list MIDS_POOL   = ["Blue Dream", "OG Kush", "Gorilla Glue", "Sour Diesel"];
+list LOUD_POOL   = ["Green Crack", "Wedding Cake", "Zkittlez", "Gelato"];
+list EXOTIC_POOL = ["Runtz", "Biscotti", "Jealousy", "Lemon Cherry Gelato"];
 
 // ----------------------------------------------------------------
-// Derive the private HUD channel from the owner UUID.
-// Matches the derivation used by HUD_Comms and all world objects.
+// Look up tier string for a strain name.
+// Returns "reggie" as safe fallback if not found.
 // ----------------------------------------------------------------
-integer deriveHUDChannel(key ownerID)
+string getTierFromStrain(string strainName)
 {
-    string hexSub = llGetSubString((string)ownerID, 0, 6);
-    hexSub = llDumpList2String(llParseString2List(hexSub, ["-"], []), "");
-    return (integer)("0x" + hexSub) * -1;
+    integer i;
+    for (i = 0; i < llGetListLength(STRAIN_DATA); i += STRAIN_STRIDE)
+    {
+        if (llList2String(STRAIN_DATA, i) == strainName)
+            return llList2String(STRAIN_DATA, i + 1);
+    }
+    return "reggie";
 }
 
 // ----------------------------------------------------------------
-// Return a display color for each quality tier.
+// Roll quality tier using cumulative thresholds.
 // ----------------------------------------------------------------
-vector qualColor(string quality)
-{
-    if (quality == "mids")   return <1.0, 0.85, 0.2>;
-    if (quality == "loud")   return <0.2, 0.85, 0.3>;
-    if (quality == "exotic") return <0.7, 0.3,  1.0>;
-    return <0.55, 0.45, 0.3>;
-}
-
-// ----------------------------------------------------------------
-// Roll quality based on pack type odds table.
-// Returns "reggie", "mids", "loud", or "exotic".
-// ----------------------------------------------------------------
-string rollQuality(string packType)
+string rollQuality(integer reggieMax, integer midsMax, integer loudMax)
 {
     float roll = llFrand(100.0);
+    if (roll < (float)reggieMax) return "reggie";
+    if (roll < (float)midsMax)   return "mids";
+    if (roll < (float)loudMax)   return "loud";
+    return "exotic";
+}
 
-    if (packType == "reggie")
+// ----------------------------------------------------------------
+// Pick a random strain from the quality-matched pool.
+// ----------------------------------------------------------------
+string randomStrainForTier(string tier)
+{
+    list pool = REGGIE_POOL;
+    if (tier == "mids")   pool = MIDS_POOL;
+    if (tier == "loud")   pool = LOUD_POOL;
+    if (tier == "exotic") pool = EXOTIC_POOL;
+    integer idx = (integer)llFrand((float)llGetListLength(pool));
+    return llList2String(pool, idx);
+}
+
+// ----------------------------------------------------------------
+// Display label for a quality tier.
+// ----------------------------------------------------------------
+string qualLabel(string tier)
+{
+    if (tier == "mids")   return "Mids";
+    if (tier == "loud")   return "Loud";
+    if (tier == "exotic") return "Exotic";
+    return "Reggie";
+}
+
+// ----------------------------------------------------------------
+// Return pack config: [minSeeds, maxSeeds, reggieMax, midsMax, loudMax]
+// ----------------------------------------------------------------
+list getPackConfig(string packType)
+{
+    if (packType == "Sampler's Pack")  return [1, 3,  70, 95,  100];
+    if (packType == "Beginner's Pack") return [2, 5,  40, 80,  98];
+    if (packType == "Hustler's Pack")  return [5, 10, 20, 55,  85];
+    if (packType == "Plug's Special")  return [8, 15,  5, 25,  65];
+    return [1, 3, 70, 95, 100];
+}
+
+// ----------------------------------------------------------------
+// Hover text color for a quality tier.
+// ----------------------------------------------------------------
+vector tierColor(string tier)
+{
+    if (tier == "mids")   return <0.3, 0.7, 0.3>;
+    if (tier == "loud")   return <0.9, 0.6, 0.1>;
+    if (tier == "exotic") return <0.8, 0.2, 0.9>;
+    return <0.5, 0.5, 0.5>;
+}
+
+// ----------------------------------------------------------------
+// Hover text color for a gacha pack type.
+// ----------------------------------------------------------------
+vector packColor(string packType)
+{
+    if (packType == "Sampler's Pack")  return <0.6, 0.6, 0.6>;
+    if (packType == "Beginner's Pack") return <0.3, 0.7, 0.3>;
+    if (packType == "Hustler's Pack")  return <0.9, 0.6, 0.1>;
+    return <0.8, 0.2, 0.9>;
+}
+
+// ----------------------------------------------------------------
+// Set hover text based on current mode and constants.
+// ----------------------------------------------------------------
+setHoverText()
+{
+    if (PACK_MODE == "strain")
     {
-        if (roll < 70.0)       return "reggie";
-        else if (roll < 95.0)  return "mids";
-        else                   return "loud";
-    }
-    else if (packType == "mids")
-    {
-        if (roll < 10.0)       return "reggie";
-        else if (roll < 75.0)  return "mids";
-        else if (roll < 97.0)  return "loud";
-        else                   return "exotic";
-    }
-    else if (packType == "loud")
-    {
-        if (roll < 15.0)       return "mids";
-        else if (roll < 85.0)  return "loud";
-        else                   return "exotic";
-    }
-    else if (packType == "exotic")
-    {
-        if (roll < 5.0)        return "mids";
-        else if (roll < 40.0)  return "loud";
-        else                   return "exotic";
+        string tier = getTierFromStrain(PACK_STRAIN);
+        llSetText(PACK_STRAIN + "\nSynful Sprouts Co.\n1-3 Seeds\nTouch to open",
+            tierColor(tier), 1.0);
     }
     else
     {
-        // mystery (default)
-        if (roll < 30.0)       return "reggie";
-        else if (roll < 65.0)  return "mids";
-        else if (roll < 90.0)  return "loud";
-        else                   return "exotic";
+        list    cfg      = getPackConfig(PACK_TYPE);
+        integer minSeeds = llList2Integer(cfg, 0);
+        integer maxSeeds = llList2Integer(cfg, 1);
+        llSetText(PACK_TYPE + "\n" +
+            (string)minSeeds + "-" + (string)maxSeeds + " Mystery Seeds\nTouch to open",
+            packColor(PACK_TYPE), 1.0);
     }
 }
 
@@ -108,22 +181,7 @@ default
 {
     state_entry()
     {
-        g_ownerKey   = llGetOwner();
-        g_hudChannel = deriveHUDChannel(g_ownerKey);
-
-        // Strip " Pack" suffix from object name if present
-        string rawName = llGetObjectName();
-        integer packIdx = llSubStringIndex(rawName, " Pack");
-        if (packIdx != -1 && packIdx == llStringLength(rawName) - 5)
-            g_strainName = llGetSubString(rawName, 0, packIdx - 1);
-        else
-            g_strainName = rawName;
-
-        // Read pack type from description; default to mystery
-        g_packType = llGetObjectDesc();
-        if (g_packType == "") g_packType = "mystery";
-
-        llSetText("Seed Pack: " + g_strainName + "\nTouch to open!", qualColor("loud"), 1.0);
+        setHoverText();
     }
 
     on_rez(integer start_param)
@@ -133,42 +191,73 @@ default
 
     touch_start(integer nd)
     {
-        // Only the owner can open their own seed pack
-        if (llDetectedKey(0) != g_ownerKey) return;
+        if (llDetectedKey(0) != llGetOwner())
+        {
+            llSay(0, "This pack belongs to someone else.");
+            return;
+        }
 
-        string quality = rollQuality(g_packType);
+        integer seedCount   = 0;
+        string  displayName = "";
+        string  lockedTier  = "";
+        integer reggieMax   = 0;
+        integer midsMax     = 0;
+        integer loudMax     = 0;
 
-        // Send seed to HUD inventory
-        llRegionSayTo(g_ownerKey, g_hudChannel,
-            "TC_ADD_ITEM|seed_raw|" + g_strainName + "|" + quality + "|1|SeedPack");
+        if (PACK_MODE == "strain")
+        {
+            seedCount   = 1 + (integer)llFrand(3.0);
+            lockedTier  = getTierFromStrain(PACK_STRAIN);
+            displayName = PACK_STRAIN;
+        }
+        else
+        {
+            list    cfg      = getPackConfig(PACK_TYPE);
+            integer minSeeds = llList2Integer(cfg, 0);
+            integer maxSeeds = llList2Integer(cfg, 1);
+            reggieMax        = llList2Integer(cfg, 2);
+            midsMax          = llList2Integer(cfg, 3);
+            loudMax          = llList2Integer(cfg, 4);
+            seedCount        = minSeeds +
+                (integer)llFrand((float)(maxSeeds - minSeeds + 1));
+            displayName      = PACK_TYPE;
+        }
 
-        // Private result message to opener
-        llRegionSayTo(g_ownerKey, 0,
-            "Opened: " + g_strainName + " seed  -  " + quality + " phenotype!");
+        // Opening announcement
+        llSay(0, "==========================");
+        llSay(0, " " + displayName + " - Opening...");
+        llSay(0, "==========================");
 
-        // Public broadcast only for exotic pulls
-        if (quality == "exotic")
-            llRegionSay(0,
-                llKey2Name(g_ownerKey) +
-                " cracked an exotic " + g_strainName + " phenotype!");
+        // Reveal each seed one at a time
+        integer i;
+        for (i = 1; i <= seedCount; i++)
+        {
+            string qualTier   = "";
+            string strainName = "";
 
-        // Quality-colored particle burst before dying
-        llParticleSystem([
-            PSYS_PART_FLAGS,           PSYS_PART_EMISSIVE_MASK,
-            PSYS_SRC_PATTERN,          PSYS_SRC_PATTERN_EXPLODE,
-            PSYS_PART_START_COLOR,     qualColor(quality),
-            PSYS_PART_START_ALPHA,     1.0,
-            PSYS_PART_END_ALPHA,       0.0,
-            PSYS_PART_START_SCALE,     <0.05, 0.05, 0.0>,
-            PSYS_PART_END_SCALE,       <0.02, 0.02, 0.0>,
-            PSYS_PART_MAX_AGE,         1.5,
-            PSYS_SRC_BURST_RATE,       0.05,
-            PSYS_SRC_BURST_PART_COUNT, 12,
-            PSYS_SRC_BURST_SPEED_MIN,  0.1,
-            PSYS_SRC_BURST_SPEED_MAX,  0.3,
-            PSYS_SRC_MAX_AGE,          0.4
-        ]);
-        llSleep(2.0);
+            if (PACK_MODE == "strain")
+            {
+                strainName = PACK_STRAIN;
+                qualTier   = lockedTier;
+            }
+            else
+            {
+                qualTier   = rollQuality(reggieMax, midsMax, loudMax);
+                strainName = randomStrainForTier(qualTier);
+            }
+
+            llSay(0, "Seed #" + (string)i + " - " +
+                qualLabel(qualTier) + " - " + strainName);
+
+            llRegionSayTo(llGetOwner(), TC_HUD_CHANNEL,
+                TC_ADD_ITEM + "|seed|" + strainName + "|" + qualTier + "|1");
+
+            llSleep(0.5);
+        }
+
+        llSay(0, (string)seedCount +
+            " seeds added to your HUD inventory. Happy growing!");
+        llSleep(0.5);
         llDie();
     }
 }
