@@ -1,6 +1,6 @@
 // ================================================================
 // THE CULTIVAR  -  HUD Comms Script
-// Version: 1.0
+// Version: 1.1
 // Handles: ALL external communication between the HUD and world
 //          objects (plants, jars, crafting tables, session objects,
 //          other player HUDs). The switchboard.
@@ -34,6 +34,10 @@ integer g_listenSession;
 
 key     g_ownerKey;
 string  g_ownerName;
+
+// Wrapper inventory: stride-1 list, each entry "flavor|count"
+// Populated by TC_WRAPPER_GIVE; queried by Rolling Table via TC_WRAPPER_QUERY
+list g_wrapperInventory = [];
 
 // Track active session if any
 integer g_inSession = FALSE;
@@ -504,6 +508,48 @@ default
                 llMessageLinked(LINK_SET, CHAN_INVENTORY,
                     "REQUEST_RAW_INVENTORY|" + llList2String(parts, 1) + "|" + (string)id,
                     NULL_KEY);
+            }
+
+            // Wrapper box gives wrappers to the player
+            // TC_WRAPPER_GIVE|flavor|count|avatarKey
+            else if (cmd == "TC_WRAPPER_GIVE")
+            {
+                string  flavor    = llList2String(parts, 1);
+                integer count     = (integer)llList2String(parts, 2);
+                key     avatarKey = (key)llList2String(parts, 3);
+
+                if (avatarKey != g_ownerKey) return;
+                if (flavor == "") return;
+                if (count <= 0) return;
+
+                // Find existing entry for this flavor and update count, or add new entry
+                integer found = -1;
+                integer wi;
+                for (wi = 0; wi < llGetListLength(g_wrapperInventory); wi++)
+                {
+                    list entry = llParseString2List(llList2String(g_wrapperInventory, wi), ["|"], []);
+                    if (llList2String(entry, 0) == flavor)
+                        found = wi;
+                }
+
+                if (found >= 0)
+                {
+                    list   entry    = llParseString2List(llList2String(g_wrapperInventory, found), ["|"], []);
+                    integer existing = (integer)llList2String(entry, 1);
+                    g_wrapperInventory = llListReplaceList(g_wrapperInventory,
+                        [flavor + "|" + (string)(existing + count)], found, found);
+                }
+                else
+                {
+                    g_wrapperInventory += [flavor + "|" + (string)count];
+                }
+
+                // ACK back to the wrapper box on private channel
+                llRegionSayTo(id, g_privateChannel, "TC_WRAPPER_ACK");
+
+                // Notify UI so wrapper count display can update
+                llMessageLinked(LINK_SET, CHAN_UI,
+                    "WRAPPER_ADDED|" + flavor + "|" + (string)count, NULL_KEY);
             }
         }
 
