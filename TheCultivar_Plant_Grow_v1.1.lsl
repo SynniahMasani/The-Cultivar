@@ -32,22 +32,18 @@ integer LINK_VEG       = 4;
 integer LINK_FLOWER    = 3;
 integer LINK_HARVEST   = 2;
 integer LINK_INDICATOR = 7;   // transparent icon prim (set to correct link number)
-
-// ---- Indicator states ----
+// ---- Indicator iStates ----
 integer STATE_NONE  = 0;
 integer STATE_WATER = 1;
 integer STATE_FERT  = 2;
 integer STATE_READY = 3;
-
 // ---- Icon texture UUIDs (also add these textures to the root prim's inventory) ----
 string TEX_ICON_WATER = "f23ddfdc-776f-c296-d1bc-c7b1a0d9bb2a"; // icon_water
 string TEX_ICON_FERT  = "b150f9a0-953b-fb2c-c640-4dbf7b17f3b6"; // icon_fertilizer
 string TEX_ICON_READY = "d131fff9-e2d3-176f-c0e2-d31bdabf0767"; // icon_ready
-
 // Internal channels (match across all plant scripts)
 integer PCHAN_GROW    = 1000; // Grow <-> Interaction
 integer PCHAN_PERSIST = 1100; // Grow <-> Persistence
-
 // --- Strain Data Table ---
 // Format per entry: strainName|qualityTier|baseYieldMin|baseYieldMax|flavorText
 // qualityTier: 0=reggie 1=mids 2=loud 3=exotic
@@ -69,10 +65,8 @@ list STRAIN_DATA = [
     "Lemon Cherry Gelato", 3, 22, 30, "Rare. Grows itself proud."
 ];
 integer STRAIN_STRIDE = 5;
-
 // --- Grow Time Table (seconds per full cycle by quality tier) ---
 list GROW_TIMES = [2700, 7200, 14400, 28800];
-
 // --- Current Plant State ---
 string  g_strainName      = "";
 integer g_qualityTier     = 0;   // 0=reggie 1=mids 2=loud 3=exotic
@@ -89,16 +83,12 @@ integer g_potUsesLeft     = 5;   // basic = 5, premium = -1 (unlimited)
 string  g_ownerName       = "";
 key     g_ownerKey        = NULL_KEY;
 integer g_hudChannel      = 0;
-
 // Timer tick rate
 float TIMER_INTERVAL = 30.0;
-
 // Grow light broadcast channel
 integer GROW_LIGHT_CHAN = -999111222;
-
 // Whether the light bonus has been applied this stage
 integer g_lightBonusApplied = FALSE;
-
 // ----------------------------------------------------------------
 // Look up strain data by name, return as list or empty list
 // ----------------------------------------------------------------
@@ -113,7 +103,6 @@ list getStrainData(string strainName)
     }
     return [];
 }
-
 // ----------------------------------------------------------------
 // Derive private HUD channel from owner UUID (matches HUD_Comms)
 // ----------------------------------------------------------------
@@ -123,7 +112,6 @@ integer deriveHUDChannel(key ownerID)
     hexSub = llDumpList2String(llParseString2List(hexSub, ["-"], []), "");
     return (integer)("0x" + hexSub) * -1;
 }
-
 // ----------------------------------------------------------------
 // Calculate stage duration accounting for pot bonus
 // ----------------------------------------------------------------
@@ -139,14 +127,13 @@ integer calcStageDuration()
         stageDur = (integer)((float)stageDur * 0.92); // standard hybrid: -8% time
     return stageDur;
 }
-
 // ----------------------------------------------------------------
 // Show or hide the status indicator icon prim.
 // Pass STATE_NONE to hide it completely.
 // ----------------------------------------------------------------
-setIndicator(integer state)
+setIndicator(integer iState)
 {
-    if (state == STATE_NONE)
+    if (iState == STATE_NONE)
     {
         llSetLinkAlpha(LINK_INDICATOR, 0.0, ALL_SIDES);
         llSetLinkPrimitiveParamsFast(LINK_INDICATOR,
@@ -155,34 +142,31 @@ setIndicator(integer state)
         llLinkParticleSystem(LINK_INDICATOR, []);
         return;
     }
-
     string tex;
     string tipText;
-    if (state == STATE_WATER)
+    if (iState == STATE_WATER)
     {
         tex     = TEX_ICON_WATER;
-        tipText = "💧 Thirsty! 💧";
+        tipText = "Thirsty!";
     }
-    else if (state == STATE_FERT)
+    else if (iState == STATE_FERT)
     {
         tex     = TEX_ICON_FERT;
-        tipText = "🌿 Needs fertilizer";
+        tipText = "Needs fertilizer";
     }
     else // STATE_READY
     {
         tex     = TEX_ICON_READY;
-        tipText = "✨ Ready to harvest!";
+        tipText = "Ready to harvest!";
     }
-
     llSetLinkPrimitiveParamsFast(LINK_INDICATOR, [
         PRIM_TEXTURE, ALL_SIDES, tex, <1.0, 1.0, 0.0>, ZERO_VECTOR, 0.0,
         PRIM_TEXT,    tipText, <0.3, 0.8, 1.0>, 1.0,
         PRIM_OMEGA,   <0.0, 0.0, 1.0>, 0.25, 1.0
     ]);
     llSetLinkAlpha(LINK_INDICATOR, 1.0, ALL_SIDES);
-
     // Drip particles only while the water icon is active
-    if (state == STATE_WATER)
+    if (iState == STATE_WATER)
         llLinkParticleSystem(LINK_INDICATOR, [
             PSYS_SRC_TEXTURE,          TEX_ICON_WATER,
             PSYS_SRC_BURST_PART_COUNT, 2,
@@ -197,7 +181,6 @@ setIndicator(integer state)
     else
         llLinkParticleSystem(LINK_INDICATOR, []);
 }
-
 // ----------------------------------------------------------------
 // Rotate the indicator to face the owner's camera.
 // Call from timer() while the indicator is visible.
@@ -210,7 +193,6 @@ updateIndicatorFacing()
     llSetLinkPrimitiveParamsFast(LINK_INDICATOR,
         [PRIM_ROTATION, llRotBetween(<1.0, 0.0, 0.0>, toCamera)]);
 }
-
 // ----------------------------------------------------------------
 // Update plant visuals for current stage
 // ----------------------------------------------------------------
@@ -221,12 +203,10 @@ updateVisuals()
     llSetLinkAlpha(LINK_VEG,      0.0, ALL_SIDES);
     llSetLinkAlpha(LINK_FLOWER,   0.0, ALL_SIDES);
     llSetLinkAlpha(LINK_HARVEST,  0.0, ALL_SIDES);
-
     // Stop particles and glow on harvest mesh
     llLinkParticleSystem(LINK_HARVEST, []);
     llSetLinkPrimitiveParamsFast(LINK_HARVEST,
         [PRIM_GLOW, ALL_SIDES, 0.0]);
-
     // Show the correct mesh for this stage
     if (g_stage == 1)
     {
@@ -266,7 +246,6 @@ updateVisuals()
         ]);
         llPlaySound("harvest_ready", 0.5);
     }
-
     // Status indicator icon prim  -  show only when action is needed
     if (g_stage == 4)
         setIndicator(STATE_READY);
@@ -276,7 +255,6 @@ updateVisuals()
         setIndicator(STATE_FERT);
     else
         setIndicator(STATE_NONE);
-
     // Hover text
     string hoverText = g_strainName + "\n";
     list stageNames  = ["Empty", "Seedling", "Vegetative", "Flowering", "Ready to Harvest!"];
@@ -305,7 +283,6 @@ updateVisuals()
     hoverText += "]";
     llSetText(hoverText, <0.6, 1.0, 0.6>, 1.0);
 }
-
 // ----------------------------------------------------------------
 // Advance to the next growth stage
 // ----------------------------------------------------------------
@@ -316,11 +293,9 @@ advanceStage()
     g_stageDuration  = calcStageDuration();
     g_isWatered = FALSE;
     g_lightBonusApplied = FALSE;
-
     string stageName;
     list stageNames = ["", "Seedling", "Vegetative", "Flowering", "Ready to Harvest"];
     stageName = llList2String(stageNames, g_stage);
-
     if (g_stage == 4)
     {
         llSetTimerEvent(0.0);
@@ -347,7 +322,6 @@ advanceStage()
     }
     llMessageLinked(LINK_SET, PCHAN_PERSIST, "SAVE_STATE", NULL_KEY);
 }
-
 // ----------------------------------------------------------------
 // Calculate final yield at harvest
 // ----------------------------------------------------------------
@@ -370,14 +344,12 @@ integer calculateYield()
     else if (g_isHybrid)    multiplier += 0.10;
     return (integer)((float)base * multiplier);
 }
-
 // ----------------------------------------------------------------
 string qualityName(integer tier)
 {
     list names = ["reggie", "mids", "loud", "exotic"];
     return llList2String(names, tier);
 }
-
 // ----------------------------------------------------------------
 integer calculateQuality()
 {
@@ -389,7 +361,6 @@ integer calculateQuality()
     }
     return finalTier;
 }
-
 // ----------------------------------------------------------------
 doHarvest()
 {
@@ -422,7 +393,6 @@ doHarvest()
     }
     resetPlant();
 }
-
 // ----------------------------------------------------------------
 resetPlant()
 {
@@ -440,7 +410,6 @@ resetPlant()
     llMessageLinked(LINK_SET, PCHAN_PERSIST, "SAVE_STATE", NULL_KEY);
     llMessageLinked(LINK_SET, PCHAN_GROW, "PLANT_RESET", NULL_KEY);
 }
-
 // ================================================================
 default
 {
@@ -452,7 +421,6 @@ default
         llListen(GROW_LIGHT_CHAN, "", NULL_KEY, "");
         llMessageLinked(LINK_SET, PCHAN_PERSIST, "LOAD_STATE", NULL_KEY);
     }
-
     on_rez(integer start_param)
     {
         g_ownerKey   = llGetOwner();
@@ -460,7 +428,6 @@ default
         g_hudChannel = deriveHUDChannel(g_ownerKey);
         llMessageLinked(LINK_SET, PCHAN_PERSIST, "LOAD_STATE", NULL_KEY);
     }
-
     timer()
     {
         if (g_stage == 0 || g_stage == 4) return;
@@ -490,24 +457,19 @@ default
         if (g_stage > 0 && g_stage < 4)
             updateIndicatorFacing();
     }
-
     link_message(integer sender_num, integer num, string msg, key id)
     {
         if (num != PCHAN_GROW) return;
-
         list   parts = llParseString2List(msg, ["|"], []);
         string cmd   = llList2String(parts, 0);
-
         if (cmd == "PLANT_SEED")
         {
             g_strainName  = llList2String(parts, 1);
             g_potType     = llList2String(parts, 2);
             g_potUsesLeft = (integer)llList2String(parts, 3);
-
             g_isHybrid    = (llSubStringIndex(g_strainName, " x ") != -1);
             g_isLegendary = g_isHybrid &&
                             (llSubStringIndex(g_strainName, "[LEGENDARY]") != -1);
-
             if (g_isLegendary)
                 g_qualityTier = 3;
             else if (g_isHybrid)
@@ -523,18 +485,15 @@ default
                 }
                 g_qualityTier = llList2Integer(data, 1);
             }
-
             g_stage          = 1;
             g_stageStartTime = llGetUnixTime();
             g_stageDuration  = calcStageDuration();
             g_isWatered      = FALSE;
             g_fertApplied    = FALSE;
             g_fertTier       = 0;
-
             llSetTimerEvent(TIMER_INTERVAL);
             updateVisuals();
             llMessageLinked(LINK_SET, PCHAN_PERSIST, "SAVE_STATE", NULL_KEY);
-
             string flavorMsg;
             if (g_isLegendary)
                 flavorMsg = "A legendary cross. This one's special.";
@@ -548,7 +507,6 @@ default
             llRegionSayTo(g_ownerKey, 0,
                 "Planted " + g_strainName + ". \"" + flavorMsg + "\"");
         }
-
         else if (cmd == "WATER_APPLIED")
         {
             if (g_stage == 0 || g_stage == 4)
@@ -562,7 +520,6 @@ default
             llRegionSayTo(g_ownerKey, 0,
                 "Watered your " + g_strainName + ".");
         }
-
         else if (cmd == "FERT_APPLIED")
         {
             if (g_stage != 2)
@@ -593,12 +550,10 @@ default
                 llList2String(fertNames, g_fertTier) +
                 " fertilizer applied to " + g_strainName + ".");
         }
-
         else if (cmd == "DO_HARVEST")
         {
             doHarvest();
         }
-
         else if (cmd == "STATE_LOADED")
         {
             g_strainName     = llList2String(parts, 1);
@@ -611,13 +566,10 @@ default
             g_fertTier       = (integer)llList2String(parts, 8);
             g_potType        = llList2String(parts, 9);
             g_potUsesLeft    = (integer)llList2String(parts, 10);
-
             if (g_stage > 0 && g_stage < 4)
                 llSetTimerEvent(TIMER_INTERVAL);
-
             updateVisuals();
         }
-
         else if (cmd == "SET_POT")
         {
             g_potType     = llList2String(parts, 1);
@@ -625,7 +577,6 @@ default
             updateVisuals();
             llMessageLinked(LINK_SET, PCHAN_PERSIST, "SAVE_STATE", NULL_KEY);
         }
-
         else if (cmd == "REQUEST_STATUS")
         {
             string status =
@@ -642,37 +593,28 @@ default
             llMessageLinked(LINK_SET, PCHAN_GROW, status, NULL_KEY);
         }
     }
-
     listen(integer channel, string name, key id, string msg)
     {
         if (channel != GROW_LIGHT_CHAN) return;
-
         list   parts = llParseString2List(msg, ["|"], []);
         string cmd   = llList2String(parts, 0);
-
         if (cmd == "TC_LIGHT_BONUS")
         {
             if (g_stage == 0 || g_stage == 4) return;
             if (g_lightBonusApplied) return;
-
             key lightOwner = (key)llList2String(parts, 3);
             if (lightOwner != g_ownerKey) return;
-
             integer bonusPct = (integer)llList2String(parts, 1);
             if (bonusPct <= 0 || bonusPct > 50) return;
-
             integer elapsed   = llGetUnixTime() - g_stageStartTime;
             integer remaining = g_stageDuration - elapsed;
             if (remaining <= 0) return;
-
             integer reduction =
                 (integer)((float)remaining * ((float)bonusPct / 100.0));
             g_stageDuration  -= reduction;
             g_lightBonusApplied = TRUE;
-
             llMessageLinked(LINK_SET, PCHAN_PERSIST, "SAVE_STATE", NULL_KEY);
             updateVisuals();
-
             // Brief glow (on flowering mesh as a hint)
             llSetLinkPrimitiveParamsFast(LINK_FLOWER,
                 [PRIM_GLOW, ALL_SIDES, 0.12]);
