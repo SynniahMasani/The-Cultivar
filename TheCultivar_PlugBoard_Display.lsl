@@ -1,14 +1,19 @@
 // ================================================================
 // THE CULTIVAR  -  Plug Board Display Script
-// Version: 1.0
+// Version: 1.1
 // Handles: Visual updates for each listing slot prim.
 //          Kept separate from main so visual glitches never
 //          interrupt payment processing or buyer menus.
 //
 // PRIM LINK STRUCTURE:
-//   Link 1 (root)  : Board frame body  -  main script lives here
+//   Link 1  (root)   : Board frame body  -  main script lives here
 //   Links 2 - 9      : Listing slot prims (up to 8 slots)
-//   Link 10        : Open/Closed sign prim
+//   Link 10          : Open/Closed sign prim
+//   Link 11          : Profile_Pic  -  managed by Main script only
+//   Link 12          : Frame  -  decorative, no script interaction
+//
+// NOTE: This script only writes to links 2-10. Links 11 and 12 are
+//       never touched here.
 //
 // SLOT PRIM VISUAL STATES:
 //   Empty slot     : grey, no glow, blank hover text

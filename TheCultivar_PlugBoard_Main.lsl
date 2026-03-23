@@ -1,6 +1,6 @@
 // ================================================================
 // THE CULTIVAR  -  Plug Board Main Script
-// Version: 1.0
+// Version: 1.1
 // Handles: Stocked inventory reading, buyer browsing, pricing,
 //          payment processing, bag delivery, owner management,
 //          and HUD sale notifications.
@@ -24,15 +24,21 @@
 //   Survives sim restarts  -  owner doesn't have to reprice on relog.
 //
 // PRIM LINK STRUCTURE:
-//   Link 1 (root)  : Board frame/body
+//   Link 1  (root)   : Board frame/body
 //   Links 2 - 9      : Display slots (up to 8, one per listing)
-//                    Each shows quality color glow + hover label
-//   Link 10        : "OPEN/CLOSED" sign prim (optional)
+//                      Each shows quality color glow + hover label
+//   Link 10          : "OPEN/CLOSED" sign prim
+//   Link 11          : Profile_Pic  -  owner photo + online status glow
+//   Link 12          : Frame  -  decorative only, no script interaction
 //
 // MAX LISTINGS: 8 (matches LSL dialog button limit)
 // ================================================================
 
 integer TC_OBJECT_PING_CHAN = -111222333;
+
+// Prim link numbers
+integer LINK_PROFILE = 11;
+// Link 12 = Frame (decorative  -  no constant needed)
 
 // Dialog channels
 integer DCHAN_OWNER_MAIN    = -101001;
@@ -81,6 +87,11 @@ key     g_pendingConsignKey   = NULL_KEY;
 string  g_pendingConsignName  = "";
 integer g_consignWindowActive = FALSE; // TRUE while waiting for consignor to drop
 integer g_consignWindowStart  = 0;    // llGetUnixTime() when window opened
+
+// Profile picture prim
+key     g_profileTexture = NULL_KEY; // UUID of owner's profile photo texture
+key     g_onlineQuery    = NULL_KEY; // Tracks pending dataserver request
+integer g_profileTexChan = 0;        // Random channel for llTextBox UUID input
 
 // ----------------------------------------------------------------
 // Derive HUD channel from UUID
@@ -259,7 +270,7 @@ showOwnerMenu()
     g_listenOwnerMain = llListen(DCHAN_OWNER_MAIN, "", g_ownerKey, "");
     llDialog(g_ownerKey,
         "=== YOUR PLUG BOARD ===\n" + status,
-        ["Set Prices", "Restock", toggleBtn,
+        ["Set Prices", "Restock", "Set Profile Pic", toggleBtn,
          "Clear Slot", consignBtn, "Clr Consign",
          "Board Stats", "Close"],
         DCHAN_OWNER_MAIN);
@@ -652,6 +663,32 @@ showStats()
         "Total Visitors: " + (string)totalVisitors);
 }
 
+// ----------------------------------------------------------------
+// Request owner online status via dataserver
+// ----------------------------------------------------------------
+updateProfileGlow()
+{
+    g_onlineQuery = llRequestAgentData(g_ownerKey, DATA_ONLINE);
+}
+
+// ----------------------------------------------------------------
+// Apply saved profile texture to the Profile_Pic prim (link 11)
+// ----------------------------------------------------------------
+applyProfileTexture()
+{
+    if (g_profileTexture == NULL_KEY)
+    {
+        return;
+    }
+    llSetLinkPrimitiveParamsFast(LINK_PROFILE, [
+        PRIM_TEXTURE, ALL_SIDES,
+        g_profileTexture,
+        <1.0, 1.0, 0.0>,
+        <0.0, 0.0, 0.0>,
+        0.0
+    ]);
+}
+
 // ================================================================
 default
 {
@@ -671,6 +708,16 @@ default
         rebuildListings();
         updateHoverText();
         updateDisplay();
+
+        // Load saved profile texture  -  persists across restarts
+        string savedTex = llLinksetDataRead("profile_tex");
+        if (savedTex != "")
+        {
+            g_profileTexture = (key)savedTex;
+        }
+        applyProfileTexture();
+        updateProfileGlow();
+        llSetTimerEvent(60.0);
     }
 
     on_rez(integer start_param)
@@ -740,16 +787,19 @@ default
     timer()
     {
         closeAllListens();
-        llSetTimerEvent(0.0);
         g_pendingBuyer   = NULL_KEY;
         g_pendingSlot    = -1;
         g_pendingPrice   = 0;
         g_pricingSlot    = -1;
+        g_profileTexChan = 0;
         llLinksetDataDelete("board_clear_mode");
 
         if (!g_registered)
             llRegionSayTo(g_ownerKey, 0,
                 "Couldn't reach your HUD. Make sure your Cultivar HUD is worn.");
+
+        updateProfileGlow();
+        llSetTimerEvent(60.0);
     }
 
     touch_start(integer nd)
@@ -871,6 +921,17 @@ default
             }
             else if (msg == "Clr Consign") showClearConsignMenu();
             else if (msg == "Board Stats") showStats();
+            else if (msg == "Set Profile Pic")
+            {
+                integer chan = (integer)(llFrand(999999.0) * -1) - 1;
+                g_profileTexChan  = chan;
+                g_listenOwnerMain = llListen(chan, "", g_ownerKey, "");
+                llTextBox(g_ownerKey,
+                    "Upload your profile photo as a texture in SL first.\n" +
+                    "Then paste the texture UUID here.\n\n" +
+                    "Current: " + (string)g_profileTexture,
+                    chan);
+            }
         }
 
         // OWNER SLOT SELECTION (price or clear)
@@ -1029,6 +1090,50 @@ default
                     " (was consigned by " + cName + ").");
             }
             showOwnerMenu();
+        }
+
+        // Profile texture UUID entered via llTextBox
+        else if (g_profileTexChan != 0 && channel == g_profileTexChan && id == g_ownerKey)
+        {
+            if (g_listenOwnerMain) { llListenRemove(g_listenOwnerMain); g_listenOwnerMain = 0; }
+            g_profileTexChan = 0;
+            key inputKey = (key)msg;
+            if (inputKey != NULL_KEY)
+            {
+                g_profileTexture = inputKey;
+                llLinksetDataWrite("profile_tex", (string)g_profileTexture);
+                applyProfileTexture();
+                llRegionSayTo(g_ownerKey, 0,
+                    "[Plug Board] Profile texture set! UUID: " + (string)g_profileTexture);
+            }
+            else
+            {
+                llRegionSayTo(g_ownerKey, 0,
+                    "[Plug Board] That doesn't look like a valid UUID. Please try again.");
+                showOwnerMenu();
+            }
+        }
+    }
+
+    dataserver(key queryid, string data)
+    {
+        if (queryid != g_onlineQuery)
+        {
+            return;
+        }
+        if (data == "1")
+        {
+            llSetLinkPrimitiveParamsFast(LINK_PROFILE, [
+                PRIM_COLOR, ALL_SIDES, <0.1, 0.9, 0.2>, 1.0,
+                PRIM_GLOW,  ALL_SIDES, 0.15
+            ]);
+        }
+        else
+        {
+            llSetLinkPrimitiveParamsFast(LINK_PROFILE, [
+                PRIM_COLOR, ALL_SIDES, <0.9, 0.1, 0.1>, 1.0,
+                PRIM_GLOW,  ALL_SIDES, 0.06
+            ]);
         }
     }
 }
