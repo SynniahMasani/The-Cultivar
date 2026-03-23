@@ -10,19 +10,14 @@
 // and hover text, and delegates mutations via link_message.
 //
 // PRIM LINK STRUCTURE:
-//   Link 1 (root)  : Jar body mesh
-//   Link 2         : Fill level mesh (scaled by fill %)
-//   Link 3         : Lid mesh
-//   Link 4         : Particle emitter (idle wisp + smoke on use)
-//   Link 5         : Quality glow ring (color changes by tier)
+//   Link 1 (root)  : Jar_Body     -  all scripts live here
+//   Link 2         : Jar_Lid      -  rotates open/closed on click
+//   Link 3         : Bud_Filling  -  inner cylinder, side-view cannabis texture
+//   Link 4         : Bud_Plane    -  top-down disc, top-view cannabis texture
 //
-// FILL LEVEL STAGES (visual thresholds):
-//   100 - 75% : Full     -  packed, visible buds at top
-//   74 - 50%  : Half     -  mid level
-//   49 - 25%  : Low      -  getting thin
-//   24 - 10%  : Almost   -  nearly empty, color shift
-//   9 - 1%    : Last     -  just a little left
-//   0%      : Empty    -  no fill mesh, idle particle gone
+// FILL VISUAL:
+//   Stocked  : LINK_FILLING and LINK_PLANE shown (alpha 1.0), tinted by quality
+//   Empty    : LINK_FILLING and LINK_PLANE hidden (alpha 0.0)
 //
 // CAPACITY: 28g default (one oz). Premium jar = 56g.
 //
@@ -33,6 +28,11 @@
 // ================================================================
 
 integer TC_OBJECT_PING_CHAN = -111222333;
+
+// Prim link numbers
+integer LINK_LID     = 2;   // Jar_Lid      -  rotates on open/close
+integer LINK_FILLING = 3;   // Bud_Filling  -  inner cylinder, shown when stocked
+integer LINK_PLANE   = 4;   // Bud_Plane    -  top disc, shown when stocked
 
 // Internal channels between jar scripts
 integer JCHAN_MAIN    = 2000;
@@ -125,29 +125,26 @@ float fillPct()
 // ----------------------------------------------------------------
 updateVisuals()
 {
-    float pct = fillPct();
+    // --- Bud_Filling and Bud_Plane  -  show when stocked, hide when empty ---
+    if (g_grams > 0)
+    {
+        llSetLinkAlpha(LINK_FILLING, 1.0, ALL_SIDES);
+        llSetLinkAlpha(LINK_PLANE,   1.0, ALL_SIDES);
+        llSetLinkPrimitiveParamsFast(LINK_FILLING, [
+            PRIM_COLOR, ALL_SIDES, qualityColor(), 1.0
+        ]);
+    }
+    else
+    {
+        llSetLinkAlpha(LINK_FILLING, 0.0, ALL_SIDES);
+        llSetLinkAlpha(LINK_PLANE,   0.0, ALL_SIDES);
+    }
 
-    // --- Fill level mesh (link 2) ---
-    float fillHeight = 0.08 * pct;
-    if (fillHeight < 0.001) fillHeight = 0.001;
-    llSetLinkPrimitiveParamsFast(2, [
-        PRIM_SIZE, <0.065, 0.065, fillHeight>,
-        PRIM_COLOR, ALL_SIDES, qualityColor(), 1.0
-    ]);
-
-    // --- Quality glow ring (link 5) ---
-    float glowVal = 0.0;
-    if (g_grams > 0) glowVal = 0.06 + (pct * 0.04);
-    llSetLinkPrimitiveParamsFast(5, [
-        PRIM_COLOR, ALL_SIDES, qualityColor(), 1.0,
-        PRIM_GLOW,  ALL_SIDES, glowVal
-    ]);
-
-    // --- Idle particle wisp (link 4) ---
+    // --- Idle particle wisp ---
     if (g_grams > 0)
         startIdleParticles();
     else
-        llLinkParticleSystem(4, []);
+        llLinkParticleSystem(LINK_PLANE, []);
 
     // --- Hover text ---
     updateHoverText();
@@ -173,7 +170,7 @@ startIdleParticles()
     if (llGetUnixTime() < g_burstUntil) return;
 
     vector col = qualityColor();
-    llLinkParticleSystem(4, [
+    llLinkParticleSystem(LINK_PLANE, [
         PSYS_PART_FLAGS,           PSYS_PART_INTERP_COLOR_MASK |
                                    PSYS_PART_INTERP_SCALE_MASK |
                                    PSYS_PART_EMISSIVE_MASK,
@@ -202,7 +199,7 @@ startIdleParticles()
 burstSmokeParticles()
 {
     vector col = qualityColor();
-    llLinkParticleSystem(4, [
+    llLinkParticleSystem(LINK_PLANE, [
         PSYS_PART_FLAGS,           PSYS_PART_INTERP_COLOR_MASK |
                                    PSYS_PART_INTERP_SCALE_MASK |
                                    PSYS_PART_EMISSIVE_MASK,
@@ -445,7 +442,7 @@ default
         {
             g_burstUntil = 0;
             if (g_grams > 0) startIdleParticles();
-            else llLinkParticleSystem(4, []);
+            else llLinkParticleSystem(LINK_PLANE, []);
 
             // If dialogs are still open, keep their timeout running
             if (g_listenOwner || g_listenLoad || g_listenAccess || g_listenVisitor)
