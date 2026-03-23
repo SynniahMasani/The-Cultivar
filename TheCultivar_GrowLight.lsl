@@ -26,10 +26,14 @@
 // RANGE: 5 meters (covers a standard grow room footprint)
 //
 // PRIM LINK STRUCTURE:
-//   Link 1 (root) : Light body / hood
-//   Link 2        : Bulb prim (glows and changes color)
-//   Link 3        : Beam prim (cone pointing down, alpha)
-//   Link 4        : Status indicator (on/off, tier)
+//   Link 1 (root) : Light body / hood (may contain multiple body prims)
+//   TC_Bulb       : Bulb prim  -  name this prim TC_Bulb in-world
+//   TC_Beam       : Beam prim  -  name this prim TC_Beam in-world
+//   TC_Status     : Status indicator  -  name this prim TC_Status in-world
+//
+// Link numbers are resolved at runtime via llGetLinkName so this
+// script works regardless of how many body prims are in the linkset.
+// Works across all grow light variants without any script changes.
 //
 // POWER STATES:
 //   ON   -  scanning, broadcasting bonus, full glow
@@ -68,6 +72,14 @@ float   SCAN_RANGE    = 5.0;  // meters
 // How many plants found last scan
 integer g_plantsFound = 0;
 
+// Resolved at runtime via llGetLinkName
+integer g_linkBulb   = -1;
+integer g_linkBeam   = -1;
+integer g_linkStatus = -1;
+
+// Private reply channel for TC_REGISTER handshake
+integer g_replyChannel = 0;
+
 // ----------------------------------------------------------------
 integer deriveHUDChannel(key id)
 {
@@ -80,9 +92,11 @@ pingHUD()
 {
     g_registered = FALSE;
     if (g_listenRegister) llListenRemove(g_listenRegister);
-    g_listenRegister = llListen(0, "", NULL_KEY, "");
+    g_replyChannel   = (integer)(llFrand(1000000.0) + 1000000) * -1;
+    g_listenRegister = llListen(g_replyChannel, "", NULL_KEY, "");
     llRegionSay(TC_OBJECT_PING_CHAN,
-        "TC_PING|" + (string)llGetKey() + "|grow_light");
+        "TC_PING|" + (string)llGetKey() + "|grow_light|" +
+        (string)g_replyChannel);
     llSetTimerEvent(8.0);
 }
 
@@ -109,6 +123,29 @@ integer isEffectivelyOn()
 }
 
 // ----------------------------------------------------------------
+// Resolve functional prim link numbers by name at runtime
+// ----------------------------------------------------------------
+resolveLinks()
+{
+    integer total = llGetNumberOfPrims();
+    integer i;
+    for (i = 1; i <= total; i++)
+    {
+        string primName = llGetLinkName(i);
+        if (primName == "TC_Bulb")   g_linkBulb   = i;
+        if (primName == "TC_Beam")   g_linkBeam   = i;
+        if (primName == "TC_Status") g_linkStatus = i;
+    }
+
+    if (g_linkBulb == -1)
+        llOwnerSay("[Grow Light] WARNING: No prim named TC_Bulb found. Check link names.");
+    if (g_linkBeam == -1)
+        llOwnerSay("[Grow Light] WARNING: No prim named TC_Beam found. Check link names.");
+    if (g_linkStatus == -1)
+        llOwnerSay("[Grow Light] WARNING: No prim named TC_Status found. Check link names.");
+}
+
+// ----------------------------------------------------------------
 // Update all light visuals based on current state
 // ----------------------------------------------------------------
 updateVisuals()
@@ -118,18 +155,21 @@ updateVisuals()
 
     if (g_lightOn)
     {
-        // Bulb full glow
-        llSetLinkPrimitiveParamsFast(2, [
-            PRIM_COLOR, ALL_SIDES, bulbColor, 1.0,
-            PRIM_GLOW,  ALL_SIDES, 0.35,
-            PRIM_POINT_LIGHT, TRUE, bulbColor, 1.0, 6.0, 0.5
-        ]);
-        // Beam cone (link 3)  -  semi-transparent downward cone
-        llSetLinkPrimitiveParamsFast(3, [
-            PRIM_COLOR, ALL_SIDES, bulbColor, 0.12,
-            PRIM_GLOW,  ALL_SIDES, 0.05
-        ]);
-        // Status prim
+        if (g_linkBulb != -1)
+        {
+            llSetLinkPrimitiveParamsFast(g_linkBulb, [
+                PRIM_COLOR, ALL_SIDES, bulbColor, 1.0,
+                PRIM_GLOW,  ALL_SIDES, 0.35,
+                PRIM_POINT_LIGHT, TRUE, bulbColor, 1.0, 6.0, 0.5
+            ]);
+        }
+        if (g_linkBeam != -1)
+        {
+            llSetLinkPrimitiveParamsFast(g_linkBeam, [
+                PRIM_COLOR, ALL_SIDES, bulbColor, 0.12,
+                PRIM_GLOW,  ALL_SIDES, 0.05
+            ]);
+        }
         string tierName = llList2String(TIER_NAMES, g_tier);
         string autoStr  = "";
         if (g_powerState == "auto") autoStr = " [AUTO]";
@@ -140,32 +180,43 @@ updateVisuals()
             if (g_plantsFound > 1) sPl = "s";
             plantsStr = (string)g_plantsFound + " plant" + sPl + " in range";
         }
-        llSetLinkPrimitiveParamsFast(4, [
-            PRIM_COLOR, ALL_SIDES, <0.2, 0.9, 0.2>, 1.0,
-            PRIM_TEXT,
-                "? " + tierName + autoStr + "\n" +
-                "-" + (string)llList2Integer(TIER_BONUS, g_tier) + "% grow time\n" +
-                plantsStr,
-                <0.2, 0.9, 0.2>, 1.0
-        ]);
+        if (g_linkStatus != -1)
+        {
+            llSetLinkPrimitiveParamsFast(g_linkStatus, [
+                PRIM_COLOR, ALL_SIDES, <0.2, 0.9, 0.2>, 1.0,
+                PRIM_TEXT,
+                    "✦ " + tierName + autoStr + "\n" +
+                    "-" + (string)llList2Integer(TIER_BONUS, g_tier) + "% grow time\n" +
+                    plantsStr,
+                    <0.2, 0.9, 0.2>, 1.0
+            ]);
+        }
     }
     else
     {
-        // Dim / off
-        llSetLinkPrimitiveParamsFast(2, [
-            PRIM_COLOR, ALL_SIDES, <0.3, 0.3, 0.3>, 1.0,
-            PRIM_GLOW,  ALL_SIDES, 0.0,
-            PRIM_POINT_LIGHT, FALSE, ZERO_VECTOR, 0.0, 0.0, 0.0
-        ]);
-        llSetLinkPrimitiveParamsFast(3, [
-            PRIM_COLOR, ALL_SIDES, <0.3, 0.3, 0.3>, 0.0
-        ]);
+        if (g_linkBulb != -1)
+        {
+            llSetLinkPrimitiveParamsFast(g_linkBulb, [
+                PRIM_COLOR, ALL_SIDES, <0.3, 0.3, 0.3>, 1.0,
+                PRIM_GLOW,  ALL_SIDES, 0.0,
+                PRIM_POINT_LIGHT, FALSE, ZERO_VECTOR, 0.0, 0.0, 0.0
+            ]);
+        }
+        if (g_linkBeam != -1)
+        {
+            llSetLinkPrimitiveParamsFast(g_linkBeam, [
+                PRIM_COLOR, ALL_SIDES, <0.3, 0.3, 0.3>, 0.0
+            ]);
+        }
         string reason = "AUTO  -  waiting for 6am SLT";
         if (g_powerState == "off") reason = "OFF";
-        llSetLinkPrimitiveParamsFast(4, [
-            PRIM_COLOR, ALL_SIDES, <0.8, 0.2, 0.2>, 1.0,
-            PRIM_TEXT,  reason, <0.8, 0.2, 0.2>, 1.0
-        ]);
+        if (g_linkStatus != -1)
+        {
+            llSetLinkPrimitiveParamsFast(g_linkStatus, [
+                PRIM_COLOR, ALL_SIDES, <0.8, 0.2, 0.2>, 1.0,
+                PRIM_TEXT,  reason, <0.8, 0.2, 0.2>, 1.0
+            ]);
+        }
     }
 
     // Main hover text
@@ -224,6 +275,7 @@ default
 {
     state_entry()
     {
+        resolveLinks();
         g_ownerKey   = llGetOwner();
         g_ownerName  = llKey2Name(g_ownerKey);
         g_hudChannel = deriveHUDChannel(g_ownerKey);
@@ -320,7 +372,7 @@ default
         list   parts = llParseString2List(msg, ["|"], []);
         string cmd   = llList2String(parts, 0);
 
-        if (channel == 0 && cmd == "TC_REGISTER")
+        if (channel == g_replyChannel && cmd == "TC_REGISTER")
         {
             key regOwner = (key)llList2String(parts, 1);
             if (regOwner != g_ownerKey) return;
