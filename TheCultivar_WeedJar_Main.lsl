@@ -83,9 +83,6 @@ string  g_pendingLoadQuality  = "";
 integer g_pendingLoadGrams    = 0;
 string  g_pendingLoadPackager = "";
 
-// Smoke burst particle tracking
-integer g_burstUntil = 0;
-
 // ----------------------------------------------------------------
 // Derive HUD channel from owner UUID
 // ----------------------------------------------------------------
@@ -121,32 +118,41 @@ float fillPct()
 }
 
 // ----------------------------------------------------------------
+// Lid open/close
+// ----------------------------------------------------------------
+openLid()
+{
+    llSetLinkPrimitiveParamsFast(LINK_LID, [
+        PRIM_ROT_LOCAL, llEuler2Rot(<110.0 * DEG_TO_RAD, 0.0, 0.0>)
+    ]);
+}
+
+closeLid()
+{
+    llSetLinkPrimitiveParamsFast(LINK_LID, [
+        PRIM_ROT_LOCAL, llEuler2Rot(<0.0, 0.0, 0.0>)
+    ]);
+}
+
+// ----------------------------------------------------------------
 // Update all visual elements based on cached state
 // ----------------------------------------------------------------
 updateVisuals()
 {
-    // --- Bud_Filling and Bud_Plane  -  show when stocked, hide when empty ---
     if (g_grams > 0)
     {
+        // Show contents
         llSetLinkAlpha(LINK_FILLING, 1.0, ALL_SIDES);
         llSetLinkAlpha(LINK_PLANE,   1.0, ALL_SIDES);
-        llSetLinkPrimitiveParamsFast(LINK_FILLING, [
-            PRIM_COLOR, ALL_SIDES, qualityColor(), 1.0
-        ]);
+        closeLid();
     }
     else
     {
+        // Hide contents when empty
         llSetLinkAlpha(LINK_FILLING, 0.0, ALL_SIDES);
         llSetLinkAlpha(LINK_PLANE,   0.0, ALL_SIDES);
+        closeLid();
     }
-
-    // --- Idle particle wisp ---
-    if (g_grams > 0)
-        startIdleParticles();
-    else
-        llLinkParticleSystem(LINK_PLANE, []);
-
-    // --- Hover text ---
     updateHoverText();
 }
 
@@ -159,68 +165,6 @@ vector qualityColor()
     if (g_quality == "loud")   return <0.2, 0.85, 0.3>;
     if (g_quality == "exotic") return <0.7, 0.3,  1.0>;
     return <0.55, 0.45, 0.3>; // reggie
-}
-
-// ----------------------------------------------------------------
-// Idle ambient wisp particles
-// ----------------------------------------------------------------
-startIdleParticles()
-{
-    // Don't override an active smoke burst
-    if (llGetUnixTime() < g_burstUntil) return;
-
-    vector col = qualityColor();
-    llLinkParticleSystem(LINK_PLANE, [
-        PSYS_PART_FLAGS,           PSYS_PART_INTERP_COLOR_MASK |
-                                   PSYS_PART_INTERP_SCALE_MASK |
-                                   PSYS_PART_EMISSIVE_MASK,
-        PSYS_SRC_PATTERN,          PSYS_SRC_PATTERN_ANGLE_CONE,
-        PSYS_PART_START_COLOR,     col,
-        PSYS_PART_END_COLOR,       <1.0, 1.0, 1.0>,
-        PSYS_PART_START_ALPHA,     0.25,
-        PSYS_PART_END_ALPHA,       0.0,
-        PSYS_PART_START_SCALE,     <0.015, 0.015, 0.0>,
-        PSYS_PART_END_SCALE,       <0.005, 0.005, 0.0>,
-        PSYS_PART_MAX_AGE,         3.0,
-        PSYS_SRC_BURST_RATE,       1.2,
-        PSYS_SRC_BURST_PART_COUNT, 1,
-        PSYS_SRC_BURST_SPEED_MIN,  0.01,
-        PSYS_SRC_BURST_SPEED_MAX,  0.03,
-        PSYS_SRC_ANGLE_BEGIN,      0.0,
-        PSYS_SRC_ANGLE_END,        0.3
-    ]);
-}
-
-// ----------------------------------------------------------------
-// Burst smoke particles when someone takes a hit.
-// Uses PSYS_SRC_MAX_AGE so the burst stops on its own after 1.5s.
-// A timer restores idle particles after 2s.
-// ----------------------------------------------------------------
-burstSmokeParticles()
-{
-    vector col = qualityColor();
-    llLinkParticleSystem(LINK_PLANE, [
-        PSYS_PART_FLAGS,           PSYS_PART_INTERP_COLOR_MASK |
-                                   PSYS_PART_INTERP_SCALE_MASK |
-                                   PSYS_PART_EMISSIVE_MASK,
-        PSYS_SRC_PATTERN,          PSYS_SRC_PATTERN_ANGLE_CONE,
-        PSYS_PART_START_COLOR,     col,
-        PSYS_PART_END_COLOR,       <0.9, 0.9, 0.9>,
-        PSYS_PART_START_ALPHA,     0.7,
-        PSYS_PART_END_ALPHA,       0.0,
-        PSYS_PART_START_SCALE,     <0.06, 0.06, 0.0>,
-        PSYS_PART_END_SCALE,       <0.12, 0.12, 0.0>,
-        PSYS_PART_MAX_AGE,         4.0,
-        PSYS_SRC_BURST_RATE,       0.05,
-        PSYS_SRC_BURST_PART_COUNT, 6,
-        PSYS_SRC_BURST_SPEED_MIN,  0.03,
-        PSYS_SRC_BURST_SPEED_MAX,  0.08,
-        PSYS_SRC_MAX_AGE,          1.5,
-        PSYS_SRC_ANGLE_BEGIN,      0.0,
-        PSYS_SRC_ANGLE_END,        0.4
-    ]);
-    g_burstUntil = llGetUnixTime() + 2;
-    llSetTimerEvent(2.5); // restore idle particles after burst
 }
 
 // ----------------------------------------------------------------
@@ -437,28 +381,12 @@ default
 
     timer()
     {
-        // Smoke burst ended  -  restore idle particles
-        if (g_burstUntil > 0 && llGetUnixTime() >= g_burstUntil)
-        {
-            g_burstUntil = 0;
-            if (g_grams > 0) startIdleParticles();
-            else llLinkParticleSystem(LINK_PLANE, []);
-
-            // If dialogs are still open, keep their timeout running
-            if (g_listenOwner || g_listenLoad || g_listenAccess || g_listenVisitor)
-            {
-                llSetTimerEvent(25.0);
-                return;
-            }
-            llSetTimerEvent(0.0);
-            return;
-        }
-
         // Dialog timeout cleanup
         if (g_listenOwner)   { llListenRemove(g_listenOwner);   g_listenOwner   = 0; }
         if (g_listenLoad)    { llListenRemove(g_listenLoad);    g_listenLoad    = 0; }
         if (g_listenAccess)  { llListenRemove(g_listenAccess);  g_listenAccess  = 0; }
         if (g_listenVisitor) { llListenRemove(g_listenVisitor); g_listenVisitor = 0; }
+        closeLid();
         llSetTimerEvent(0.0);
 
         if (!g_registered)
@@ -469,6 +397,7 @@ default
     touch_start(integer nd)
     {
         key toucher = llDetectedKey(0);
+        openLid();
 
         if (toucher == g_ownerKey)
         {
@@ -692,10 +621,6 @@ default
             llMessageLinked(LINK_SET, JCHAN_ATTACH,
                 "ATTACH|" + (string)smoker + "|" + strain + "|" + quality,
                 NULL_KEY);
-
-            // Burst particles and play sound
-            burstSmokeParticles();
-            llPlaySound("jar_open", 0.5);
 
             // Feedback
             if (smoker == g_ownerKey)
