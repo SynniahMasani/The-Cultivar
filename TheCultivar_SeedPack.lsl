@@ -38,6 +38,9 @@ string PACK_MODE   = "gacha";
 string PACK_STRAIN = "";
 string PACK_TYPE   = "Hustler's Pack";
 
+// ---- Depletion guard ----
+integer g_used = FALSE;
+
 // ---- Channel constants ----
 integer TC_HUD_CHANNEL = -987655;
 string  TC_ADD_ITEM    = "TC_ADD_ITEM";
@@ -191,11 +194,15 @@ default
 
     touch_start(integer nd)
     {
+        if (g_used) return;
+
         if (llDetectedKey(0) != llGetOwner())
         {
             llSay(0, "This pack belongs to someone else.");
             return;
         }
+
+        g_used = TRUE;
 
         integer seedCount   = 0;
         string  displayName = "";
