@@ -42,8 +42,15 @@ string PACK_TYPE   = "Hustler's Pack";
 integer g_used = FALSE;
 
 // ---- Channel constants ----
-integer TC_HUD_CHANNEL = -987655;
 string  TC_ADD_ITEM    = "TC_ADD_ITEM";
+
+// ---- Derive private HUD channel from owner UUID (matches HUD_Comms) ----
+integer deriveHUDChannel(key ownerID)
+{
+    string h = llGetSubString((string)ownerID, 0, 6);
+    h = llDumpList2String(llParseString2List(h, ["-"], []), "");
+    return (integer)("0x" + h) * -1;
+}
 
 // ---- Strain master table ----
 // Stride 3: strainName, tierString, tierIndex
@@ -256,8 +263,8 @@ default
             llSay(0, "Seed #" + (string)i + " - " +
                 qualLabel(qualTier) + " - " + strainName);
 
-            llRegionSayTo(llGetOwner(), TC_HUD_CHANNEL,
-                TC_ADD_ITEM + "|seed|" + strainName + "|" + qualTier + "|1");
+            llRegionSayTo(llGetOwner(), deriveHUDChannel(llGetOwner()),
+                TC_ADD_ITEM + "|seed_raw|" + strainName + "|" + qualTier + "|1");
 
             llSleep(0.5);
         }
