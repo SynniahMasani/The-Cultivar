@@ -331,8 +331,10 @@ default
         {
             string detName = llDetectedName(i);
             // Match Cultivar plant objects by name prefix
-            if (llSubStringIndex(detName, "TC_Plant") == 0 ||
-                llSubStringIndex(detName, "TC_Pot")   == 0)
+            if (llSubStringIndex(detName, "TC_Plant")       == 0 ||
+                llSubStringIndex(detName, "TC_Pot")        == 0 ||
+                llSubStringIndex(detName, "TC_Basic Pot")  == 0 ||
+                llSubStringIndex(detName, "TC_Premium Pot") == 0)
             {
                 g_plantsFound++;
             }
