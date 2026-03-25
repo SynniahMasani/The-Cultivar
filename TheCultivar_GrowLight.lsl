@@ -230,15 +230,8 @@ updateVisuals()
         }
     }
 
-    // Main hover text
-    if (g_lightOn)
-        llSetText("THE CULTIVAR\nGrow Light [" +
-                  llList2String(TIER_NAMES, g_tier) + "]\n" +
-                  "-" + (string)llList2Integer(TIER_BONUS, g_tier) + "% grow time",
-                  llList2Vector(TIER_COLORS, g_tier), 1.0);
-    else
-        llSetText("THE CULTIVAR\nGrow Light [OFF]",
-                  <0.5, 0.5, 0.5>, 0.7);
+    // TC_Status prim handles all display — clear root prim text
+    llSetText("", ZERO_VECTOR, 0.0);
 }
 
 // ----------------------------------------------------------------
