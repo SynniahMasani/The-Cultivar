@@ -88,6 +88,17 @@ integer deriveHUDChannel(key id)
     return (integer)("0x" + h) * -1;
 }
 
+// ----------------------------------------------------------------
+// Detect light tier from object name (Full Spectrum / LED Panel / Standard)
+// ----------------------------------------------------------------
+integer detectTierFromName()
+{
+    string objName = llGetObjectName();
+    if (llSubStringIndex(objName, "Full Spectrum") != -1) return 2;
+    if (llSubStringIndex(objName, "LED Panel")     != -1) return 1;
+    return 0;
+}
+
 pingHUD()
 {
     g_registered = FALSE;
@@ -263,9 +274,7 @@ showOwnerMenu()
         llList2String(TIER_NAMES, g_tier) + "\n" +
         stateLabel + "  ?  " +
         (string)g_plantsFound + " plant" + plantSuffix + " in range",
-        ["Turn On", "Turn Off", "Auto Mode",
-         "Standard", "LED Panel", "Full Spectrum",
-         "Close"],
+        ["Turn On", "Turn Off", "Auto Mode", "Close"],
         DCHAN_OWNER);
     llSetTimerEvent(30.0);
 }
@@ -280,11 +289,10 @@ default
         g_ownerName  = llKey2Name(g_ownerKey);
         g_hudChannel = deriveHUDChannel(g_ownerKey);
 
-        // Restore saved power state and tier after a sim restart or reset
+        // Restore saved power state; tier is always derived from object name
         string savedPower = llLinksetDataRead("light_power");
-        string savedTier  = llLinksetDataRead("light_tier");
         if (savedPower != "") g_powerState = savedPower;
-        if (savedTier  != "") g_tier = (integer)savedTier;
+        g_tier = detectTierFromName();
 
         if (g_listenRegister) llListenRemove(g_listenRegister);
         g_listenRegister = llListen(0, "", NULL_KEY, "");
@@ -396,13 +404,9 @@ default
             if (msg == "Turn On")        g_powerState = "on";
             else if (msg == "Turn Off")  g_powerState = "off";
             else if (msg == "Auto Mode") g_powerState = "auto";
-            else if (msg == "Standard")      g_tier = 0;
-            else if (msg == "LED Panel")     g_tier = 1;
-            else if (msg == "Full Spectrum") g_tier = 2;
 
             updateVisuals();
             llLinksetDataWrite("light_power", g_powerState);
-            llLinksetDataWrite("light_tier",  (string)g_tier);
         }
     }
 }

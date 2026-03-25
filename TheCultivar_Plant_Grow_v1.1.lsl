@@ -27,11 +27,12 @@
 //                        icon_ready      d131fff9-e2d3-176f-c0e2-d31bdabf0767
 //
 // ================================================================
-integer LINK_SEEDLING  = 5;
-integer LINK_VEG       = 4;
-integer LINK_FLOWER    = 3;
-integer LINK_HARVEST   = 2;
-integer LINK_INDICATOR = 7;   // transparent icon prim (set to correct link number)
+// Link numbers resolved at runtime via llGetLinkName
+integer g_linkSeedling  = -1;  // Cannabis_Plant_1
+integer g_linkVeg       = -1;  // Cannabis_Plant_2
+integer g_linkFlower    = -1;  // Cannabis_Plant_3
+integer g_linkHarvest   = -1;  // Cannabis_Plant_4
+integer g_linkIndicator = -1;  // Indicator (optional, absent on premium pot)
 // ---- Indicator iStates ----
 integer STATE_NONE  = 0;
 integer STATE_WATER = 1;
@@ -90,6 +91,30 @@ integer GROW_LIGHT_CHAN = -999111222;
 // Whether the light bonus has been applied this stage
 integer g_lightBonusApplied = FALSE;
 // ----------------------------------------------------------------
+// Resolve functional prim link numbers by name at runtime.
+// Works for both TC_Basic Pot and TC_Premium Pot without changes.
+// ----------------------------------------------------------------
+resolveLinks()
+{
+    g_linkSeedling  = -1;
+    g_linkVeg       = -1;
+    g_linkFlower    = -1;
+    g_linkHarvest   = -1;
+    g_linkIndicator = -1;
+    integer total = llGetNumberOfPrims();
+    integer i;
+    for (i = 1; i <= total; i++)
+    {
+        string n = llGetLinkName(i);
+        if      (n == "Cannabis_Plant_1") g_linkSeedling  = i;
+        else if (n == "Cannabis_Plant_2") g_linkVeg       = i;
+        else if (n == "Cannabis_Plant_3") g_linkFlower    = i;
+        else if (n == "Cannabis_Plant_4") g_linkHarvest   = i;
+        else if (n == "Indicator")        g_linkIndicator = i;
+    }
+}
+
+// ----------------------------------------------------------------
 // Look up strain data by name, return as list or empty list
 // ----------------------------------------------------------------
 list getStrainData(string strainName)
@@ -133,13 +158,14 @@ integer calcStageDuration()
 // ----------------------------------------------------------------
 setIndicator(integer iState)
 {
+    if (g_linkIndicator == -1) return; // no indicator prim (e.g. premium pot)
     if (iState == STATE_NONE)
     {
-        llSetLinkAlpha(LINK_INDICATOR, 0.0, ALL_SIDES);
-        llSetLinkPrimitiveParamsFast(LINK_INDICATOR,
+        llSetLinkAlpha(g_linkIndicator, 0.0, ALL_SIDES);
+        llSetLinkPrimitiveParamsFast(g_linkIndicator,
             [PRIM_TEXT,  "", ZERO_VECTOR, 0.0,
              PRIM_OMEGA, ZERO_VECTOR, 0.0, 0.0]);
-        llLinkParticleSystem(LINK_INDICATOR, []);
+        llLinkParticleSystem(g_linkIndicator, []);
         return;
     }
     string tex;
@@ -159,15 +185,15 @@ setIndicator(integer iState)
         tex     = TEX_ICON_READY;
         tipText = "Ready to harvest!";
     }
-    llSetLinkPrimitiveParamsFast(LINK_INDICATOR, [
+    llSetLinkPrimitiveParamsFast(g_linkIndicator, [
         PRIM_TEXTURE, ALL_SIDES, tex, <1.0, 1.0, 0.0>, ZERO_VECTOR, 0.0,
         PRIM_TEXT,    tipText, <0.3, 0.8, 1.0>, 1.0,
         PRIM_OMEGA,   <0.0, 0.0, 1.0>, 0.25, 1.0
     ]);
-    llSetLinkAlpha(LINK_INDICATOR, 1.0, ALL_SIDES);
+    llSetLinkAlpha(g_linkIndicator, 1.0, ALL_SIDES);
     // Drip particles only while the water icon is active
     if (iState == STATE_WATER)
-        llLinkParticleSystem(LINK_INDICATOR, [
+        llLinkParticleSystem(g_linkIndicator, [
             PSYS_SRC_TEXTURE,          TEX_ICON_WATER,
             PSYS_SRC_BURST_PART_COUNT, 2,
             PSYS_SRC_BURST_RATE,       3.0,
@@ -179,7 +205,7 @@ setIndicator(integer iState)
             PSYS_PART_MAX_AGE,         1.2
         ]);
     else
-        llLinkParticleSystem(LINK_INDICATOR, []);
+        llLinkParticleSystem(g_linkIndicator, []);
 }
 // ----------------------------------------------------------------
 // Rotate the indicator to face the owner's camera.
@@ -188,9 +214,10 @@ setIndicator(integer iState)
 // ----------------------------------------------------------------
 updateIndicatorFacing()
 {
+    if (g_linkIndicator == -1) return;
     vector toCamera = llVecNorm(llGetCameraPos() - llGetPos());
     if (toCamera == ZERO_VECTOR) return;
-    llSetLinkPrimitiveParamsFast(LINK_INDICATOR,
+    llSetLinkPrimitiveParamsFast(g_linkIndicator,
         [PRIM_ROTATION, llRotBetween(<1.0, 0.0, 0.0>, toCamera)]);
 }
 // ----------------------------------------------------------------
@@ -199,33 +226,33 @@ updateIndicatorFacing()
 updateVisuals()
 {
     // Hide all plant meshes
-    llSetLinkAlpha(LINK_SEEDLING, 0.0, ALL_SIDES);
-    llSetLinkAlpha(LINK_VEG,      0.0, ALL_SIDES);
-    llSetLinkAlpha(LINK_FLOWER,   0.0, ALL_SIDES);
-    llSetLinkAlpha(LINK_HARVEST,  0.0, ALL_SIDES);
+    llSetLinkAlpha(g_linkSeedling, 0.0, ALL_SIDES);
+    llSetLinkAlpha(g_linkVeg,      0.0, ALL_SIDES);
+    llSetLinkAlpha(g_linkFlower,   0.0, ALL_SIDES);
+    llSetLinkAlpha(g_linkHarvest,  0.0, ALL_SIDES);
     // Stop particles and glow on harvest mesh
-    llLinkParticleSystem(LINK_HARVEST, []);
-    llSetLinkPrimitiveParamsFast(LINK_HARVEST,
+    llLinkParticleSystem(g_linkHarvest, []);
+    llSetLinkPrimitiveParamsFast(g_linkHarvest,
         [PRIM_GLOW, ALL_SIDES, 0.0]);
     // Show the correct mesh for this stage
     if (g_stage == 1)
     {
-        llSetLinkAlpha(LINK_SEEDLING, 1.0, ALL_SIDES);
+        llSetLinkAlpha(g_linkSeedling, 1.0, ALL_SIDES);
     }
     else if (g_stage == 2)
     {
-        llSetLinkAlpha(LINK_VEG, 1.0, ALL_SIDES);
+        llSetLinkAlpha(g_linkVeg, 1.0, ALL_SIDES);
     }
     else if (g_stage == 3)
     {
-        llSetLinkAlpha(LINK_FLOWER, 1.0, ALL_SIDES);
+        llSetLinkAlpha(g_linkFlower, 1.0, ALL_SIDES);
     }
     else if (g_stage == 4)
     {
-        llSetLinkAlpha(LINK_HARVEST, 1.0, ALL_SIDES);
-        llSetLinkPrimitiveParamsFast(LINK_HARVEST,
+        llSetLinkAlpha(g_linkHarvest, 1.0, ALL_SIDES);
+        llSetLinkPrimitiveParamsFast(g_linkHarvest,
             [PRIM_GLOW, ALL_SIDES, 0.05]);
-        llLinkParticleSystem(LINK_HARVEST, [
+        llLinkParticleSystem(g_linkHarvest, [
             PSYS_PART_FLAGS,        PSYS_PART_INTERP_COLOR_MASK |
                                     PSYS_PART_INTERP_SCALE_MASK |
                                     PSYS_PART_EMISSIVE_MASK,
@@ -415,6 +442,7 @@ default
 {
     state_entry()
     {
+        resolveLinks();
         g_ownerKey  = llGetOwner();
         g_ownerName = llKey2Name(g_ownerKey);
         g_hudChannel = deriveHUDChannel(g_ownerKey);
@@ -423,6 +451,7 @@ default
     }
     on_rez(integer start_param)
     {
+        resolveLinks();
         g_ownerKey   = llGetOwner();
         g_ownerName  = llKey2Name(g_ownerKey);
         g_hudChannel = deriveHUDChannel(g_ownerKey);
@@ -616,7 +645,7 @@ default
             llMessageLinked(LINK_SET, PCHAN_PERSIST, "SAVE_STATE", NULL_KEY);
             updateVisuals();
             // Brief glow (on flowering mesh as a hint)
-            llSetLinkPrimitiveParamsFast(LINK_FLOWER,
+            llSetLinkPrimitiveParamsFast(g_linkFlower,
                 [PRIM_GLOW, ALL_SIDES, 0.12]);
         }
     }
