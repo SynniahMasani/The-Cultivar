@@ -26,7 +26,7 @@ integer g_listenMain;
 integer g_listenPlant;
 integer g_listenStrain;
 integer g_listenConfirm;
-integer g_listenFert;     // fertilizer tier sub-menu
+integer g_listenHUD;      // HUD inventory response channel
 integer g_listenVisitor;  // visitor "Close" dialog
 integer g_listenAccess;
 integer g_listenAddAuth;
@@ -34,7 +34,13 @@ integer g_listenRemAuth;
 
 key     g_ownerKey;
 string  g_ownerName;
-key     g_toucher = NULL_KEY;
+key     g_toucher    = NULL_KEY;
+integer g_hudChannel = 0;        // derived from owner key, used for seed queries
+
+// Cached seed list from HUD (stride 2: strainName, qualityStr)
+list    g_availableSeeds = [];
+// Selected tier while waiting for seed data from HUD
+integer g_pendingPlantTier = -1;
 
 // Access control
 integer g_plantLocked    = FALSE;  // if TRUE, only owner can interact
@@ -54,6 +60,16 @@ integer g_potSpent      = FALSE;
 string g_pendingAction = "";
 
 // ----------------------------------------------------------------
+// Derive HUD private channel from owner UUID (must match HUD_Comms)
+// ----------------------------------------------------------------
+integer deriveHUDChannel(key ownerID)
+{
+    string h = llGetSubString((string)ownerID, 0, 6);
+    h = llDumpList2String(llParseString2List(h, ["-"], []), "");
+    return (integer)("0x" + h) * -1;
+}
+
+// ----------------------------------------------------------------
 // Close all open listens
 // ----------------------------------------------------------------
 closeAllListens()
@@ -62,7 +78,7 @@ closeAllListens()
     if (g_listenPlant)    { llListenRemove(g_listenPlant);    g_listenPlant   = 0; }
     if (g_listenStrain)   { llListenRemove(g_listenStrain);   g_listenStrain  = 0; }
     if (g_listenConfirm)  { llListenRemove(g_listenConfirm);  g_listenConfirm = 0; }
-    if (g_listenFert)     { llListenRemove(g_listenFert);     g_listenFert    = 0; }
+    if (g_listenHUD)      { llListenRemove(g_listenHUD);      g_listenHUD     = 0; }
     if (g_listenVisitor)  { llListenRemove(g_listenVisitor);  g_listenVisitor = 0; }
     if (g_listenAccess)   { llListenRemove(g_listenAccess);   g_listenAccess  = 0; }
     if (g_listenAddAuth)  { llListenRemove(g_listenAddAuth);  g_listenAddAuth = 0; }
@@ -269,26 +285,33 @@ showVisitorMenu()
 }
 
 // ----------------------------------------------------------------
-// STRAIN SELECTION MENU  -  shown when planting
+// STRAIN SELECTION MENU  -  built from player's actual HUD seed inventory
 // ----------------------------------------------------------------
 showStrainMenu(integer qualityTier)
 {
     closeAllListens();
+    list qualStrings = ["reggie", "mids", "loud", "exotic"];
+    string tierQual  = llList2String(qualStrings, qualityTier);
 
-    // Build strain list for chosen tier
-    list STRAIN_DATA = [
-        "Schwag",0,"Ditch Weed",0,"Brown Frown",0,
-        "Blue Dream",1,"Green Crack",1,"Gorilla Glue",1,"Sour Diesel",1,
-        "OG Kush",2,"Wedding Cake",2,"Zkittlez",2,"Gelato",2,
-        "Runtz",3,"Biscotti",3,"Jealousy",3,"Lemon Cherry Gelato",3
-    ];
-    integer SSTRIDE = 2;
     list buttons;
     integer i;
-    for (i = 0; i < llGetListLength(STRAIN_DATA); i += SSTRIDE)
+    for (i = 0; i < llGetListLength(g_availableSeeds); i += 2)
     {
-        if (llList2Integer(STRAIN_DATA, i+1) == qualityTier)
-            buttons += [llList2String(STRAIN_DATA, i)];
+        if (llList2String(g_availableSeeds, i+1) == tierQual)
+        {
+            string sn = llList2String(g_availableSeeds, i);
+            if (llListFindList(buttons, [sn]) == -1) // no dupes
+                buttons += [sn];
+        }
+    }
+
+    if (llGetListLength(buttons) == 0)
+    {
+        llRegionSayTo(g_toucher, 0,
+            "You don't have any " + llList2String(["Reggie","Mids","Loud","Exotic"], qualityTier) +
+            " seeds in your HUD inventory.");
+        showPotMenu();
+        return;
     }
     buttons += ["Back"];
 
@@ -298,20 +321,46 @@ showStrainMenu(integer qualityTier)
         "=== CHOOSE STRAIN ===\n" +
         llList2String(qualNames, qualityTier) + " tier. Select a strain:",
         buttons, DCHAN_STRAIN);
+    llSetTimerEvent(30.0);
 }
 
 // ----------------------------------------------------------------
-// POT TYPE MENU  -  shown when planting (determines pot to use)
+// POT TYPE MENU  -  only shows tiers the player has seeds for
 // ----------------------------------------------------------------
 showPotMenu()
 {
     closeAllListens();
-    string usesStr = (string)g_potUsesLeft + " uses left";
+    list qualStrings  = ["reggie", "mids", "loud", "exotic"];
+    list qualBtnNames = ["Reggie Seed", "Mids Seed", "Loud Seed", "Exotic Seed"];
+    list buttons;
+    integer t;
+    for (t = 0; t < 4; t++)
+    {
+        string q = llList2String(qualStrings, t);
+        integer i;
+        for (i = 0; i < llGetListLength(g_availableSeeds); i += 2)
+        {
+            if (llList2String(g_availableSeeds, i+1) == q)
+            {
+                buttons += [llList2String(qualBtnNames, t)];
+                jump next_tier;
+            }
+        }
+        @next_tier;
+    }
+    if (llGetListLength(buttons) == 0)
+    {
+        llRegionSayTo(g_toucher, 0,
+            "You don't have any seeds in your HUD inventory. " +
+            "Open a seed pack or earn seeds to start growing.");
+        return;
+    }
+    buttons += ["Back"];
     g_listenPlant = llListen(DCHAN_PLANT, "", g_toucher, "");
     llDialog(g_toucher,
         "=== SELECT SEED TIER ===\nWhat are you planting?",
-        ["Reggie Seed", "Mids Seed", "Loud Seed", "Exotic Seed", "Back"],
-        DCHAN_PLANT);
+        buttons, DCHAN_PLANT);
+    llSetTimerEvent(30.0);
 }
 
 // ----------------------------------------------------------------
@@ -376,16 +425,16 @@ default
     {
         g_ownerKey    = llGetOwner();
         g_ownerName   = llKey2Name(g_ownerKey);
+        g_hudChannel  = deriveHUDChannel(g_ownerKey);
         g_plantLocked = (integer)llLinksetDataRead("plant_locked");
         llMessageLinked(LINK_SET, PCHAN_GROW, "REQUEST_STATUS", NULL_KEY);
-        // No channel-0 listener needed here: the grow script derives the HUD
-        // channel directly from the owner key and handles TC_REGISTER itself.
     }
 
     on_rez(integer start_param)
     {
         g_ownerKey    = llGetOwner();
         g_ownerName   = llKey2Name(g_ownerKey);
+        g_hudChannel  = deriveHUDChannel(g_ownerKey);
         g_plantLocked = (integer)llLinksetDataRead("plant_locked");
         llMessageLinked(LINK_SET, PCHAN_GROW, "REQUEST_STATUS", NULL_KEY);
     }
@@ -436,6 +485,34 @@ default
 
     listen(integer channel, string name, key id, string msg)
     {
+        // HUD seed inventory response  -  arrives from HUD object, not from g_toucher
+        if (channel == g_hudChannel && g_listenHUD != 0)
+        {
+            list   parts2 = llParseString2List(msg, ["|"], []);
+            string cmd2   = llList2String(parts2, 0);
+            if (cmd2 == "TC_INVENTORY_DATA")
+            {
+                if (g_listenHUD) { llListenRemove(g_listenHUD); g_listenHUD = 0; }
+                string rawData = llList2String(parts2, 1);
+                g_availableSeeds = [];
+                if (rawData != "")
+                {
+                    list entries = llParseString2List(rawData, ["^"], []);
+                    integer ei;
+                    for (ei = 0; ei < llGetListLength(entries); ei++)
+                    {
+                        list fields = llParseString2List(llList2String(entries, ei), ["~"], []);
+                        // fields: itemType ~ strainName ~ quality ~ qty ~ packager
+                        if (llGetListLength(fields) >= 3)
+                            g_availableSeeds += [llList2String(fields, 1),
+                                                 llList2String(fields, 2)];
+                    }
+                }
+                showPotMenu();
+            }
+            return;
+        }
+
         if (id != g_toucher) return;
         closeAllListens();
         llSetTimerEvent(0.0);
@@ -446,23 +523,21 @@ default
             if (msg == "Close") return;
 
             else if (msg == "Plant Seed")
-                showPotMenu();
+            {
+                // Request seed inventory from HUD, then show filtered menus
+                g_availableSeeds = [];
+                if (g_listenHUD) llListenRemove(g_listenHUD);
+                g_listenHUD = llListen(g_hudChannel, "", NULL_KEY, "");
+                llRegionSayTo(g_ownerKey, g_hudChannel,
+                    "TC_INVENTORY_REQUEST|seed_raw|" + (string)llGetKey());
+                llSetTimerEvent(10.0); // short timeout for HUD response
+            }
 
             else if (msg == "Water")
                 doWater();
 
             else if (msg == "Fertilize")
-            {
-                // Quick fertilizer tier menu
-                integer fc = -55001;
-                if (g_listenFert) llListenRemove(g_listenFert);
-                g_listenFert = llListen(fc, "", g_toucher, "");
-                llDialog(g_toucher,
-                    "=== FERTILIZE ===\nChoose fertilizer type:\n" +
-                    "(Only usable during vegetative stage, once per cycle)",
-                    ["Basic Fert", "Premium Fert", "Exotic Fert", "Back"], fc);
-                llSetTimerEvent(30.0);
-            }
+                doFertilize(0); // basic fertilizer, applied directly like water
 
             else if (msg == "Harvest!")
                 showHarvestConfirm();
@@ -474,7 +549,6 @@ default
 
             else if (msg == "Replace Pot")
             {
-                // Tell player to drop a new pot object on the land
                 llRegionSayTo(g_toucher, 0,
                     "Rez a new pot from your inventory to replace this one.");
             }
@@ -571,15 +645,16 @@ default
             showAccessMenu();
         }
 
-        // SEED TIER SELECTION (reusing plant menu listen)
+        // SEED TIER SELECTION
         else if (channel == DCHAN_PLANT)
         {
             if (msg == "Back") { showMainMenu(); return; }
             integer tier = 0;
-            if (msg == "Reggie Seed") tier = 0;
-            else if (msg == "Mids Seed")  tier = 1;
-            else if (msg == "Loud Seed")  tier = 2;
+            if      (msg == "Reggie Seed") tier = 0;
+            else if (msg == "Mids Seed")   tier = 1;
+            else if (msg == "Loud Seed")   tier = 2;
             else if (msg == "Exotic Seed") tier = 3;
+            g_pendingPlantTier = tier;
             showStrainMenu(tier);
         }
 
@@ -587,12 +662,16 @@ default
         else if (channel == DCHAN_STRAIN)
         {
             if (msg == "Back") { showPotMenu(); return; }
-            // msg is the chosen strain name
+            // Consume one seed from HUD inventory
+            list qualStrings = ["reggie", "mids", "loud", "exotic"];
+            string qualStr   = llList2String(qualStrings, g_pendingPlantTier);
+            llRegionSayTo(g_ownerKey, g_hudChannel,
+                "TC_REMOVE_ITEM|seed_raw|" + msg + "|" + qualStr + "|1|");
+            // Tell grow script to start growing
             string potType = "premium";
             if (g_potType_basic) potType = "basic";
-            integer usesLeft = g_potUsesLeft;
             llMessageLinked(LINK_SET, PCHAN_GROW,
-                "PLANT_SEED|" + msg + "|" + potType + "|" + (string)usesLeft,
+                "PLANT_SEED|" + msg + "|" + potType + "|" + (string)g_potUsesLeft,
                 NULL_KEY);
         }
 
@@ -604,16 +683,6 @@ default
             // Cancel just closes
         }
 
-        // FERTILIZER TIER
-        else if (channel == -55001)
-        {
-            if (msg == "Back")       { showMainMenu(); return; }
-            integer ft = 0;
-            if (msg == "Basic Fert")   ft = 0;
-            else if (msg == "Premium Fert") ft = 1;
-            else if (msg == "Exotic Fert")  ft = 2;
-            doFertilize(ft);
-        }
     }
 
     link_message(integer sender_num, integer num, string msg, key id)
