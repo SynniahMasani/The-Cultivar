@@ -461,8 +461,8 @@ default
 {
     state_entry()
     {
-        llSetText("Breeding Station\nTouch to breed two seeds\ninto a hybrid strain",
-            <0.3, 0.8, 0.3>, 1.0);
+        // Full reset ensures no dirty state survives a script reload or update push.
+        resetStation();
     }
 
     on_rez(integer start_param)
