@@ -196,12 +196,12 @@ showRemovePlayerMenu()
 string buildStatusString()
 {
     if (g_potSpent)
-        return "? This pot is cracked and spent.\nReplace it with a new pot.";
+        return "!! This pot is cracked and spent.\nReplace it with a new pot.";
 
     if (g_stage == 0)
         return "Pot is empty.\nPlant a seed to begin growing.";
 
-    list stageNames  = ["", "Seedling ?", "Vegetative ?", "Flowering ?", "? READY ?"];
+    list stageNames  = ["", "- Seedling -", "- Vegetative -", "- Flowering -", "*** READY ***"];
     list qualNames   = ["Reggie", "Mids", "Loud", "Exotic"];
     string stageName = llList2String(stageNames, g_stage);
     string qualName  = llList2String(qualNames, g_qualityTier);
@@ -211,9 +211,9 @@ string buildStatusString()
 
     if (g_stage < 4)
     {
-        if (g_isWatered)  status += "? Watered\n";
-        else              status += "? Needs water\n";
-        if (g_fertApplied) status += "? Fertilized\n";
+        if (g_isWatered)  status += "+ Watered\n";
+        else              status += "! Needs water\n";
+        if (g_fertApplied) status += "+ Fertilized\n";
     }
 
     string potLabel = "Premium pot";

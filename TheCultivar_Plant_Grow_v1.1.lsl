@@ -129,6 +129,17 @@ list getStrainData(string strainName)
     return [];
 }
 // ----------------------------------------------------------------
+// Derive pot type from object name  -  always authoritative.
+// "TC_Basic Pot" → "basic",  anything else → "premium".
+// This overrides any value saved in llLinksetData, preventing
+// corrupted or mismatched state from persisting.
+// ----------------------------------------------------------------
+string derivePotType()
+{
+    if (llSubStringIndex(llGetObjectName(), "Basic") != -1) return "basic";
+    return "premium";
+}
+// ----------------------------------------------------------------
 // Derive private HUD channel from owner UUID (matches HUD_Comms)
 // ----------------------------------------------------------------
 integer deriveHUDChannel(key ownerID)
@@ -457,6 +468,7 @@ default
         g_ownerKey  = llGetOwner();
         g_ownerName = llKey2Name(g_ownerKey);
         g_hudChannel = deriveHUDChannel(g_ownerKey);
+        g_potType    = derivePotType();
         llListen(GROW_LIGHT_CHAN, "", NULL_KEY, "");
         llMessageLinked(LINK_SET, PCHAN_PERSIST, "LOAD_STATE", NULL_KEY);
     }
@@ -466,6 +478,7 @@ default
         g_ownerKey   = llGetOwner();
         g_ownerName  = llKey2Name(g_ownerKey);
         g_hudChannel = deriveHUDChannel(g_ownerKey);
+        g_potType    = derivePotType();
         llMessageLinked(LINK_SET, PCHAN_PERSIST, "LOAD_STATE", NULL_KEY);
     }
     timer()
@@ -606,8 +619,10 @@ default
             g_isWatered      = (integer)llList2String(parts, 6);
             g_fertApplied    = (integer)llList2String(parts, 7);
             g_fertTier       = (integer)llList2String(parts, 8);
-            g_potType        = llList2String(parts, 9);
+            // g_potType is set from object name (derivePotType) — do not load from save
             g_potUsesLeft    = (integer)llList2String(parts, 10);
+            // Sanitize potUsesLeft for basic pots in case a corrupted value was saved
+            if (g_potType == "basic" && g_potUsesLeft > 5) g_potUsesLeft = 5;
             if (g_stage > 0 && g_stage < 4)
                 llSetTimerEvent(TIMER_INTERVAL);
             updateVisuals();

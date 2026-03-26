@@ -537,12 +537,13 @@ default
             if (g_listenHUD)      { llListenRemove(g_listenHUD);      g_listenHUD      = 0; }
             g_listenHUD = llListen(g_hudChannel, "", NULL_KEY, "");
 
-            llSetTimerEvent(0.0);
             updateHoverText();
 
-            // Request flower inventory
+            // Request flower inventory  -  keep a 15s timeout in case HUD
+            // never responds (prevents g_busy from sticking forever)
             llRegionSayTo(g_ownerKey, g_hudChannel,
                 "TC_INVENTORY_REQUEST|flower_raw|" + (string)llGetKey());
+            llSetTimerEvent(15.0);
         }
 
         // ---- HUD sends inventory data ----
