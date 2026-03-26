@@ -279,7 +279,7 @@ default
     {
         resolveLinks();
         g_ownerKey   = llGetOwner();
-        g_ownerName  = llKey2Name(g_ownerKey);
+        g_ownerName  = llGetDisplayName(g_ownerKey);
         g_hudChannel = deriveHUDChannel(g_ownerKey);
 
         // Restore saved power state; tier is always derived from object name

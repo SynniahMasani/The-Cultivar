@@ -346,7 +346,7 @@ passToNamed(string targetName, key requester)
             llRegionSayTo(requester, 0,
                 "Passed the " + g_strain + " to " + pName + ".");
             llRegionSayTo(targetKey, 0,
-                llKey2Name(requester) + " passed you the " +
+                llGetDisplayName(requester) + " passed you the " +
                 g_quality + " " + g_strain + ". ?");
 
             llRegionSayTo(targetKey, participantHUDChan(i),
@@ -633,7 +633,7 @@ default
             else if (cmd == "TC_SESSION_LEAVE")
             {
                 key leaver = (key)llList2String(parts, 1);
-                string leaverName = llKey2Name(leaver);
+                string leaverName = llGetDisplayName(leaver);
 
                 removeParticipant(leaver);
                 broadcastToAll("TC_SESSION_MEMBER_LEAVE|" + leaverName);

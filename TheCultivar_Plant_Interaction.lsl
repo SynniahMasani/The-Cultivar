@@ -144,7 +144,7 @@ showAddPlayerMenu()
     {
         key    a = llList2Key(agents, i);
         if (a == g_ownerKey) jump skip_self;
-        string n = llKey2Name(a);
+        string n = llGetDisplayName(a);
         buttons += [llGetSubString(n, 0, 11)];
         menuText += n + "\n";
         @skip_self;
@@ -179,7 +179,7 @@ showRemovePlayerMenu()
     for (i = 0; i < n && llGetListLength(buttons) < 9; i++)
     {
         string k     = llList2String(authList, i);
-        string pName = llKey2Name((key)k);
+        string pName = llGetDisplayName((key)k);
         if (pName == "") pName = llGetSubString(k, 0, 7) + "...";
         buttons  += [llGetSubString(pName, 0, 11)];
         menuText += pName + "\n";
@@ -424,7 +424,7 @@ default
     state_entry()
     {
         g_ownerKey    = llGetOwner();
-        g_ownerName   = llKey2Name(g_ownerKey);
+        g_ownerName   = llGetDisplayName(g_ownerKey);
         g_hudChannel  = deriveHUDChannel(g_ownerKey);
         g_plantLocked = (integer)llLinksetDataRead("plant_locked");
         llMessageLinked(LINK_SET, PCHAN_GROW, "REQUEST_STATUS", NULL_KEY);
@@ -433,7 +433,7 @@ default
     on_rez(integer start_param)
     {
         g_ownerKey    = llGetOwner();
-        g_ownerName   = llKey2Name(g_ownerKey);
+        g_ownerName   = llGetDisplayName(g_ownerKey);
         g_hudChannel  = deriveHUDChannel(g_ownerKey);
         g_plantLocked = (integer)llLinksetDataRead("plant_locked");
         llMessageLinked(LINK_SET, PCHAN_GROW, "REQUEST_STATUS", NULL_KEY);
@@ -592,7 +592,7 @@ default
             {
                 key    a = llList2Key(agents, i);
                 if (a == g_ownerKey) jump skip_ao;
-                string n = llKey2Name(a);
+                string n = llGetDisplayName(a);
                 if (llGetSubString(n, 0, 11) == msg)
                 {
                     string authData = llLinksetDataRead("auth_list");
@@ -630,7 +630,7 @@ default
             for (i = 0; i < n; i++)
             {
                 string k     = llList2String(authList, i);
-                string pName = llKey2Name((key)k);
+                string pName = llGetDisplayName((key)k);
                 if (pName == "") pName = llGetSubString(k, 0, 7) + "...";
                 if (llGetSubString(pName, 0, 11) == msg)
                 {

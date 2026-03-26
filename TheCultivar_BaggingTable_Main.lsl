@@ -377,7 +377,7 @@ default
         {
             llRegionSayTo(toucher, 0,
                 "This bagging table belongs to " +
-                llKey2Name(llGetOwner()) + ".");
+                llGetDisplayName(llGetOwner()) + ".");
             return;
         }
 
@@ -388,7 +388,7 @@ default
         }
 
         g_ownerKey  = toucher;
-        g_ownerName = llKey2Name(toucher);
+        g_ownerName = llGetDisplayName(toucher);
 
         // Re-register each touch to make sure channel is fresh
         pingHUD();

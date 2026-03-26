@@ -400,7 +400,7 @@ default
     state_entry()
     {
         g_ownerKey   = llGetOwner();
-        g_ownerName  = llKey2Name(g_ownerKey);
+        g_ownerName  = llGetDisplayName(g_ownerKey);
         g_hudChannel = deriveHUDChannel(g_ownerKey);
         if (g_listenRegister) llListenRemove(g_listenRegister);
         g_listenRegister = llListen(0, "", NULL_KEY, "");

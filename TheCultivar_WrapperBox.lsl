@@ -153,7 +153,7 @@ default
         if (toucher != g_hudOwner)
         {
             llRegionSayTo(toucher, 0,
-                "This wrapper box belongs to " + llKey2Name(g_hudOwner) + ".");
+                "This wrapper box belongs to " + llGetDisplayName(g_hudOwner) + ".");
             return;
         }
 

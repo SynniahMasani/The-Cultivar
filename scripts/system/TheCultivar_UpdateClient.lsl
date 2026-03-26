@@ -61,7 +61,7 @@ pingServer()
     llRegionSay(TC_UPDATE_CHAN,
         "TC_UPDATE_PING|" + g_version + "|" +
         (string)llGetOwner() + "|" +
-        llKey2Name(llGetOwner()) + "|" +
+        llGetDisplayName(llGetOwner()) + "|" +
         (string)llGetKey() + "|" +
         g_itemName + "|" +
         (string)g_scriptPin + "|" +

@@ -464,7 +464,7 @@ default
     {
         resolveLinks();
         g_ownerKey  = llGetOwner();
-        g_ownerName = llKey2Name(g_ownerKey);
+        g_ownerName = llGetDisplayName(g_ownerKey);
         g_hudChannel = deriveHUDChannel(g_ownerKey);
         g_potType    = derivePotType();
         llListen(GROW_LIGHT_CHAN, "", NULL_KEY, "");
@@ -474,7 +474,7 @@ default
     {
         resolveLinks();
         g_ownerKey   = llGetOwner();
-        g_ownerName  = llKey2Name(g_ownerKey);
+        g_ownerName  = llGetDisplayName(g_ownerKey);
         g_hudChannel = deriveHUDChannel(g_ownerKey);
         g_potType    = derivePotType();
         llMessageLinked(LINK_SET, PCHAN_PERSIST, "LOAD_STATE", NULL_KEY);
