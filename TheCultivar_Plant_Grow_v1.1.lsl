@@ -179,33 +179,6 @@ setIndicator(integer iState)
         llLinkParticleSystem(g_linkIndicator, []);
         return;
     }
-    if (iState == STATE_WATER)
-    {
-        // No rotating icon for water  -  blue particle effect only
-        llSetLinkAlpha(g_linkIndicator, 0.0, ALL_SIDES);
-        llSetLinkPrimitiveParamsFast(g_linkIndicator,
-            [PRIM_TEXT,  "", ZERO_VECTOR, 0.0,
-             PRIM_OMEGA, ZERO_VECTOR, 0.0, 0.0]);
-        llLinkParticleSystem(g_linkIndicator, [
-            PSYS_PART_FLAGS,           PSYS_PART_INTERP_COLOR_MASK |
-                                       PSYS_PART_INTERP_SCALE_MASK |
-                                       PSYS_PART_EMISSIVE_MASK,
-            PSYS_SRC_PATTERN,          PSYS_SRC_PATTERN_EXPLODE,
-            PSYS_PART_START_COLOR,     <0.2, 0.6, 1.0>,
-            PSYS_PART_END_COLOR,       <0.0, 0.3, 0.9>,
-            PSYS_PART_START_ALPHA,     0.9,
-            PSYS_PART_END_ALPHA,       0.0,
-            PSYS_PART_START_SCALE,     <0.05, 0.05, 0.0>,
-            PSYS_PART_END_SCALE,       <0.02, 0.02, 0.0>,
-            PSYS_PART_MAX_AGE,         2.0,
-            PSYS_SRC_BURST_RATE,       0.5,
-            PSYS_SRC_BURST_PART_COUNT, 3,
-            PSYS_SRC_BURST_SPEED_MIN,  0.02,
-            PSYS_SRC_BURST_SPEED_MAX,  0.1,
-            PSYS_SRC_ACCEL,            <0.0, 0.0, 0.08>
-        ]);
-        return;
-    }
     string tex;
     string tipText;
     if (iState == STATE_FERT)
@@ -249,10 +222,15 @@ updateVisuals()
     llSetLinkAlpha(g_linkVeg,      0.0, ALL_SIDES);
     llSetLinkAlpha(g_linkFlower,   0.0, ALL_SIDES);
     llSetLinkAlpha(g_linkHarvest,  0.0, ALL_SIDES);
-    // Stop particles and glow on harvest mesh
-    llLinkParticleSystem(g_linkHarvest, []);
-    llSetLinkPrimitiveParamsFast(g_linkHarvest,
-        [PRIM_GLOW, ALL_SIDES, 0.0]);
+    // Stop particles on all plant meshes
+    llLinkParticleSystem(g_linkSeedling, []);
+    llLinkParticleSystem(g_linkVeg,      []);
+    llLinkParticleSystem(g_linkFlower,   []);
+    llLinkParticleSystem(g_linkHarvest,  []);
+    llSetLinkPrimitiveParamsFast(g_linkHarvest, [PRIM_GLOW, ALL_SIDES, 0.0]);
+    // Force-clear any stale PRIM_TEXT on indicator (survives script resets and old script versions)
+    if (g_linkIndicator != -1)
+        llSetLinkPrimitiveParamsFast(g_linkIndicator, [PRIM_TEXT, "", ZERO_VECTOR, 0.0]);
     // Show the correct mesh for this stage
     if (g_stage == 1)
     {
@@ -292,12 +270,35 @@ updateVisuals()
         ]);
         llPlaySound("harvest_ready", 0.5);
     }
+    // Water thirst: blue particles on the active plant mesh (no indicator prim needed)
+    if (g_stage > 0 && g_stage < 4 && !g_isWatered)
+    {
+        integer activeMesh = g_linkSeedling;
+        if (g_stage == 2) activeMesh = g_linkVeg;
+        if (g_stage == 3) activeMesh = g_linkFlower;
+        llLinkParticleSystem(activeMesh, [
+            PSYS_PART_FLAGS,           PSYS_PART_INTERP_COLOR_MASK |
+                                       PSYS_PART_INTERP_SCALE_MASK |
+                                       PSYS_PART_EMISSIVE_MASK,
+            PSYS_SRC_PATTERN,          PSYS_SRC_PATTERN_EXPLODE,
+            PSYS_PART_START_COLOR,     <0.2, 0.6, 1.0>,
+            PSYS_PART_END_COLOR,       <0.0, 0.3, 0.9>,
+            PSYS_PART_START_ALPHA,     0.9,
+            PSYS_PART_END_ALPHA,       0.0,
+            PSYS_PART_START_SCALE,     <0.05, 0.05, 0.0>,
+            PSYS_PART_END_SCALE,       <0.02, 0.02, 0.0>,
+            PSYS_PART_MAX_AGE,         2.0,
+            PSYS_SRC_BURST_RATE,       0.5,
+            PSYS_SRC_BURST_PART_COUNT, 3,
+            PSYS_SRC_BURST_SPEED_MIN,  0.02,
+            PSYS_SRC_BURST_SPEED_MAX,  0.1,
+            PSYS_SRC_ACCEL,            <0.0, 0.0, 0.08>
+        ]);
+    }
     // Status indicator icon prim  -  show only when action is needed
     if (g_stage == 4)
         setIndicator(STATE_READY);
-    else if (g_stage > 0 && !g_isWatered)
-        setIndicator(STATE_WATER);
-    else if (g_stage == 2 && !g_fertApplied)
+    else if (g_stage == 2 && g_isWatered && !g_fertApplied)
         setIndicator(STATE_FERT);
     else
         setIndicator(STATE_NONE);
