@@ -50,6 +50,7 @@ saveIdentity()
     llLinksetDataWrite("id_rep",       (string)g_repScore);
     llLinksetDataWrite("id_joined",    g_joinDate);
     llLinksetDataWrite("id_brand",     g_brandName);
+    // id_brand_custom is written only by SET_BRAND_NAME / RESET_BRAND_NAME, not here
     llLinksetDataWrite("id_grower_xp",    (string)g_growerXP);
     llLinksetDataWrite("id_roller_xp",    (string)g_rollerXP);
     llLinksetDataWrite("id_seller_xp",    (string)g_sellerXP);
@@ -157,6 +158,7 @@ loadIdentity()
         g_rollerXP            = 0;
         g_sellerXP            = 0;
         g_earnedAchievements  = "";
+        llLinksetDataWrite("id_brand_custom", "0");
         saveIdentity();
         llOwnerSay("Welcome to the The Cultivar! Your profile has been created.");
     }
@@ -172,8 +174,20 @@ loadIdentity()
         g_strainHistory  = llLinksetDataRead("id_history");
         g_repScore       = (integer)llLinksetDataRead("id_rep");
         g_joinDate       = llLinksetDataRead("id_joined");
-        g_brandName      = llLinksetDataRead("id_brand");
-        if (g_brandName == "") g_brandName = g_playerName;
+
+        // Only use a stored brand if the player explicitly set it.
+        // If id_brand_custom is not "1" (e.g. stale data from a previous
+        // display name or HUD initialization), fall back to current display name.
+        if (llLinksetDataRead("id_brand_custom") == "1")
+        {
+            g_brandName = llLinksetDataRead("id_brand");
+            if (g_brandName == "") g_brandName = llGetDisplayName(llGetOwner());
+        }
+        else
+        {
+            g_brandName = llGetDisplayName(llGetOwner());
+            llLinksetDataWrite("id_brand", g_brandName);
+        }
         g_growerXP       = (integer)llLinksetDataRead("id_grower_xp");
         g_rollerXP       = (integer)llLinksetDataRead("id_roller_xp");
         g_sellerXP       = (integer)llLinksetDataRead("id_seller_xp");
@@ -400,7 +414,18 @@ default
         {
             g_brandName = llList2String(parts, 1);
             llLinksetDataWrite("id_brand", g_brandName);
+            llLinksetDataWrite("id_brand_custom", "1");
             broadcastIdentity();
+        }
+
+        // UI resets brand back to the player's current display name
+        else if (cmd == "RESET_BRAND_NAME")
+        {
+            g_brandName = llGetDisplayName(llGetOwner());
+            llLinksetDataWrite("id_brand", g_brandName);
+            llLinksetDataWrite("id_brand_custom", "0");
+            broadcastIdentity();
+            llOwnerSay("Brand name reset to: " + g_brandName);
         }
 
         // UI requests a formatted stats card for display
