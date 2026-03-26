@@ -1,6 +1,6 @@
 // ================================================================
 // THE CULTIVAR  -  Rolling Tray Script
-// Version: 1.3
+// Version: 1.4
 // Lives inside: any TC rolling tray variant (all designs, one script)
 //
 // WHAT IT DOES:
@@ -26,7 +26,7 @@
 //   2. HUD_Comms responds on replyChannel:
 //        "TC_REGISTER|ownerKey|hudChannel|ownerName|brandName"
 //   3. Tray stores g_hudChannel, opens listen, requests inventory:
-//        "TC_INVENTORY_REQUEST|flower_raw|trayKey"
+//        "TC_INVENTORY_REQUEST||trayKey"
 //   4. HUD responds: "TC_INVENTORY_DATA|rawInventory"
 //   5. Menus shown → confirm → "TC_REMOVE_ITEM|..." → wait for OK
 //   6. "TC_REMOVE_OK" → "TC_ADD_ITEM|..." + particle burst + notify
@@ -268,7 +268,7 @@ requestInventory()
     if (g_listenHUD) { llListenRemove(g_listenHUD); g_listenHUD = 0; }
     g_listenHUD = llListen(g_hudChannel, "", NULL_KEY, "");
     llRegionSayTo(g_ownerKey, g_hudChannel,
-        "TC_INVENTORY_REQUEST|flower_raw|" + (string)llGetKey());
+        "TC_INVENTORY_REQUEST||" + (string)llGetKey());
     llSetTimerEvent(15.0);
 }
 
@@ -609,6 +609,7 @@ default
         }
         else
         {
+            g_registered = FALSE;
             llRegionSayTo(g_ownerKey, 0,
                 "HUD didn't respond in time. Touch the tray to try again.");
         }
@@ -727,6 +728,7 @@ default
             }
             g_busy = FALSE;
             resetTransaction();
+            llSetTimerEvent(HOVER_FADE_SECS);
         }
 
         // ---- Strain selection ----

@@ -1,6 +1,6 @@
 // ================================================================
 // THE CULTIVAR  -  HUD Identity Script
-// Version: 1.0
+// Version: 1.1
 // Handles: Player identity, lifetime stats, strain history, rep score
 // Persistence: llLinksetDataWrite (survives sim restarts)
 // ================================================================
@@ -39,6 +39,7 @@ string  g_earnedAchievements = "";  // comma-delimited list of earned achievemen
 // ----------------------------------------------------------------
 saveIdentity()
 {
+    llLinksetDataWrite("id_owner",     (string)g_playerUUID);
     llLinksetDataWrite("id_name",      g_playerName);
     llLinksetDataWrite("id_smoked",    (string)g_totalSmoked);
     llLinksetDataWrite("id_grown",     (string)g_totalGrown);
@@ -127,7 +128,16 @@ grantXP(string track, integer amount)
 // ----------------------------------------------------------------
 loadIdentity()
 {
-    string test = llLinksetDataRead("id_name");
+    string storedOwner = llLinksetDataRead("id_owner");
+    string test        = llLinksetDataRead("id_name");
+
+    // If data exists but belongs to a different owner (copy-transfer case),
+    // wipe it so we initialize fresh for the new owner.
+    if (test != "" && storedOwner != "" && storedOwner != (string)llGetOwner())
+    {
+        llLinksetDataReset();
+        test = "";
+    }
 
     if (test == "")
     {
