@@ -10,10 +10,10 @@
 // Each item slot: itemType ~ strainName ~ quality ~ quantity ~ packager
 //
 // itemType values:
-//   seed_raw, flower_raw, joint, blunt, spliff, edible_brownie,
-//   edible_gummy, edible_drink, concentrate, bag_dime, bag_eighth,
-//   bag_quarter, bag_oz, fertilizer_basic, fertilizer_premium,
-//   fertilizer_exotic, water_can
+//   seed_raw, flower_raw, papers_raw, joint, blunt, spliff,
+//   edible_brownie, edible_gummy, edible_drink, concentrate,
+//   bag_dime, bag_eighth, bag_quarter, bag_oz, fertilizer_basic,
+//   fertilizer_premium, fertilizer_exotic, water_can
 //
 // quality values: reggie, mids, loud, exotic
 //
