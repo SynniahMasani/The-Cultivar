@@ -271,7 +271,9 @@ default
 
         llSay(0, (string)seedCount +
             " seeds added to your HUD inventory. Happy growing!");
-        llSleep(0.5);
+        llSetText("EMPTY\nAll seeds delivered.\nNothing left to see here, bestie.\nGo grow something.",
+            <0.35, 0.35, 0.35>, 0.6);
+        llSleep(2.0);
         llDie();
     }
 }

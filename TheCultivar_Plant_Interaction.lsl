@@ -667,12 +667,8 @@ default
             string qualStr   = llList2String(qualStrings, g_pendingPlantTier);
             llRegionSayTo(g_ownerKey, g_hudChannel,
                 "TC_REMOVE_ITEM|seed_raw|" + msg + "|" + qualStr + "|1|");
-            // Tell grow script to start growing
-            string potType = "premium";
-            if (g_potType_basic) potType = "basic";
-            llMessageLinked(LINK_SET, PCHAN_GROW,
-                "PLANT_SEED|" + msg + "|" + potType + "|" + (string)g_potUsesLeft,
-                NULL_KEY);
+            // Tell grow script to start growing  -  pot type/uses owned by grow script
+            llMessageLinked(LINK_SET, PCHAN_GROW, "PLANT_SEED|" + msg, NULL_KEY);
         }
 
         // HARVEST CONFIRM
