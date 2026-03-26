@@ -1,6 +1,6 @@
 // ================================================================
 // THE CULTIVAR  -  Rolling Tray Script
-// Version: 1.2
+// Version: 1.3
 // Lives inside: any TC rolling tray variant (all designs, one script)
 //
 // WHAT IT DOES:
@@ -31,11 +31,11 @@
 //   5. Menus shown → confirm → "TC_REMOVE_ITEM|..." → wait for OK
 //   6. "TC_REMOVE_OK" → "TC_ADD_ITEM|..." + particle burst + notify
 //
-// PARTICLE DISPATCH  (llMessageLinked, num=2000):
-//   "HERB_PARTICLES|<quality>"  — green herb-drop effect (steps 0-2)
-//   "SMOKE_PARTICLES|<quality>" — quality-colored wisps   (steps 3-4)
-//   "BURST_PARTICLES|<quality>" — celebration explode     (finish)
-//   "STOP_PARTICLES"            — clear all emitters
+// PARTICLES (built-in, no linked prim needed):
+//   herbParticles()           — green crumbs falling (steps 0-2)
+//   smokeParticles(quality)   — quality-colored wisps (steps 3-4)
+//   burstParticles(quality)   — celebration explode  (finish)
+//   llParticleSystem([])      — clear all particles
 //
 // DIALOG CHANNELS  (negative, distinct from BaggingTable -66001-66004):
 //   DCHAN_STRAIN   = -77001
@@ -66,47 +66,114 @@ string  g_brandName   = "";
 integer g_hudChannel  = 0;
 integer g_registered  = FALSE;
 integer g_busy        = FALSE;
-integer g_particleClear     = FALSE; // TRUE while post-craft 3s timer is running
-integer g_rollStep          = 0;     // current step of the rolling sequence (0-5)
-integer g_inRollingSequence = FALSE; // TRUE while rolling animation is playing
+integer g_particleClear     = FALSE;
+integer g_rollStep          = 0;
+integer g_inRollingSequence = FALSE;
 
 list    g_availableFlower;
-integer FLOWER_STRIDE = 4;         // stride: strainName, quality, qty, packager
+integer FLOWER_STRIDE = 4;
 
 string  g_selectedStrain   = "";
 string  g_selectedQuality  = "";
 string  g_selectedPackager = "";
-integer g_selectedQty      = 0;   // grams of selected strain available
-string  g_selectedRollType = "";  // "joint" | "blunt" | "spliff"
-integer g_selectedCount    = 0;   // number of items to roll
-integer g_rollCost         = 0;   // grams per item
-integer g_totalCost        = 0;   // g_selectedCount * g_rollCost
-integer g_papersCount      = 0;   // Var Papers available in inventory
-integer g_removingPapers   = FALSE; // TRUE while awaiting papers TC_REMOVE_OK
+integer g_selectedQty      = 0;
+string  g_selectedRollType = "";
+integer g_selectedCount    = 0;
+integer g_rollCost         = 0;
+integer g_totalCost        = 0;
+integer g_papersCount      = 0;
+integer g_removingPapers   = FALSE;
 
-// ----------------------------------------------------------------
-// Ping the HUD using a random private reply channel.
-// HUD_Comms listens on TC_OBJECT_PING_CHAN and sends TC_REGISTER
-// back on the reply channel.
-// ----------------------------------------------------------------
-pingHUD()
+// ================================================================
+// PARTICLE SYSTEM  (self-contained, no linked prim required)
+// ================================================================
+
+vector qualColor(string quality)
 {
-    g_registered = FALSE;
-    if (g_listenRegister) llListenRemove(g_listenRegister);
-    g_replyChannel   = (integer)(llFrand(1000000.0) + 1000000) * -1;
-    g_listenRegister = llListen(g_replyChannel, "", NULL_KEY, "");
-    llRegionSay(TC_OBJECT_PING_CHAN,
-        "TC_PING|" + (string)llGetKey() + "|rolling_tray|" +
-        (string)g_replyChannel);
-    llSetTimerEvent(10.0);
+    if (quality == "mids")   return <1.0, 0.85, 0.2>;
+    if (quality == "loud")   return <0.2, 0.85, 0.3>;
+    if (quality == "exotic") return <0.7, 0.3,  1.0>;
+    return <0.55, 0.45, 0.3>; // reggie
 }
 
-// ----------------------------------------------------------------
+herbParticles()
+{
+    llParticleSystem([
+        PSYS_PART_FLAGS,           PSYS_PART_INTERP_COLOR_MASK |
+                                   PSYS_PART_INTERP_SCALE_MASK,
+        PSYS_SRC_PATTERN,          PSYS_SRC_PATTERN_DROP,
+        PSYS_PART_START_COLOR,     <0.2, 0.5, 0.1>,
+        PSYS_PART_END_COLOR,       <0.1, 0.3, 0.05>,
+        PSYS_PART_START_ALPHA,     0.9,
+        PSYS_PART_END_ALPHA,       0.0,
+        PSYS_PART_START_SCALE,     <0.02, 0.02, 0.0>,
+        PSYS_PART_END_SCALE,       <0.01, 0.01, 0.0>,
+        PSYS_PART_MAX_AGE,         1.5,
+        PSYS_SRC_BURST_RATE,       0.12,
+        PSYS_SRC_BURST_PART_COUNT, 5,
+        PSYS_SRC_ACCEL,            <0.0, 0.0, -0.25>,
+        PSYS_SRC_BURST_SPEED_MIN,  0.08,
+        PSYS_SRC_BURST_SPEED_MAX,  0.2,
+        PSYS_SRC_BURST_RADIUS,     0.1
+    ]);
+}
+
+smokeParticles(string quality)
+{
+    vector col = qualColor(quality);
+    llParticleSystem([
+        PSYS_PART_FLAGS,           PSYS_PART_INTERP_COLOR_MASK |
+                                   PSYS_PART_INTERP_SCALE_MASK |
+                                   PSYS_PART_EMISSIVE_MASK,
+        PSYS_SRC_PATTERN,          PSYS_SRC_PATTERN_ANGLE_CONE,
+        PSYS_PART_START_COLOR,     col,
+        PSYS_PART_END_COLOR,       <1.0, 1.0, 1.0>,
+        PSYS_PART_START_ALPHA,     0.7,
+        PSYS_PART_END_ALPHA,       0.0,
+        PSYS_PART_START_SCALE,     <0.03, 0.03, 0.0>,
+        PSYS_PART_END_SCALE,       <0.18, 0.18, 0.0>,
+        PSYS_PART_MAX_AGE,         4.0,
+        PSYS_SRC_BURST_RATE,       0.1,
+        PSYS_SRC_BURST_PART_COUNT, 3,
+        PSYS_SRC_BURST_SPEED_MIN,  0.02,
+        PSYS_SRC_BURST_SPEED_MAX,  0.07,
+        PSYS_SRC_ACCEL,            <0.0, 0.0, 0.05>,
+        PSYS_SRC_ANGLE_BEGIN,      0.0,
+        PSYS_SRC_ANGLE_END,        0.35
+    ]);
+}
+
+burstParticles(string quality)
+{
+    vector col = qualColor(quality);
+    llParticleSystem([
+        PSYS_PART_FLAGS,           PSYS_PART_INTERP_COLOR_MASK |
+                                   PSYS_PART_INTERP_SCALE_MASK |
+                                   PSYS_PART_EMISSIVE_MASK,
+        PSYS_SRC_PATTERN,          PSYS_SRC_PATTERN_EXPLODE,
+        PSYS_PART_START_COLOR,     col,
+        PSYS_PART_END_COLOR,       <1.0, 1.0, 1.0>,
+        PSYS_PART_START_ALPHA,     1.0,
+        PSYS_PART_END_ALPHA,       0.0,
+        PSYS_PART_START_SCALE,     <0.06, 0.06, 0.0>,
+        PSYS_PART_END_SCALE,       <0.02, 0.02, 0.0>,
+        PSYS_PART_MAX_AGE,         2.0,
+        PSYS_SRC_BURST_RATE,       0.03,
+        PSYS_SRC_BURST_PART_COUNT, 15,
+        PSYS_SRC_BURST_SPEED_MIN,  0.1,
+        PSYS_SRC_BURST_SPEED_MAX,  0.3,
+        PSYS_SRC_MAX_AGE,          0.5
+    ]);
+}
+
+// ================================================================
+// INVENTORY PARSING
+// ================================================================
+
 // Parse raw HUD inventory string; keep only flower_raw entries.
 // Input format per slot: itemType~strainName~quality~qty~packager
 // Slots separated by ^
 // Stored as stride-4 list: strainName, quality, qty, packager
-// ----------------------------------------------------------------
 parseFlowerInventory(string rawData)
 {
     g_availableFlower = [];
@@ -129,9 +196,6 @@ parseFlowerInventory(string rawData)
     }
 }
 
-// ----------------------------------------------------------------
-// Count total Var Papers available from full inventory data.
-// ----------------------------------------------------------------
 integer parsePapersCount(string rawData)
 {
     integer total = 0;
@@ -148,9 +212,10 @@ integer parsePapersCount(string rawData)
     return total;
 }
 
-// ----------------------------------------------------------------
-// Close all active dialog listeners
-// ----------------------------------------------------------------
+// ================================================================
+// UTILITY
+// ================================================================
+
 closeAllListens()
 {
     if (g_listenStrain)   { llListenRemove(g_listenStrain);   g_listenStrain   = 0; }
@@ -159,9 +224,6 @@ closeAllListens()
     if (g_listenConfirm)  { llListenRemove(g_listenConfirm);  g_listenConfirm  = 0; }
 }
 
-// ----------------------------------------------------------------
-// Clear all transaction state variables
-// ----------------------------------------------------------------
 resetTransaction()
 {
     g_selectedStrain   = "";
@@ -175,10 +237,45 @@ resetTransaction()
     g_removingPapers   = FALSE;
 }
 
-// ----------------------------------------------------------------
-// STEP 1 — Show the flower (strain) selection menu.
-// Lists up to 9 strains with quality label and gram count.
-// ----------------------------------------------------------------
+updateHoverText()
+{
+    if (g_registered)
+        llSetText("THE CULTIVAR\nRolling Tray\nTouch to roll your flower",
+                  <0.9, 0.85, 0.5>, 1.0);
+    else
+        llSetText("THE CULTIVAR\nRolling Tray\nTouch to roll",
+                  <0.8, 0.7, 0.4>, 1.0);
+}
+
+// ================================================================
+// HUD COMMUNICATION
+// ================================================================
+
+pingHUD()
+{
+    g_registered = FALSE;
+    if (g_listenRegister) llListenRemove(g_listenRegister);
+    g_replyChannel   = (integer)(llFrand(1000000.0) + 1000000) * -1;
+    g_listenRegister = llListen(g_replyChannel, "", NULL_KEY, "");
+    llRegionSay(TC_OBJECT_PING_CHAN,
+        "TC_PING|" + (string)llGetKey() + "|rolling_tray|" +
+        (string)g_replyChannel);
+    llSetTimerEvent(10.0);
+}
+
+requestInventory()
+{
+    if (g_listenHUD) { llListenRemove(g_listenHUD); g_listenHUD = 0; }
+    g_listenHUD = llListen(g_hudChannel, "", NULL_KEY, "");
+    llRegionSayTo(g_ownerKey, g_hudChannel,
+        "TC_INVENTORY_REQUEST|flower_raw|" + (string)llGetKey());
+    llSetTimerEvent(15.0);
+}
+
+// ================================================================
+// MENUS
+// ================================================================
+
 showFlowerMenu()
 {
     closeAllListens();
@@ -220,10 +317,6 @@ showFlowerMenu()
     llSetTimerEvent(30.0);
 }
 
-// ----------------------------------------------------------------
-// STEP 2 — Show the roll type menu.
-// Blunt (2g) button is omitted if the player has less than 2g.
-// ----------------------------------------------------------------
 showRollTypeMenu()
 {
     closeAllListens();
@@ -245,14 +338,13 @@ showRollTypeMenu()
         "Select what to roll:";
 
     if (g_selectedQty < 2)
-        menuText += "\n(Blunt requires 2g — not enough)";
+        menuText += "\n(Blunt requires 2g  -  not enough)";
 
     if (g_papersCount < 1)
-        menuText += "\n(Joint/Spliff require Var Papers — none in inventory)";
+        menuText += "\n(Joint/Spliff require Var Papers  -  none in inventory)";
     else
         menuText += "\nVar Papers: " + (string)g_papersCount;
 
-    // If nothing is rollable at all, bail out early
     if (g_papersCount < 1 && g_selectedQty < 2)
     {
         llRegionSayTo(g_ownerKey, 0,
@@ -276,10 +368,6 @@ showRollTypeMenu()
     llSetTimerEvent(30.0);
 }
 
-// ----------------------------------------------------------------
-// STEP 3 — Show the quantity menu.
-// Offers 1 / 2 / 5 / 10, capped by floor(available / cost).
-// ----------------------------------------------------------------
 showQuantityMenu()
 {
     closeAllListens();
@@ -326,9 +414,6 @@ showQuantityMenu()
     llSetTimerEvent(30.0);
 }
 
-// ----------------------------------------------------------------
-// STEP 4 — Show confirmation summary before committing.
-// ----------------------------------------------------------------
 showConfirmMenu()
 {
     closeAllListens();
@@ -351,9 +436,10 @@ showConfirmMenu()
     llSetTimerEvent(30.0);
 }
 
-// ----------------------------------------------------------------
-// Send TC_REMOVE_ITEM to HUD and wait for TC_REMOVE_OK / FAIL.
-// ----------------------------------------------------------------
+// ================================================================
+// TRANSACTION
+// ================================================================
+
 sendRemoveRequest()
 {
     llRegionSayTo(g_ownerKey, g_hudChannel,
@@ -363,9 +449,6 @@ sendRemoveRequest()
     llSetTimerEvent(10.0);
 }
 
-// ----------------------------------------------------------------
-// Send TC_REMOVE_ITEM for Var Papers to HUD.
-// ----------------------------------------------------------------
 sendPapersRemoveRequest()
 {
     llRegionSayTo(g_ownerKey, g_hudChannel,
@@ -374,48 +457,33 @@ sendPapersRemoveRequest()
     llSetTimerEvent(10.0);
 }
 
-// ----------------------------------------------------------------
-// Play a 6-step rolling animation sequence (steps 0-5, 3 s apart).
-// Step 0 fires immediately; the timer advances steps 1-5.
-// TC_REMOVE_ITEM is sent only after step 5 completes.
-// ----------------------------------------------------------------
 startRollingSequence()
 {
     g_inRollingSequence = TRUE;
     g_busy              = TRUE;
     g_rollStep          = 0;
 
-    // Notify HUD to start rolling idle animation
     llRegionSayTo(g_ownerKey, g_hudChannel, "TC_PLAY_ANIM|rolling_idle");
 
-    // Step 0 message
     if (g_selectedRollType == "blunt")
         llSay(0, g_ownerName + " splits the cigar wrap carefully.");
     else
         llSay(0, g_ownerName + " pulls out a Var Paper and gets to work.");
 
-    // Steps 0-2: green herb particles (flower being packed)
-    llMessageLinked(LINK_SET, 2000, "HERB_PARTICLES|" + g_selectedQuality, NULL_KEY);
-
+    herbParticles();
     llSetTimerEvent(3.0);
 }
 
-// ----------------------------------------------------------------
-// HUD confirmed the removal — add rolled items, fire effects.
-// ----------------------------------------------------------------
 finishCraft()
 {
-    // Add rolled items to HUD inventory
     llRegionSayTo(g_ownerKey, g_hudChannel,
         "TC_ADD_ITEM|" + g_selectedRollType + "|" + g_selectedStrain + "|" +
         g_selectedQuality + "|" + (string)g_selectedCount + "|" +
         g_brandName);
 
-    // Celebration particle burst
-    llMessageLinked(LINK_SET, 2000, "BURST_PARTICLES|" + g_selectedQuality, NULL_KEY);
+    burstParticles(g_selectedQuality);
     llPlaySound("roll_complete", 0.6);
 
-    // Announce in nearby chat so others can see the result
     string plural = "";
     if (g_selectedCount > 1) plural = "s";
     llSay(0, g_ownerName + " rolled " + (string)g_selectedCount + "x " +
@@ -423,23 +491,9 @@ finishCraft()
         g_selectedRollType + plural +
         " (" + (string)g_totalCost + "g used).");
 
-    // Mark for particle clear after 3s; reset transaction now
     g_particleClear = TRUE;
     resetTransaction();
     llSetTimerEvent(3.0);
-}
-
-// ----------------------------------------------------------------
-// Update hover text based on registration state
-// ----------------------------------------------------------------
-updateHoverText()
-{
-    if (g_registered)
-        llSetText("THE CULTIVAR\nRolling Tray\nTouch to roll your flower",
-                  <0.9, 0.85, 0.5>, 1.0);
-    else
-        llSetText("THE CULTIVAR\nRolling Tray\nTouch to roll",
-                  <0.8, 0.7, 0.4>, 1.0);
 }
 
 // ================================================================
@@ -447,12 +501,11 @@ default
 {
     state_entry()
     {
-        // Explicit reset so a dirty state from a previous session or
-        // a mid-transaction script reload never leaves the tray stuck.
         g_busy              = FALSE;
         g_inRollingSequence = FALSE;
         g_removingPapers    = FALSE;
         closeAllListens();
+        llParticleSystem([]);
         g_ownerKey  = llGetOwner();
         g_ownerName = llGetDisplayName(g_ownerKey);
         updateHoverText();
@@ -476,7 +529,6 @@ default
         {
             g_rollStep++;
 
-            // Per-step owner messages
             if (g_selectedRollType == "blunt")
             {
                 if (g_rollStep == 1)
@@ -507,25 +559,12 @@ default
                     llSay(0, g_ownerName + " twists the tip. Perfect.");
             }
 
-            // Switch to quality-colored wisp particles at step 3
             if (g_rollStep == 3)
-                llMessageLinked(LINK_SET, 2000, "SMOKE_PARTICLES|" + g_selectedQuality, NULL_KEY);
+                smokeParticles(g_selectedQuality);
 
-            // Start tray rotation at step 1
-            if (g_rollStep == 1)
-            {
-                llSetLinkPrimitiveParamsFast(2, [
-                    PRIM_OMEGA, <0.0, 0.0, 1.0>, 0.3, 0.5
-                ]);
-            }
-
-            // Final step: wrap up sequence and send TC_REMOVE_ITEM
             if (g_rollStep >= 5)
             {
-                llMessageLinked(LINK_SET, 2000, "STOP_PARTICLES", NULL_KEY);
-                llSetLinkPrimitiveParamsFast(2, [
-                    PRIM_OMEGA, <0.0, 0.0, 1.0>, 0.0, 0.0
-                ]);
+                llParticleSystem([]);
                 llRegionSayTo(g_ownerKey, g_hudChannel, "TC_STOP_ANIM|rolling_idle");
                 g_inRollingSequence = FALSE;
                 sendRemoveRequest();
@@ -540,13 +579,13 @@ default
         if (g_particleClear)
         {
             g_particleClear = FALSE;
-            llMessageLinked(LINK_SET, 2000, "STOP_PARTICLES", NULL_KEY);
+            llParticleSystem([]);
             g_busy = FALSE;
             llSetTimerEvent(HOVER_FADE_SECS);
             return;
         }
 
-        // Idle fade: no active transaction — fade hover text and stop timer
+        // Idle fade
         if (!g_busy)
         {
             llSetText("THE CULTIVAR\nRolling Tray\nTouch to roll",
@@ -555,10 +594,9 @@ default
             return;
         }
 
-        // General timeout: HUD not found, or player abandoned a menu
+        // General timeout: HUD not found or player abandoned a menu
         closeAllListens();
         g_busy = FALSE;
-
         if (!g_registered)
         {
             llRegionSayTo(g_ownerKey, 0,
@@ -568,6 +606,11 @@ default
         {
             llRegionSayTo(g_ownerKey, 0, "Rolling session timed out.");
             resetTransaction();
+        }
+        else
+        {
+            llRegionSayTo(g_ownerKey, 0,
+                "HUD didn't respond in time. Touch the tray to try again.");
         }
         llSetTimerEvent(HOVER_FADE_SECS);
     }
@@ -586,24 +629,31 @@ default
 
         if (g_busy)
         {
-            // Only truly block during active rolling animation or post-craft clear.
-            // In all other busy states (waiting for HUD, menu, removal) the session
-            // may have gone stale — auto-reset so the owner can try again immediately.
+            // Block touches during the rolling animation or particle clear
             if (g_inRollingSequence || g_particleClear)
             {
                 llRegionSayTo(g_ownerKey, 0, "Hold on  -  finishing previous action...");
                 return;
             }
+            // Cancel any open menus / pending transaction
             closeAllListens();
             resetTransaction();
-            g_registered = FALSE;
-            g_busy       = FALSE;
+            g_busy = FALSE;
         }
 
         g_busy      = TRUE;
         g_ownerKey  = toucher;
         g_ownerName = llGetDisplayName(toucher);
-        pingHUD();
+
+        if (g_registered)
+        {
+            // HUD already connected — skip the ping and go straight to inventory
+            requestInventory();
+        }
+        else
+        {
+            pingHUD();
+        }
     }
 
     listen(integer channel, string name, key id, string msg)
@@ -611,7 +661,7 @@ default
         list   parts = llParseString2List(msg, ["|"], []);
         string cmd   = llList2String(parts, 0);
 
-        // ---- HUD registration response (private reply channel) ----
+        // ---- HUD registration response ----
         if (channel == g_replyChannel && cmd == "TC_REGISTER")
         {
             key regOwner = (key)llList2String(parts, 1);
@@ -624,22 +674,15 @@ default
             g_registered = TRUE;
 
             if (g_listenRegister) { llListenRemove(g_listenRegister); g_listenRegister = 0; }
-            if (g_listenHUD)      { llListenRemove(g_listenHUD);      g_listenHUD      = 0; }
-            g_listenHUD = llListen(g_hudChannel, "", NULL_KEY, "");
 
             updateHoverText();
-
-            // Request full inventory so we can check both flower and papers.
-            // Keep a 15s timeout in case HUD never responds.
-            llRegionSayTo(g_ownerKey, g_hudChannel,
-                "TC_INVENTORY_REQUEST||" + (string)llGetKey());
-            llSetTimerEvent(15.0);
+            requestInventory();
         }
 
         // ---- HUD sends inventory data ----
         else if (channel == g_hudChannel && cmd == "TC_INVENTORY_DATA")
         {
-            if (!g_busy) return; // stale response — no active session
+            if (!g_busy) return;
             string rawInv = llList2String(parts, 1);
             parseFlowerInventory(rawInv);
             g_papersCount = parsePapersCount(rawInv);
@@ -649,18 +692,16 @@ default
         // ---- HUD confirmed item removal ----
         else if (channel == g_hudChannel && cmd == "TC_REMOVE_OK")
         {
-            if (!g_busy || g_selectedStrain == "") return; // stale response
+            if (!g_busy || g_selectedStrain == "") return;
             llSetTimerEvent(0.0);
             if (!g_removingPapers &&
                 (g_selectedRollType == "joint" || g_selectedRollType == "spliff"))
             {
-                // Flower removed — now remove papers
                 g_removingPapers = TRUE;
                 sendPapersRemoveRequest();
             }
             else
             {
-                // Either blunt (no papers needed) or papers just confirmed
                 finishCraft();
             }
         }
@@ -668,11 +709,10 @@ default
         // ---- HUD refused item removal ----
         else if (channel == g_hudChannel && cmd == "TC_REMOVE_FAIL")
         {
-            if (!g_busy || g_selectedStrain == "") return; // stale response
+            if (!g_busy || g_selectedStrain == "") return;
             llSetTimerEvent(0.0);
             if (g_removingPapers)
             {
-                // Papers failed — refund the flower already deducted
                 llRegionSayTo(g_ownerKey, g_hudChannel,
                     "TC_ADD_ITEM|flower_raw|" + g_selectedStrain + "|" +
                     g_selectedQuality + "|" + (string)g_totalCost + "|" +
@@ -722,8 +762,6 @@ default
             if (msg == "Cancel") { g_busy = FALSE; resetTransaction(); return; }
             if (msg == "Back")   { showFlowerMenu(); return; }
 
-            // Button labels are "Joint (1g)", "Blunt (2g)", "Spliff (1g)"
-            // Extract the type name before the space
             string typePart = llToLower(llList2String(
                 llParseString2List(msg, [" "], []), 0));
 
