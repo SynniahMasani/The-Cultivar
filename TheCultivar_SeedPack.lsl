@@ -191,11 +191,22 @@ default
 {
     state_entry()
     {
+        // Non-creator who re-rezzed an already-used pack sees it as empty.
+        if (llLinksetDataRead("pack_used") == "1")
+        {
+            llSetText("EMPTY\nAll seeds have been claimed.\nPurchase a new pack to get more seeds.",
+                <0.35, 0.35, 0.35>, 0.6);
+            return;
+        }
         setHoverText();
     }
 
     on_rez(integer start_param)
     {
+        // Original creator re-rezzes → clear used flag so packs can be
+        // distributed fresh. Everyone else keeps the empty/used state.
+        if (llGetOwner() == llGetCreator())
+            llLinksetDataDelete("pack_used");
         llResetScript();
     }
 
@@ -210,6 +221,10 @@ default
         }
 
         g_used = TRUE;
+        // Persist the used state so a non-creator re-rezzing a copy-enabled
+        // pack cannot claim seeds again.
+        if (llGetOwner() != llGetCreator())
+            llLinksetDataWrite("pack_used", "1");
 
         integer seedCount   = 0;
         string  displayName = "";

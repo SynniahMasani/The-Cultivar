@@ -90,7 +90,15 @@ default
         else llSetTimerEvent(HOVER_FADE_SECS);
     }
 
-    on_rez(integer start_param) { llResetScript(); }
+    on_rez(integer start_param)
+    {
+        // Original creator re-rezzes → clear the opened flag so the box
+        // can be distributed or restocked fresh.
+        // Everyone else keeps their opened/empty state on re-rez.
+        if (llGetOwner() == llGetCreator())
+            llLinksetDataDelete("papers_opened");
+        llResetScript();
+    }
     changed(integer change)     { if (change & CHANGED_OWNER) llResetScript(); }
 
     timer()

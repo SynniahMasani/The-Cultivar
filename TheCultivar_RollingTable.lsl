@@ -586,8 +586,18 @@ default
 
         if (g_busy)
         {
-            llRegionSayTo(g_ownerKey, 0, "Hold on  -  finishing previous action...");
-            return;
+            // Only truly block during active rolling animation or post-craft clear.
+            // In all other busy states (waiting for HUD, menu, removal) the session
+            // may have gone stale — auto-reset so the owner can try again immediately.
+            if (g_inRollingSequence || g_particleClear)
+            {
+                llRegionSayTo(g_ownerKey, 0, "Hold on  -  finishing previous action...");
+                return;
+            }
+            closeAllListens();
+            resetTransaction();
+            g_registered = FALSE;
+            g_busy       = FALSE;
         }
 
         g_busy      = TRUE;
@@ -629,6 +639,7 @@ default
         // ---- HUD sends inventory data ----
         else if (channel == g_hudChannel && cmd == "TC_INVENTORY_DATA")
         {
+            if (!g_busy) return; // stale response — no active session
             string rawInv = llList2String(parts, 1);
             parseFlowerInventory(rawInv);
             g_papersCount = parsePapersCount(rawInv);
@@ -638,6 +649,7 @@ default
         // ---- HUD confirmed item removal ----
         else if (channel == g_hudChannel && cmd == "TC_REMOVE_OK")
         {
+            if (!g_busy || g_selectedStrain == "") return; // stale response
             llSetTimerEvent(0.0);
             if (!g_removingPapers &&
                 (g_selectedRollType == "joint" || g_selectedRollType == "spliff"))
@@ -656,6 +668,7 @@ default
         // ---- HUD refused item removal ----
         else if (channel == g_hudChannel && cmd == "TC_REMOVE_FAIL")
         {
+            if (!g_busy || g_selectedStrain == "") return; // stale response
             llSetTimerEvent(0.0);
             if (g_removingPapers)
             {
