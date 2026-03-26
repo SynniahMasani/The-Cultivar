@@ -48,7 +48,7 @@ integer g_listenBagConfig = 0;  // listens for TC_BAG_CONFIG from the table
 
 // Bag identity  -  parsed from object description on rez
 string  g_strain    = "Unknown";
-string  g_quality   = "reggie";
+string  g_quality   = "Unknown";
 string  g_packager  = "Unknown";
 integer g_weight    = 0;   // grams
 integer g_price     = 0;   // L$
