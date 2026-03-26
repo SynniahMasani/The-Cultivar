@@ -354,7 +354,7 @@ default
     state_entry()
     {
         g_ownerKey   = llGetOwner();
-        g_ownerName  = llKey2Name(g_ownerKey);
+        g_ownerName  = llGetDisplayName(g_ownerKey);
         g_hudChannel = deriveHUDChannel(g_ownerKey);
 
         // Storage broadcasts CONTENTS_UPDATED on its state_entry,

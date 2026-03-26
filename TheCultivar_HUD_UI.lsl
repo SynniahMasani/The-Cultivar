@@ -310,7 +310,7 @@ showPassPlayerMenu()
     {
         key    a = llList2Key(agents, i);
         if (a == g_ownerKey) jump skip_self;
-        string n = llKey2Name(a);
+        string n = llGetDisplayName(a);
         buttons  += [llGetSubString(n, 0, 11)];
         menuText += n + "\n";
         @skip_self;
@@ -536,7 +536,7 @@ default
     state_entry()
     {
         g_ownerKey  = llGetOwner();
-        g_ownerName = llKey2Name(g_ownerKey);
+        g_ownerName = llGetDisplayName(g_ownerKey);
         llMessageLinked(LINK_SET, CHAN_IDENTITY, "REQUEST_IDENTITY", NULL_KEY);
         llMessageLinked(LINK_SET, CHAN_INVENTORY, "REQUEST_INVENTORY", NULL_KEY);
         refreshAllGlows();
@@ -674,7 +674,7 @@ default
             for (i = 0; i < llGetListLength(agents); i++)
             {
                 key    a = llList2Key(agents, i);
-                string n = llKey2Name(a);
+                string n = llGetDisplayName(a);
                 if (llGetSubString(n, 0, 11) == msg)
                 {
                     g_passTarget     = a;

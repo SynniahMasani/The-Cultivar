@@ -132,7 +132,7 @@ loadIdentity()
     if (test == "")
     {
         // First time this HUD has been used  -  initialize fresh
-        g_playerName     = llKey2Name(llGetOwner());
+        g_playerName     = llGetDisplayName(llGetOwner());
         g_playerUUID     = llGetOwner();
         g_totalSmoked    = 0;
         g_totalGrown     = 0;

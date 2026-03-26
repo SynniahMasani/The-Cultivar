@@ -171,7 +171,7 @@ default
     state_entry()
     {
         g_ownerKey  = llGetOwner();
-        g_ownerName = llKey2Name(g_ownerKey);
+        g_ownerName = llGetDisplayName(g_ownerKey);
         parseDescription();
         updateHoverText();
         updateSaleState(g_forSale, g_price);
@@ -182,7 +182,7 @@ default
     on_rez(integer start_param)
     {
         g_ownerKey  = llGetOwner();
-        g_ownerName = llKey2Name(g_ownerKey);
+        g_ownerName = llGetDisplayName(g_ownerKey);
 
         if (start_param != 0)
         {
@@ -210,13 +210,13 @@ default
             {
                 integer sellerHUDChan = deriveHUDChannel(g_ownerKey);
                 llRegionSayTo(g_ownerKey, sellerHUDChan,
-                    "TC_SALE_COMPLETE|" + (string)g_price + "|" + llKey2Name(newOwner));
+                    "TC_SALE_COMPLETE|" + (string)g_price + "|" + llGetDisplayName(newOwner));
                 llRegionSayTo(g_ownerKey, 0,
                     "Sold your " + g_strain + " bag to " +
-                    llKey2Name(newOwner) + " for L$" + (string)g_price + ".");
+                    llGetDisplayName(newOwner) + " for L$" + (string)g_price + ".");
             }
             g_ownerKey  = newOwner;
-            g_ownerName = llKey2Name(newOwner);
+            g_ownerName = llGetDisplayName(newOwner);
             g_forSale   = FALSE;
             g_price     = 0;
             saveDescription();

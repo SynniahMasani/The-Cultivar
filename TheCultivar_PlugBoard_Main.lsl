@@ -489,7 +489,7 @@ completeSale(key buyer, integer slot)
             (string)weight + "g   -   Check your inventory!");
         llRegionSayTo(g_ownerKey, 0,
             "? Consignment sale: " + quality + " " + strain + " to " +
-            llKey2Name(buyer) + "  -  fee L$" + (string)fee + " received.");
+            llGetDisplayName(buyer) + "  -  fee L$" + (string)fee + " received.");
         llInstantMessage(cKey,
             "? Your " + quality + " " + strain + " sold for L$" + (string)price +
             "! You receive L$" + (string)payout +
@@ -506,12 +506,12 @@ completeSale(key buyer, integer slot)
             (string)weight + "g   -   Check your inventory!");
         llRegionSayTo(g_ownerKey, 0,
             "? Sold " + quality + " " + strain + " " + (string)weight +
-            "g to " + llKey2Name(buyer) + " for L$" + (string)price + "!");
+            "g to " + llGetDisplayName(buyer) + " for L$" + (string)price + "!");
     }
 
     // Notify owner HUD
     llRegionSayTo(g_ownerKey, g_hudChannel,
-        "TC_SALE_COMPLETE|" + (string)price + "|" + llKey2Name(buyer));
+        "TC_SALE_COMPLETE|" + (string)price + "|" + llGetDisplayName(buyer));
 
     // Clear this slot's price data
     llLinksetDataDelete("price_" + (string)slot);
@@ -695,7 +695,7 @@ default
     state_entry()
     {
         g_ownerKey  = llGetOwner();
-        g_ownerName = llKey2Name(g_ownerKey);
+        g_ownerName = llGetDisplayName(g_ownerKey);
         g_hudChannel = deriveHUDChannel(g_ownerKey);
 
         // Listen for HUD registration

@@ -88,7 +88,7 @@ default
     state_entry()
     {
         g_ownerKey  = llGetOwner();
-        g_ownerName = llKey2Name(g_ownerKey);
+        g_ownerName = llGetDisplayName(g_ownerKey);
         g_privateChannel = derivePrivateChannel(g_ownerKey);
         // Store so UI script can include it in TC_SESSION_START messages
         llLinksetDataWrite("hud_private_chan", (string)g_privateChannel);
@@ -251,7 +251,7 @@ default
                 string strain  = llList2String(parts, 1);
                 string quality = llList2String(parts, 2);
                 integer qty    = (integer)llList2String(parts, 3);
-                string owner   = llKey2Name(g_ownerKey);
+                string owner   = llGetDisplayName(g_ownerKey);
 
                 // Apply grower level yield perk before adding to inventory
                 integer growerLevel = (integer)llLinksetDataRead("grower_level");

@@ -413,7 +413,7 @@ default
     state_entry()
     {
         g_ownerKey  = llGetOwner();
-        g_ownerName = llKey2Name(g_ownerKey);
+        g_ownerName = llGetDisplayName(g_ownerKey);
         if (g_listenRegister) llListenRemove(g_listenRegister);
         g_listenRegister = llListen(0, "", NULL_KEY, "");
         updateHoverText();
@@ -459,7 +459,7 @@ default
         if (llDetectedKey(0) != llGetOwner()) return;
         if (g_busy) { llRegionSayTo(g_ownerKey, 0, "Still working..."); return; }
         g_ownerKey  = llDetectedKey(0);
-        g_ownerName = llKey2Name(g_ownerKey);
+        g_ownerName = llGetDisplayName(g_ownerKey);
         pingHUD();
     }
 

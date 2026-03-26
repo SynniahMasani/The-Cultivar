@@ -384,7 +384,7 @@ default
     state_entry()
     {
         g_ownerKey  = llGetOwner();
-        g_ownerName = llKey2Name(g_ownerKey);
+        g_ownerName = llGetDisplayName(g_ownerKey);
         updateHoverText();
     }
 
@@ -499,7 +499,7 @@ default
         if (toucher != llGetOwner())
         {
             llRegionSayTo(toucher, 0,
-                "This rolling tray belongs to " + llKey2Name(llGetOwner()) + ".");
+                "This rolling tray belongs to " + llGetDisplayName(llGetOwner()) + ".");
             return;
         }
 
@@ -511,7 +511,7 @@ default
 
         g_busy      = TRUE;
         g_ownerKey  = toucher;
-        g_ownerName = llKey2Name(toucher);
+        g_ownerName = llGetDisplayName(toucher);
         pingHUD();
     }
 

@@ -259,7 +259,7 @@ default
     state_entry()
     {
         g_ownerKey = llGetOwner();
-        g_ownerName = llKey2Name(g_ownerKey);
+        g_ownerName = llGetDisplayName(g_ownerKey);
         g_hudChannel = deriveHUDChannel(g_ownerKey);
 
         // Always listen on HUD channel and channel 0 for registration
@@ -276,7 +276,7 @@ default
         {
             g_attached  = TRUE;
             g_ownerKey  = llGetOwner();
-            g_ownerName = llKey2Name(g_ownerKey);
+            g_ownerName = llGetDisplayName(g_ownerKey);
             g_hudChannel = deriveHUDChannel(g_ownerKey);
 
             // Register with HUD
