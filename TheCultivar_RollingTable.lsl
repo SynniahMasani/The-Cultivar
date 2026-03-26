@@ -326,9 +326,9 @@ startRollingSequence()
 
     // Step 0 message
     if (g_selectedRollType == "blunt")
-        llOwnerSay("You split the cigar wrap carefully.");
+        llSay(0, g_ownerName + " splits the cigar wrap carefully.");
     else
-        llOwnerSay("You pull out a fresh rolling paper.");
+        llSay(0, g_ownerName + " pulls out a fresh rolling paper.");
 
     // Steps 0-2: green herb particles (flower being packed)
     llMessageLinked(LINK_SET, 2000, "HERB_PARTICLES|" + g_selectedQuality, NULL_KEY);
@@ -351,11 +351,10 @@ finishCraft()
     llMessageLinked(LINK_SET, 2000, "BURST_PARTICLES|" + g_selectedQuality, NULL_KEY);
     llPlaySound("roll_complete", 0.6);
 
-    // Notify player
+    // Announce in nearby chat so others can see the result
     string plural = "";
     if (g_selectedCount > 1) plural = "s";
-    llRegionSayTo(g_ownerKey, 0,
-        "Rolled " + (string)g_selectedCount + "x " +
+    llSay(0, g_ownerName + " rolled " + (string)g_selectedCount + "x " +
         g_selectedQuality + " " + g_selectedStrain + " " +
         g_selectedRollType + plural +
         " (" + (string)g_totalCost + "g used).");
@@ -410,31 +409,31 @@ default
             if (g_selectedRollType == "blunt")
             {
                 if (g_rollStep == 1)
-                    llOwnerSay("You empty the tobacco and pack in the " +
+                    llSay(0, g_ownerName + " empties the tobacco and packs in the " +
                                g_selectedStrain + ".");
                 else if (g_rollStep == 2)
-                    llOwnerSay("You load the wrap with " +
+                    llSay(0, g_ownerName + " loads the wrap with " +
                                g_selectedQuality + " flower.");
                 else if (g_rollStep == 3)
-                    llOwnerSay("You roll it tight, sealing the edges.");
+                    llSay(0, g_ownerName + " rolls it tight, sealing the edges.");
                 else if (g_rollStep == 4)
-                    llOwnerSay("You lick and press the seam shut.");
+                    llSay(0, g_ownerName + " licks and presses the seam shut.");
                 else if (g_rollStep == 5)
-                    llOwnerSay("You twist both ends. That's a backwood.");
+                    llSay(0, g_ownerName + " twists both ends. That's a backwood.");
             }
             else
             {
                 if (g_rollStep == 1)
-                    llOwnerSay("You grind the " + g_selectedStrain +
-                               " and spread it evenly.");
+                    llSay(0, g_ownerName + " grinds the " + g_selectedStrain +
+                               " and spreads it evenly.");
                 else if (g_rollStep == 2)
-                    llOwnerSay("You tuck the edge and start the roll.");
+                    llSay(0, g_ownerName + " tucks the edge and starts the roll.");
                 else if (g_rollStep == 3)
-                    llOwnerSay("You roll it firm and even.");
+                    llSay(0, g_ownerName + " rolls it firm and even.");
                 else if (g_rollStep == 4)
-                    llOwnerSay("You lick the edge and seal it.");
+                    llSay(0, g_ownerName + " licks the edge and seals it.");
                 else if (g_rollStep == 5)
-                    llOwnerSay("You twist the tip. Perfect.");
+                    llSay(0, g_ownerName + " twists the tip. Perfect.");
             }
 
             // Switch to quality-colored wisp particles at step 3

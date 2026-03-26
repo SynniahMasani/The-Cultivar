@@ -37,9 +37,10 @@ string buildSaveString(string strainName, integer qualityTier,
                        integer stage, integer stageStartTime,
                        integer stageDuration, integer isWatered,
                        integer fertApplied, integer fertTier,
-                       string potType, integer potUsesLeft)
+                       string potType, integer potUsesLeft,
+                       integer potSpent)
 {
-    return strainName       + "|" +
+    return strainName            + "|" +
            (string)qualityTier   + "|" +
            (string)stage         + "|" +
            (string)stageStartTime + "|" +
@@ -48,7 +49,8 @@ string buildSaveString(string strainName, integer qualityTier,
            (string)fertApplied    + "|" +
            (string)fertTier       + "|" +
            potType                + "|" +
-           (string)potUsesLeft;
+           (string)potUsesLeft    + "|" +
+           (string)potSpent;
 }
 
 // ----------------------------------------------------------------
@@ -87,6 +89,8 @@ string fastForward(string stateStr)
     integer fertTier       = (integer)llList2String(parts, 7);
     string  potType        = llList2String(parts, 8);
     integer potUsesLeft    = (integer)llList2String(parts, 9);
+    // potSpent is at index 10 in the save string (absent in old saves  -  defaults to 0)
+    integer potSpent       = (integer)llList2String(parts, 10);
 
     // Only fast-forward active growing stages (1-3)
     if (stage == 0 || stage == 4) return stateStr;
@@ -139,7 +143,7 @@ string fastForward(string stateStr)
 
     return buildSaveString(strainName, qualityTier, stage, stageStartTime,
                            stageDuration, isWatered, fertApplied, fertTier,
-                           potType, potUsesLeft);
+                           potType, potUsesLeft, potSpent);
 }
 
 // ================================================================
@@ -238,7 +242,7 @@ state saving
             if (cmd == "STATUS")
             {
                 // STATUS|strainName|qualityTier|stage|stageStartTime|stageDuration
-                //        |isWatered|fertApplied|fertTier|potType|potUsesLeft
+                //        |isWatered|fertApplied|fertTier|potType|potUsesLeft|potSpent
                 string stateStr = buildSaveString(
                     llList2String(parts, 1),
                     (integer)llList2String(parts, 2),
@@ -249,7 +253,8 @@ state saving
                     (integer)llList2String(parts, 7),
                     (integer)llList2String(parts, 8),
                     llList2String(parts, 9),
-                    (integer)llList2String(parts, 10)
+                    (integer)llList2String(parts, 10),
+                    (integer)llList2String(parts, 11)
                 );
                 saveState(stateStr);
                 state default;
