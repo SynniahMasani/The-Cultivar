@@ -517,8 +517,24 @@ default
 
         if (g_ownerKey != NULL_KEY)
         {
-            llSay(0, "This station is currently in use.");
-            return;
+            if (toucher == g_ownerKey && g_removeStep == 0)
+            {
+                // Owner re-touching while waiting on HUD or a menu (stale/pending).
+                // Reset and let them start fresh.
+                resetStation();
+                // fall through to start a new session
+            }
+            else if (toucher == g_ownerKey)
+            {
+                // Seeds are actively being removed — cannot interrupt.
+                llSay(0, "Still processing your previous request...");
+                return;
+            }
+            else
+            {
+                llSay(0, "This station is currently in use.");
+                return;
+            }
         }
 
         if (toucher != llGetOwner())
@@ -567,6 +583,7 @@ default
         {
             if (cmd == "TC_INVENTORY_DATA")
             {
+                if (g_ownerKey == NULL_KEY) return; // stale response
                 llSetTimerEvent(0.0);
                 parseSeedInventory(llList2String(parts, 1));
 
@@ -593,6 +610,7 @@ default
 
             if (cmd == "TC_REMOVE_OK")
             {
+                if (g_ownerKey == NULL_KEY || g_removeStep == 0) return; // stale response
                 if (g_removeStep == 1)
                 {
                     g_removeStep = 2;
@@ -615,6 +633,7 @@ default
 
             if (cmd == "TC_REMOVE_FAIL")
             {
+                if (g_ownerKey == NULL_KEY) return; // stale response
                 llSetTimerEvent(0.0);
                 llRegionSayTo(g_ownerKey, 0,
                     "Breeding failed  -  could not remove seeds from inventory. Please try again.");

@@ -339,7 +339,7 @@ finishCraft()
         PRIM_COLOR, ALL_SIDES, col, 1.0,
         PRIM_GLOW,  ALL_SIDES, 0.15,
         PRIM_TEXT,
-            "? " + (string)g_outputCount + "x crafted",
+            (string)g_outputCount + "x crafted",
         col, 1.0
     ]);
 
@@ -380,7 +380,7 @@ finishCraft()
     else if (g_selectedItem == "concentrate")  itemLabel = "concentrate";
 
     llRegionSayTo(g_ownerKey, 0,
-        "? Crafted " + (string)g_outputCount + "x " +
+        "Crafted " + (string)g_outputCount + "x " +
         g_selectedQuality + " " + g_selectedStrain + " " + itemLabel +
         " (" + (string)g_totalCost + "g used)");
 
