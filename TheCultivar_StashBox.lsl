@@ -32,6 +32,7 @@
 // ================================================================
 
 integer TC_OBJECT_PING_CHAN = -111222333;
+integer HOVER_FADE_SECS = 30;
 
 integer DCHAN_OWNER   = -120001;
 integer DCHAN_VISITOR = -120002;
@@ -407,6 +408,7 @@ default
         rebuildContents();
         updateDisplay();
         updateHoverText();
+        llSetTimerEvent(HOVER_FADE_SECS);
     }
 
     on_rez(integer start_param) { llResetScript(); }
@@ -423,22 +425,42 @@ default
             rebuildContents();
             updateDisplay();
             updateHoverText();
+            llSetTimerEvent(HOVER_FADE_SECS);
         }
     }
 
     timer()
     {
+        // Idle fade: no dialog listens open — fade hover text and stop timer
+        if (!g_listenOwner && !g_listenVisitor && !g_listenItem && !g_listenRegister)
+        {
+            integer count = llGetListLength(g_contents) / CONT_STRIDE;
+            string  lockStr = "";
+            if (g_locked) lockStr = " ?";
+            if (count == 0)
+                llSetText("THE CULTIVAR\nStash Box [Empty]" + lockStr +
+                          "\nOwner: " + g_ownerName,
+                          <0.5, 0.5, 0.5>, 0.0);
+            else
+                llSetText("THE CULTIVAR\nStash Box" + lockStr +
+                          "\nOwner: " + g_ownerName,
+                          <0.4, 0.9, 0.4>, 0.0);
+            llSetTimerEvent(0.0);
+            return;
+        }
+
         closeAllListens();
-        llSetTimerEvent(0.0);
         g_pendingVisitor  = NULL_KEY;
         g_pendingItemName = "";
         if (!g_registered)
             llRegionSayTo(g_ownerKey, 0,
                 "Couldn't reach your HUD. Make sure it's worn.");
+        llSetTimerEvent(HOVER_FADE_SECS);
     }
 
     touch_start(integer nd)
     {
+        updateHoverText();
         key toucher = llDetectedKey(0);
 
         if (toucher == g_ownerKey)

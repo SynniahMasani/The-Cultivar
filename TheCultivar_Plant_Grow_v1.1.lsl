@@ -86,6 +86,7 @@ key     g_ownerKey        = NULL_KEY;
 integer g_hudChannel      = 0;
 // Timer tick rate
 float TIMER_INTERVAL = 30.0;
+integer HOVER_FADE_SECS = 60;
 // Grow light broadcast channel
 integer GROW_LIGHT_CHAN = -999111222;
 // Whether the light bonus has been applied this stage
@@ -345,7 +346,7 @@ advanceStage()
     stageName = llList2String(stageNames, g_stage);
     if (g_stage == 4)
     {
-        llSetTimerEvent(0.0);
+        llSetTimerEvent(HOVER_FADE_SECS);
         updateVisuals();
         llMessageLinked(LINK_SET, PCHAN_GROW, "STAGE_READY|4", NULL_KEY);
         llRegionSayTo(g_ownerKey, 0,
@@ -452,7 +453,7 @@ resetPlant()
     g_fertTier       = 0;
     g_isHybrid       = FALSE;
     g_isLegendary    = FALSE;
-    llSetTimerEvent(0.0);
+    llSetTimerEvent(HOVER_FADE_SECS);
     updateVisuals();
     llMessageLinked(LINK_SET, PCHAN_PERSIST, "SAVE_STATE", NULL_KEY);
     llMessageLinked(LINK_SET, PCHAN_GROW, "PLANT_RESET", NULL_KEY);
@@ -469,6 +470,7 @@ default
         g_potType    = derivePotType();
         llListen(GROW_LIGHT_CHAN, "", NULL_KEY, "");
         llMessageLinked(LINK_SET, PCHAN_PERSIST, "LOAD_STATE", NULL_KEY);
+        llSetTimerEvent(HOVER_FADE_SECS);
     }
     on_rez(integer start_param)
     {
@@ -481,7 +483,23 @@ default
     }
     timer()
     {
-        if (g_stage == 0 || g_stage == 4) return;
+        // Idle fade for empty pot (stage 0) or harvest-ready (stage 4)
+        if (g_stage == 0)
+        {
+            llSetText(g_strainName + "\nEmpty", <0.6, 1.0, 0.6>, 0.0);
+            llSetTimerEvent(0.0);
+            return;
+        }
+        if (g_stage == 4)
+        {
+            string hoverText = g_strainName + "\nReady to Harvest!\n* Click to harvest!\n[" +
+                g_potType + " pot";
+            if (g_potType == "basic") hoverText += " | " + (string)g_potUsesLeft + " uses left";
+            hoverText += "]";
+            llSetText(hoverText, <0.6, 1.0, 0.6>, 0.0);
+            llSetTimerEvent(0.0);
+            return;
+        }
         integer now     = llGetUnixTime();
         integer elapsed = now - g_stageStartTime;
         if (elapsed >= g_stageDuration)

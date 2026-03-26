@@ -40,6 +40,7 @@
 // Public ping channel  -  table broadcasts here when touched
 // HUD_Comms listens on this channel for world object pings
 integer TC_OBJECT_PING_CHAN = -111222333;
+integer HOVER_FADE_SECS = 30;
 
 // Dialog channels
 integer DCHAN_MAIN    = -66001;
@@ -361,6 +362,7 @@ default
         // No persistent channel-0 listen needed.
         updateHoverText();
         checkBagInventory();
+        llSetTimerEvent(HOVER_FADE_SECS);
     }
 
     on_rez(integer start_param)
@@ -370,6 +372,7 @@ default
 
     touch_start(integer nd)
     {
+        updateHoverText();
         key toucher = llDetectedKey(0);
 
         // Only owner can use this table
@@ -574,9 +577,21 @@ default
 
     timer()
     {
+        // Idle fade: no active transaction — fade hover text and stop timer
+        if (!g_busy)
+        {
+            if (g_registered)
+                llSetText("THE CULTIVAR\nBagging Table\nTouch to bag your flower",
+                          <0.4, 0.9, 0.4>, 0.0);
+            else
+                llSetText("THE CULTIVAR\nBagging Table\nTouch to begin",
+                          <0.6, 0.6, 0.6>, 0.0);
+            llSetTimerEvent(0.0);
+            return;
+        }
+
         // Timeout  -  clean up and reset
         closeAllListens();
-        llSetTimerEvent(0.0);
         g_busy = FALSE;
 
         if (!g_registered)
@@ -594,5 +609,6 @@ default
                 resetTransaction();
             }
         }
+        llSetTimerEvent(HOVER_FADE_SECS);
     }
 }

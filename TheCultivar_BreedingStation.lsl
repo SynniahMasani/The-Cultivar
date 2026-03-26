@@ -36,6 +36,7 @@
 
 // ---- Channel constants ----
 integer TC_OBJECT_PING_CHAN = -111222333;
+integer HOVER_FADE_SECS = 30;
 
 // ---- Dialog channels ----
 integer DCHAN_PARENT1 = -88001;
@@ -259,7 +260,7 @@ resetStation()
     g_hybridQuality  = "";
     g_isLegendary    = FALSE;
     g_isMutation     = FALSE;
-    llSetTimerEvent(0.0);
+    llSetTimerEvent(HOVER_FADE_SECS);
     llSetText("Breeding Station\nTouch to breed two seeds\ninto a hybrid strain",
         <0.3, 0.8, 0.3>, 1.0);
 }
@@ -477,6 +478,15 @@ default
 
     timer()
     {
+        // Idle fade: station is idle — fade hover text and stop timer
+        if (g_ownerKey == NULL_KEY && g_listenReply == 0)
+        {
+            llSetText("Breeding Station\nTouch to breed two seeds\ninto a hybrid strain",
+                <0.3, 0.8, 0.3>, 0.0);
+            llSetTimerEvent(0.0);
+            return;
+        }
+
         llSetTimerEvent(0.0);
 
         if (g_ownerKey == NULL_KEY)
@@ -488,6 +498,7 @@ default
             llSetText("Breeding Station\nTouch to breed two seeds\ninto a hybrid strain",
                 <0.3, 0.8, 0.3>, 1.0);
             llOwnerSay("No HUD found. Touch again.");
+            llSetTimerEvent(HOVER_FADE_SECS);
         }
         else
         {
@@ -500,6 +511,8 @@ default
 
     touch_start(integer nd)
     {
+        llSetText("Breeding Station\nTouch to breed two seeds\ninto a hybrid strain",
+            <0.3, 0.8, 0.3>, 1.0);
         key toucher = llDetectedKey(0);
 
         if (g_ownerKey != NULL_KEY)

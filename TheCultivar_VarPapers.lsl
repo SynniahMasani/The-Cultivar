@@ -28,6 +28,7 @@
 // ================================================================
 
 integer TC_OBJECT_PING_CHAN = -111222333;
+integer HOVER_FADE_SECS = 30;
 
 integer PAPERS_PER_BOX = 50;
 
@@ -86,6 +87,7 @@ default
         g_opened = (llLinksetDataRead("papers_opened") == "1");
         setHoverText();
         if (!g_opened) pingHUD();
+        else llSetTimerEvent(HOVER_FADE_SECS);
     }
 
     on_rez(integer start_param) { llResetScript(); }
@@ -93,6 +95,25 @@ default
 
     timer()
     {
+        // Idle fade: box is opened and not busy — fade and stop
+        if (g_opened && !g_busy)
+        {
+            llSetText("Var Papers  -  King Size Slim\nEmpty",
+                      <0.5, 0.5, 0.5>, 0.0);
+            llSetTimerEvent(0.0);
+            return;
+        }
+
+        // Idle fade: registered and not busy — fade and stop
+        if (g_registered && !g_busy)
+        {
+            llSetText("Var Papers  -  King Size Slim\n" +
+                      (string)PAPERS_PER_BOX + " per box  |  Touch to open",
+                      <0.85, 0.2, 0.2>, 0.0);
+            llSetTimerEvent(0.0);
+            return;
+        }
+
         llSetTimerEvent(0.0);
 
         if (!g_registered)
@@ -100,6 +121,7 @@ default
             if (g_listenHandle) llListenRemove(g_listenHandle);
             g_listenHandle = 0;
             setHoverText();
+            llSetTimerEvent(HOVER_FADE_SECS);
             return;
         }
 
@@ -107,10 +129,12 @@ default
         g_busy = FALSE;
         llParticleSystem([]);
         setHoverText();
+        llSetTimerEvent(HOVER_FADE_SECS);
     }
 
     touch_start(integer nd)
     {
+        setHoverText();
         key toucher = llDetectedKey(0);
 
         if (!g_registered || g_hudOwner == NULL_KEY)
