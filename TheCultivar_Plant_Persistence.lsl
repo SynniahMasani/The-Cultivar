@@ -57,8 +57,6 @@ string buildSaveString(string strainName, integer qualityTier,
 saveState(string stateStr)
 {
     llLinksetDataWrite("plant_state", stateStr);
-    // Truncated backup in object description (256 char limit)
-    llSetObjectDesc(llGetSubString(stateStr, 0, 250));
 }
 
 // ----------------------------------------------------------------
@@ -67,14 +65,7 @@ saveState(string stateStr)
 // ----------------------------------------------------------------
 string loadState()
 {
-    string data = llLinksetDataRead("plant_state");
-    if (data != "") return data;
-
-    // Fallback: try object description
-    string desc = llGetObjectDesc();
-    if (llSubStringIndex(desc, "|") != -1) return desc;
-
-    return "";
+    return llLinksetDataRead("plant_state");
 }
 
 // ----------------------------------------------------------------
@@ -221,7 +212,7 @@ default
         else if (cmd == "CLEAR_STATE")
         {
             llLinksetDataDelete("plant_state");
-            llSetObjectDesc("");
+            llSetObjectDesc(""); // clear any legacy description backup
         }
     }
 

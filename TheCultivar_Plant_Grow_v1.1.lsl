@@ -608,6 +608,7 @@ default
         }
         else if (cmd == "REQUEST_STATUS")
         {
+            integer potSpent = (g_potType == "basic" && g_potUsesLeft <= 0);
             string status =
                 "STATUS|"         + g_strainName           + "|" +
                 (string)g_qualityTier                       + "|" +
@@ -618,7 +619,8 @@ default
                 (string)g_fertApplied                       + "|" +
                 (string)g_fertTier                          + "|" +
                 g_potType                                   + "|" +
-                (string)g_potUsesLeft;
+                (string)g_potUsesLeft                       + "|" +
+                (string)potSpent;
             llMessageLinked(LINK_SET, PCHAN_GROW, status, NULL_KEY);
         }
     }
