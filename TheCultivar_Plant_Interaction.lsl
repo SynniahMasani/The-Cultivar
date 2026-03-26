@@ -705,6 +705,7 @@ default
             string potType    = llList2String(parts, 9);
             g_potType_basic   = (potType == "basic");
             g_potUsesLeft     = (integer)llList2String(parts, 10);
+            g_potSpent        = (integer)llList2String(parts, 11);
         }
 
         // Grow script says pot is spent
@@ -720,7 +721,8 @@ default
             g_stage       = 0;
             g_isWatered   = FALSE;
             g_fertApplied = FALSE;
-            g_potSpent    = FALSE;
+            // g_potSpent is NOT cleared here  -  it is set by POT_SPENT just before
+            // PLANT_RESET fires and must persist until the player replaces the pot
         }
     }
 }
