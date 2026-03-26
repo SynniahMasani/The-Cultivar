@@ -80,6 +80,8 @@ string  g_selectedRollType = "";  // "joint" | "blunt" | "spliff"
 integer g_selectedCount    = 0;   // number of items to roll
 integer g_rollCost         = 0;   // grams per item
 integer g_totalCost        = 0;   // g_selectedCount * g_rollCost
+integer g_papersCount      = 0;   // Var Papers available in inventory
+integer g_removingPapers   = FALSE; // TRUE while awaiting papers TC_REMOVE_OK
 
 // ----------------------------------------------------------------
 // Ping the HUD using a random private reply channel.
@@ -127,6 +129,25 @@ parseFlowerInventory(string rawData)
 }
 
 // ----------------------------------------------------------------
+// Count total Var Papers available from full inventory data.
+// ----------------------------------------------------------------
+integer parsePapersCount(string rawData)
+{
+    integer total = 0;
+    if (rawData == "") return total;
+    list slots = llParseString2List(rawData, ["^"], []);
+    integer i;
+    for (i = 0; i < llGetListLength(slots); i++)
+    {
+        list fields = llParseString2List(llList2String(slots, i), ["~"], []);
+        if (llGetListLength(fields) == 5 &&
+            llList2String(fields, 0) == "papers_raw")
+            total += (integer)llList2String(fields, 3);
+    }
+    return total;
+}
+
+// ----------------------------------------------------------------
 // Close all active dialog listeners
 // ----------------------------------------------------------------
 closeAllListens()
@@ -150,6 +171,7 @@ resetTransaction()
     g_selectedCount    = 0;
     g_rollCost         = 0;
     g_totalCost        = 0;
+    g_removingPapers   = FALSE;
 }
 
 // ----------------------------------------------------------------
@@ -224,11 +246,28 @@ showRollTypeMenu()
     if (g_selectedQty < 2)
         menuText += "\n(Blunt requires 2g — not enough)";
 
+    if (g_papersCount < 1)
+        menuText += "\n(Joint/Spliff require Var Papers — none in inventory)";
+    else
+        menuText += "\nVar Papers: " + (string)g_papersCount;
+
+    // If nothing is rollable at all, bail out early
+    if (g_papersCount < 1 && g_selectedQty < 2)
+    {
+        llRegionSayTo(g_ownerKey, 0,
+            "Nothing to roll: need Var Papers for joints/spliffs, and 2g+ for blunts.");
+        g_busy = FALSE;
+        resetTransaction();
+        return;
+    }
+
     list buttons;
-    buttons += ["Joint (1g)"];
+    if (g_papersCount >= 1)
+        buttons += ["Joint (1g)"];
     if (g_selectedQty >= 2)
         buttons += ["Blunt (2g)"];
-    buttons += ["Spliff (1g)"];
+    if (g_papersCount >= 1)
+        buttons += ["Spliff (1g)"];
     buttons += ["Back", "Cancel"];
 
     g_listenRollType = llListen(DCHAN_ROLLTYPE, "", g_ownerKey, "");
@@ -245,6 +284,10 @@ showQuantityMenu()
     closeAllListens();
 
     integer maxCount = g_selectedQty / g_rollCost;
+    if ((g_selectedRollType == "joint" || g_selectedRollType == "spliff") &&
+        g_papersCount < maxCount)
+        maxCount = g_papersCount;
+
     if (maxCount <= 0)
     {
         llRegionSayTo(g_ownerKey, 0,
@@ -259,8 +302,12 @@ showQuantityMenu()
         "=== HOW MANY? ===\n" +
         g_selectedRollType + "  -  " + g_selectedQuality + " " + g_selectedStrain + "\n" +
         "Cost: " + (string)g_rollCost + "g each\n" +
-        "Available: " + (string)g_selectedQty + "g\n" +
-        "Max you can roll: " + (string)maxCount + "\n";
+        "Available: " + (string)g_selectedQty + "g\n";
+
+    if (g_selectedRollType == "joint" || g_selectedRollType == "spliff")
+        menuText += "Var Papers: " + (string)g_papersCount + "\n";
+
+    menuText += "Max you can roll: " + (string)maxCount + "\n";
 
     list counts = [1, 2, 5, 10];
     list buttons;
@@ -289,7 +336,12 @@ showConfirmMenu()
         "=== CONFIRM ROLL ===\n" +
         (string)g_selectedCount + "x " + g_selectedRollType +
         "  -  " + g_selectedQuality + " " + g_selectedStrain + "\n" +
-        "Flower used: " + (string)g_totalCost + "g\n" +
+        "Flower used: " + (string)g_totalCost + "g\n";
+
+    if (g_selectedRollType == "joint" || g_selectedRollType == "spliff")
+        confirmMsg += "Papers: " + (string)g_selectedCount + "x Var Papers\n";
+
+    confirmMsg +=
         "Rolled by: " + g_brandName + "\n" +
         "Confirm?";
 
@@ -311,6 +363,17 @@ sendRemoveRequest()
 }
 
 // ----------------------------------------------------------------
+// Send TC_REMOVE_ITEM for Var Papers to HUD.
+// ----------------------------------------------------------------
+sendPapersRemoveRequest()
+{
+    llRegionSayTo(g_ownerKey, g_hudChannel,
+        "TC_REMOVE_ITEM|papers_raw|Var Papers|standard|" +
+        (string)g_selectedCount + "|Var");
+    llSetTimerEvent(10.0);
+}
+
+// ----------------------------------------------------------------
 // Play a 6-step rolling animation sequence (steps 0-5, 3 s apart).
 // Step 0 fires immediately; the timer advances steps 1-5.
 // TC_REMOVE_ITEM is sent only after step 5 completes.
@@ -328,7 +391,7 @@ startRollingSequence()
     if (g_selectedRollType == "blunt")
         llSay(0, g_ownerName + " splits the cigar wrap carefully.");
     else
-        llSay(0, g_ownerName + " pulls out a fresh rolling paper.");
+        llSay(0, g_ownerName + " pulls out a Var Paper and gets to work.");
 
     // Steps 0-2: green herb particles (flower being packed)
     llMessageLinked(LINK_SET, 2000, "HERB_PARTICLES|" + g_selectedQuality, NULL_KEY);
@@ -538,34 +601,60 @@ default
 
             updateHoverText();
 
-            // Request flower inventory  -  keep a 15s timeout in case HUD
-            // never responds (prevents g_busy from sticking forever)
+            // Request full inventory so we can check both flower and papers.
+            // Keep a 15s timeout in case HUD never responds.
             llRegionSayTo(g_ownerKey, g_hudChannel,
-                "TC_INVENTORY_REQUEST|flower_raw|" + (string)llGetKey());
+                "TC_INVENTORY_REQUEST||" + (string)llGetKey());
             llSetTimerEvent(15.0);
         }
 
         // ---- HUD sends inventory data ----
         else if (channel == g_hudChannel && cmd == "TC_INVENTORY_DATA")
         {
-            parseFlowerInventory(llList2String(parts, 1));
+            string rawInv = llList2String(parts, 1);
+            parseFlowerInventory(rawInv);
+            g_papersCount = parsePapersCount(rawInv);
             showFlowerMenu();
         }
 
-        // ---- HUD confirmed flower removal ----
+        // ---- HUD confirmed item removal ----
         else if (channel == g_hudChannel && cmd == "TC_REMOVE_OK")
         {
             llSetTimerEvent(0.0);
-            finishCraft();
+            if (!g_removingPapers &&
+                (g_selectedRollType == "joint" || g_selectedRollType == "spliff"))
+            {
+                // Flower removed — now remove papers
+                g_removingPapers = TRUE;
+                sendPapersRemoveRequest();
+            }
+            else
+            {
+                // Either blunt (no papers needed) or papers just confirmed
+                finishCraft();
+            }
         }
 
-        // ---- HUD refused removal (not enough flower) ----
+        // ---- HUD refused item removal ----
         else if (channel == g_hudChannel && cmd == "TC_REMOVE_FAIL")
         {
             llSetTimerEvent(0.0);
+            if (g_removingPapers)
+            {
+                // Papers failed — refund the flower already deducted
+                llRegionSayTo(g_ownerKey, g_hudChannel,
+                    "TC_ADD_ITEM|flower_raw|" + g_selectedStrain + "|" +
+                    g_selectedQuality + "|" + (string)g_totalCost + "|" +
+                    g_selectedPackager);
+                llRegionSayTo(g_ownerKey, 0,
+                    "Not enough Var Papers. Your flower has been returned.");
+            }
+            else
+            {
+                llRegionSayTo(g_ownerKey, 0,
+                    "Not enough flower. Check your inventory and try again.");
+            }
             g_busy = FALSE;
-            llRegionSayTo(g_ownerKey, 0,
-                "Not enough flower. Check your inventory and try again.");
             resetTransaction();
         }
 
