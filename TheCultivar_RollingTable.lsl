@@ -45,6 +45,7 @@
 // ================================================================
 
 integer TC_OBJECT_PING_CHAN = -111222333;
+integer HOVER_FADE_SECS = 30;
 
 integer DCHAN_STRAIN   = -77001;
 integer DCHAN_ROLLTYPE = -77002;
@@ -451,11 +452,11 @@ default
         g_busy              = FALSE;
         g_inRollingSequence = FALSE;
         g_removingPapers    = FALSE;
-        llSetTimerEvent(0.0);
         closeAllListens();
         g_ownerKey  = llGetOwner();
         g_ownerName = llGetDisplayName(g_ownerKey);
         updateHoverText();
+        llSetTimerEvent(HOVER_FADE_SECS);
     }
 
     on_rez(integer start_param)
@@ -535,14 +536,22 @@ default
             return;
         }
 
-        llSetTimerEvent(0.0);
-
         // Post-craft particle clear fires 3s after finishCraft()
         if (g_particleClear)
         {
             g_particleClear = FALSE;
             llMessageLinked(LINK_SET, 2000, "STOP_PARTICLES", NULL_KEY);
             g_busy = FALSE;
+            llSetTimerEvent(HOVER_FADE_SECS);
+            return;
+        }
+
+        // Idle fade: no active transaction — fade hover text and stop timer
+        if (!g_busy)
+        {
+            llSetText("THE CULTIVAR\nRolling Tray\nTouch to roll",
+                      <0.8, 0.7, 0.4>, 0.0);
+            llSetTimerEvent(0.0);
             return;
         }
 
@@ -560,10 +569,12 @@ default
             llRegionSayTo(g_ownerKey, 0, "Rolling session timed out.");
             resetTransaction();
         }
+        llSetTimerEvent(HOVER_FADE_SECS);
     }
 
     touch_start(integer nd)
     {
+        updateHoverText();
         key toucher = llDetectedKey(0);
 
         if (toucher != llGetOwner())
