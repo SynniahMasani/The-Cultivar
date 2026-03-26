@@ -67,7 +67,7 @@ list    TIER_COLORS   = [<1.0, 0.95, 0.8>, <0.7, 0.85, 1.0>, <1.0, 0.8, 1.0>];
 
 // Scan interval (seconds)
 float   SCAN_INTERVAL = 60.0; // check every minute
-float   SCAN_RANGE    = 5.0;  // meters
+float   SCAN_RANGE    = 20.0; // meters
 
 // How many plants found last scan
 integer g_plantsFound = 0;
