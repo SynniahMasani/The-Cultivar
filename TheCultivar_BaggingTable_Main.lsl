@@ -273,8 +273,10 @@ giveBag()
     if (llGetInventoryType(bagName) != INVENTORY_OBJECT)
     {
         llRegionSayTo(g_ownerKey, 0,
-            "[ERROR] Bag object '" + bagName +
-            "' not found in table. Please contact support.");
+            "[TC BaggingTable] Bag template '" + bagName + "' is missing from " +
+            "the table's inventory. This usually means the template was no-copy " +
+            "and got consumed on a previous use. Re-add the bag templates and " +
+            "make sure they have COPY permission before placing them in the table.");
         g_busy = FALSE;
         return;
     }
@@ -308,6 +310,36 @@ resetTransaction()
 }
 
 // ----------------------------------------------------------------
+// Check that all bag templates are present and have COPY permission.
+// Called at startup so the owner knows immediately if something is wrong.
+// llRezObject() silently consumes a no-copy object from inventory, so
+// bag templates MUST be copy-permissioned or they deplete after each use.
+// ----------------------------------------------------------------
+checkBagInventory()
+{
+    string warn = "";
+    integer i;
+    for (i = 0; i < llGetListLength(BAG_ASSETS); i++)
+    {
+        string bagName = llList2String(BAG_ASSETS, i);
+        if (llGetInventoryType(bagName) != INVENTORY_OBJECT)
+        {
+            warn += "\n  MISSING: " + bagName;
+        }
+        else if (!(llGetInventoryPermMask(bagName, MASK_OWNER) & PERM_COPY))
+        {
+            warn += "\n  NO-COPY (will deplete on use!): " + bagName;
+        }
+    }
+    if (warn != "")
+    {
+        llRegionSayTo(llGetOwner(), 0,
+            "[TC BaggingTable] Setup problem detected:" + warn +
+            "\nAll bag templates must be inside the table AND set to COPY permission.");
+    }
+}
+
+// ----------------------------------------------------------------
 // Update hover text based on registration state
 // ----------------------------------------------------------------
 updateHoverText()
@@ -328,6 +360,7 @@ default
         // Registration listener is opened in pingHUD() on a random reply channel.
         // No persistent channel-0 listen needed.
         updateHoverText();
+        checkBagInventory();
     }
 
     on_rez(integer start_param)

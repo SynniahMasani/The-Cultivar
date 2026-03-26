@@ -22,7 +22,7 @@ integer g_bagConfigChan   = 0;
 integer g_listenBagConfig = 0;
 
 string  g_strain    = "Unknown";
-string  g_quality   = "reggie";
+string  g_quality   = "Unknown";
 string  g_packager  = "Unknown";
 integer g_weight    = 0;
 integer g_price     = 0;
