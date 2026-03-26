@@ -222,10 +222,10 @@ default
         if (channel == TC_OBJECT_PING_CHAN && cmd == "TC_PING")
         {
             // TC_PING|objectKey|objectType|replyChannel
-            key     objectKey   = (key)llList2String(parts, 1);
+            key     objectKey    = (key)llList2String(parts, 1);
             integer replyChannel = (integer)llList2String(parts, 3);
-            if (replyChannel == 0) replyChannel = 0; // legacy fallback (should never be 0)
-            llRegionSay(replyChannel,
+            if (replyChannel == 0) return; // malformed ping — no safe channel to reply on
+            llRegionSayTo(objectKey, replyChannel,
                 "TC_REGISTER|" + (string)g_ownerKey + "|" +
                 (string)g_privateChannel + "|" + g_ownerName + "|" +
                 llLinksetDataRead("id_brand"));

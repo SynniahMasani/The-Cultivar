@@ -32,6 +32,7 @@ integer DCHAN_STRAIN  = -113003;
 integer DCHAN_BATCH   = -113004;
 integer DCHAN_CONFIRM = -113005;
 
+integer g_replyChannel  = 0;
 integer g_listenRegister;
 integer g_listenHUD;
 integer g_listenMode;
@@ -91,9 +92,11 @@ pingHUD()
 {
     g_registered = FALSE;
     if (g_listenRegister) llListenRemove(g_listenRegister);
-    g_listenRegister = llListen(0, "", NULL_KEY, "");
+    g_replyChannel   = (integer)(llFrand(1000000.0) + 1000000) * -1;
+    g_listenRegister = llListen(g_replyChannel, "", NULL_KEY, "");
     llRegionSay(TC_OBJECT_PING_CHAN,
-        "TC_PING|" + (string)llGetKey() + "|edibles_bench");
+        "TC_PING|" + (string)llGetKey() + "|edibles_bench|" +
+        (string)g_replyChannel);
     llSetTimerEvent(10.0);
 }
 
@@ -403,7 +406,7 @@ updateHoverText()
 {
     string benchPrompt = "Touch to begin";
     if (g_registered) benchPrompt = "Touch to craft";
-    llSetText("THE CULTIVAR\nCrafting Bench\n" + benchPrompt,
+    llSetText("THE CULTIVAR\nEdibles Bench\n" + benchPrompt,
               <0.9, 0.6, 0.2>, 1.0);
 }
 
@@ -468,7 +471,7 @@ default
         list   parts = llParseString2List(msg, ["|"], []);
         string cmd   = llList2String(parts, 0);
 
-        if (channel == 0 && cmd == "TC_REGISTER")
+        if (channel == g_replyChannel && cmd == "TC_REGISTER")
         {
             key regOwner = (key)llList2String(parts, 1);
             if (regOwner != g_ownerKey) return;
@@ -478,6 +481,7 @@ default
             if (g_brandName == "") g_brandName = g_ownerName;
             g_registered = TRUE;
             if (g_listenRegister) { llListenRemove(g_listenRegister); g_listenRegister = 0; }
+            g_replyChannel = 0;
             // Open HUD channel listener so TC_INVENTORY_DATA / TC_REMOVE_OK /
             // TC_REMOVE_FAIL can be received
             if (g_listenHUD) { llListenRemove(g_listenHUD); g_listenHUD = 0; }

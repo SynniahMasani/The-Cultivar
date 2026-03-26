@@ -38,6 +38,7 @@ key     g_hudOwner     = NULL_KEY;
 integer g_hudChannel   = 0;
 integer g_registered   = FALSE;
 integer g_busy         = FALSE;
+integer g_opened       = FALSE;  // TRUE once papers have been given
 
 // ----------------------------------------------------------------
 integer randomNegChan()
@@ -65,7 +66,10 @@ pingHUD()
 // ----------------------------------------------------------------
 setHoverText()
 {
-    if (g_registered)
+    if (g_opened)
+        llSetText("Var Papers  -  King Size Slim\nEmpty",
+                  <0.5, 0.5, 0.5>, 0.7);
+    else if (g_registered)
         llSetText("Var Papers  -  King Size Slim\n" +
                   (string)PAPERS_PER_BOX + " per box  |  Touch to open",
                   <0.85, 0.2, 0.2>, 1.0);
@@ -79,8 +83,9 @@ default
 {
     state_entry()
     {
+        g_opened = (llLinksetDataRead("papers_opened") == "1");
         setHoverText();
-        pingHUD();
+        if (!g_opened) pingHUD();
     }
 
     on_rez(integer start_param) { llResetScript(); }
@@ -123,13 +128,21 @@ default
             return;
         }
 
+        if (g_opened)
+        {
+            llRegionSayTo(toucher, 0, "This box is empty.");
+            return;
+        }
+
         if (g_busy)
         {
             llRegionSayTo(toucher, 0, "Opening  -  just a moment.");
             return;
         }
 
-        g_busy = TRUE;
+        g_busy   = TRUE;
+        g_opened = TRUE;
+        llLinksetDataWrite("papers_opened", "1");
 
         // Add papers to HUD main inventory
         llRegionSayTo(toucher, g_hudChannel,

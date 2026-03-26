@@ -47,6 +47,7 @@ key     g_hudOwner     = NULL_KEY;
 integer g_hudChannel   = 0;
 integer g_registered   = FALSE;
 integer g_awaitingAck  = FALSE;
+integer g_opened       = FALSE;  // TRUE once wrappers have been given
 
 // ----------------------------------------------------------------
 // Generate a random guaranteed-negative reply channel.
@@ -83,7 +84,10 @@ pingHUD()
 // ----------------------------------------------------------------
 setHoverText()
 {
-    if (g_registered)
+    if (g_opened)
+        llSetText("Synwoods  -  " + WRAPPER_FLAVOR +
+                  "\nEmpty", <0.5, 0.5, 0.5>, 0.7);
+    else if (g_registered)
         llSetText("Synwoods  -  " + WRAPPER_FLAVOR +
                   "\nTouch to open!", <0.9, 0.8, 0.5>, 1.0);
     else
@@ -96,8 +100,9 @@ default
 {
     state_entry()
     {
+        g_opened = (llLinksetDataRead("wrapper_opened") == "1");
         setHoverText();
-        pingHUD();
+        if (!g_opened) pingHUD();
     }
 
     on_rez(integer start_param)
@@ -140,6 +145,12 @@ default
     touch_start(integer nd)
     {
         key toucher = llDetectedKey(0);
+
+        if (g_opened)
+        {
+            llRegionSayTo(toucher, 0, "This box is empty.");
+            return;
+        }
 
         if (!g_registered || g_hudOwner == NULL_KEY)
         {
@@ -202,6 +213,8 @@ default
         {
             llSetTimerEvent(0.0);
             g_awaitingAck = FALSE;
+            g_opened      = TRUE;
+            llLinksetDataWrite("wrapper_opened", "1");
 
             // Quality-neutral celebration burst
             llParticleSystem([

@@ -446,6 +446,13 @@ default
 {
     state_entry()
     {
+        // Explicit reset so a dirty state from a previous session or
+        // a mid-transaction script reload never leaves the tray stuck.
+        g_busy              = FALSE;
+        g_inRollingSequence = FALSE;
+        g_removingPapers    = FALSE;
+        llSetTimerEvent(0.0);
+        closeAllListens();
         g_ownerKey  = llGetOwner();
         g_ownerName = llGetDisplayName(g_ownerKey);
         updateHoverText();
