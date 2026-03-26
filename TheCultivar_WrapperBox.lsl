@@ -36,6 +36,7 @@
 // ================================================================
 
 integer TC_OBJECT_PING_CHAN = -111222333;
+integer HOVER_FADE_SECS = 30;
 
 string  WRAPPER_FLAVOR   = "Angel's Breath";
 integer WRAPPERS_PER_BOX = 5;
@@ -103,6 +104,7 @@ default
         g_opened = (llLinksetDataRead("wrapper_opened") == "1");
         setHoverText();
         if (!g_opened) pingHUD();
+        else llSetTimerEvent(HOVER_FADE_SECS);
     }
 
     on_rez(integer start_param)
@@ -117,6 +119,15 @@ default
 
     timer()
     {
+        // Idle fade: box is opened (empty) and not waiting — fade and stop
+        if (g_opened && !g_awaitingAck)
+        {
+            llSetText("Synwoods  -  " + WRAPPER_FLAVOR +
+                      "\nEmpty", <0.5, 0.5, 0.5>, 0.0);
+            llSetTimerEvent(0.0);
+            return;
+        }
+
         llSetTimerEvent(0.0);
 
         if (!g_registered)
@@ -125,6 +136,7 @@ default
             if (g_listenHandle) llListenRemove(g_listenHandle);
             g_listenHandle = 0;
             setHoverText();
+            llSetTimerEvent(HOVER_FADE_SECS);
         }
         else if (g_awaitingAck)
         {
@@ -133,17 +145,20 @@ default
             llRegionSayTo(g_hudOwner, 0,
                 "Couldn't reach your HUD. Make sure it is still worn and try again.");
             setHoverText();
+            llSetTimerEvent(HOVER_FADE_SECS);
         }
         else
         {
             // Post-success: clear particles and reset hover text
             llParticleSystem([]);
             setHoverText();
+            llSetTimerEvent(HOVER_FADE_SECS);
         }
     }
 
     touch_start(integer nd)
     {
+        setHoverText();
         key toucher = llDetectedKey(0);
 
         if (g_opened)

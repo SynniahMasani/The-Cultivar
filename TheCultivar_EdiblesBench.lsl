@@ -25,6 +25,7 @@
 // ================================================================
 
 integer TC_OBJECT_PING_CHAN = -111222333;
+integer HOVER_FADE_SECS = 30;
 
 integer DCHAN_MODE    = -113001;
 integer DCHAN_ITEM    = -113002;
@@ -417,9 +418,8 @@ default
     {
         g_ownerKey  = llGetOwner();
         g_ownerName = llGetDisplayName(g_ownerKey);
-        if (g_listenRegister) llListenRemove(g_listenRegister);
-        g_listenRegister = llListen(0, "", NULL_KEY, "");
         updateHoverText();
+        llSetTimerEvent(HOVER_FADE_SECS);
     }
 
     on_rez(integer start_param) { llResetScript(); }
@@ -439,13 +439,23 @@ default
             ]);
             g_busy = FALSE;
             resetTransaction();
+            llSetTimerEvent(HOVER_FADE_SECS);
+            return;
+        }
+
+        // Idle fade: no active transaction — fade hover text and stop timer
+        if (!g_busy)
+        {
+            string benchPrompt = "Touch to begin";
+            if (g_registered) benchPrompt = "Touch to craft";
+            llSetText("THE CULTIVAR\nEdibles Bench\n" + benchPrompt,
+                      <0.9, 0.6, 0.2>, 0.0);
             llSetTimerEvent(0.0);
             return;
         }
 
         // Dialog / HUD-registration timeout
         closeAllListens();
-        llSetTimerEvent(0.0);
         g_busy = FALSE;
         if (!g_registered)
             llRegionSayTo(g_ownerKey, 0,
@@ -455,10 +465,12 @@ default
             llRegionSayTo(g_ownerKey, 0, "Crafting session timed out.");
             resetTransaction();
         }
+        llSetTimerEvent(HOVER_FADE_SECS);
     }
 
     touch_start(integer nd)
     {
+        updateHoverText();
         if (llDetectedKey(0) != llGetOwner()) return;
         if (g_busy) { llRegionSayTo(g_ownerKey, 0, "Still working..."); return; }
         g_ownerKey  = llDetectedKey(0);

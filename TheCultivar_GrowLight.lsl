@@ -44,6 +44,7 @@
 
 integer GROW_LIGHT_CHAN  = -999111222; // broadcast channel for plant bonus
 integer TC_OBJECT_PING_CHAN = -111222333;
+integer HOVER_FADE_SECS = 30;
 
 integer DCHAN_OWNER = -130001;
 integer g_listenOwner;
@@ -79,6 +80,7 @@ integer g_linkStatus = -1;
 
 // Private reply channel for TC_REGISTER handshake
 integer g_replyChannel = 0;
+integer g_idleFadeAt   = 0; // unix time when status text should be faded (0 = not scheduled)
 
 // ----------------------------------------------------------------
 integer deriveHUDChannel(key id)
@@ -304,6 +306,30 @@ default
         {
             if (g_listenRegister) { llListenRemove(g_listenRegister); g_listenRegister = 0; }
             // Not a critical failure for the light  -  it works without HUD
+            g_idleFadeAt = llGetUnixTime() + HOVER_FADE_SECS;
+        }
+
+        // Owner menu dialog timeout (listenOwner still set but timer fired)
+        if (g_listenOwner)
+        {
+            llListenRemove(g_listenOwner);
+            g_listenOwner = 0;
+            g_idleFadeAt  = llGetUnixTime() + HOVER_FADE_SECS;
+        }
+
+        // Idle fade: schedule has elapsed — fade TC_Status prim text
+        if (g_idleFadeAt > 0 && llGetUnixTime() >= g_idleFadeAt)
+        {
+            g_idleFadeAt = 0;
+            if (g_linkStatus != -1)
+            {
+                list params = llGetLinkPrimitiveParams(g_linkStatus, [PRIM_TEXT]);
+                string statusTxt = llList2String(params, 0);
+                vector statusCol = llList2Vector(params, 1);
+                llSetLinkPrimitiveParamsFast(g_linkStatus, [
+                    PRIM_TEXT, statusTxt, statusCol, 0.0
+                ]);
+            }
         }
 
         // Auto schedule check
@@ -361,6 +387,8 @@ default
 
     touch_start(integer nd)
     {
+        g_idleFadeAt = 0;
+        updateVisuals();
         key toucher = llDetectedKey(0);
         if (toucher != g_ownerKey)
         {
@@ -402,6 +430,7 @@ default
 
             updateVisuals();
             llLinksetDataWrite("light_power", g_powerState);
+            g_idleFadeAt = llGetUnixTime() + HOVER_FADE_SECS;
         }
     }
 }

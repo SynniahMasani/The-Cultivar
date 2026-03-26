@@ -28,6 +28,7 @@
 // ================================================================
 
 integer TC_OBJECT_PING_CHAN = -111222333;
+integer HOVER_FADE_SECS = 30;
 
 // Prim link numbers
 integer LINK_LID     = 2;   // Jar_Lid      -  rotates on open/close
@@ -363,6 +364,7 @@ default
 
         // Registration listener opened in pingHUD() on a random reply channel.
         llListen(g_hudChannel, "", NULL_KEY, "");
+        llSetTimerEvent(HOVER_FADE_SECS);
     }
 
     on_rez(integer start_param)
@@ -381,21 +383,61 @@ default
 
     timer()
     {
+        // Idle fade: no dialog listens open — fade hover text and stop timer
+        if (!g_listenOwner && !g_listenLoad && !g_listenAccess && !g_listenVisitor
+            && !g_listenRegister)
+        {
+            updateHoverText();
+            // Re-set hover text with alpha 0.0
+            if (g_grams == 0)
+            {
+                llSetText("THE CULTIVAR\nWeed Jar [Empty]\nTouch to load",
+                          <0.5, 0.5, 0.5>, 0.0);
+            }
+            else
+            {
+                float  pct      = fillPct();
+                string fillStr;
+                if      (pct >= 0.75) fillStr = "Full";
+                else if (pct >= 0.50) fillStr = "Half";
+                else if (pct >= 0.25) fillStr = "Low";
+                else if (pct >= 0.10) fillStr = "Almost Gone";
+                else                  fillStr = "Last Bit";
+                list   accessLabels = ["Owner Only", "Group", "Open"];
+                string accessStr    = llList2String(accessLabels, g_accessMode);
+                string qualLabel;
+                if      (g_quality == "reggie") qualLabel = "Reggie";
+                else if (g_quality == "mids")   qualLabel = "Mids";
+                else if (g_quality == "loud")   qualLabel = "Loud";
+                else if (g_quality == "exotic") qualLabel = "Exotic";
+                else qualLabel = g_quality;
+                llSetText(
+                    "THE CULTIVAR\n" +
+                    g_strain + "  [" + qualLabel + "]\n" +
+                    fillStr + "  " + (string)g_grams + "g / " + (string)g_capacity + "g\n" +
+                    "Packed by " + g_packager + "  ?  " + accessStr,
+                    qualityColor(), 0.0);
+            }
+            llSetTimerEvent(0.0);
+            return;
+        }
+
         // Dialog timeout cleanup
         if (g_listenOwner)   { llListenRemove(g_listenOwner);   g_listenOwner   = 0; }
         if (g_listenLoad)    { llListenRemove(g_listenLoad);    g_listenLoad    = 0; }
         if (g_listenAccess)  { llListenRemove(g_listenAccess);  g_listenAccess  = 0; }
         if (g_listenVisitor) { llListenRemove(g_listenVisitor); g_listenVisitor = 0; }
         closeLid();
-        llSetTimerEvent(0.0);
 
         if (!g_registered)
             llRegionSayTo(g_ownerKey, 0,
                 "Couldn't reach your HUD. Make sure your Cultivar HUD is worn.");
+        llSetTimerEvent(HOVER_FADE_SECS);
     }
 
     touch_start(integer nd)
     {
+        updateHoverText();
         key toucher = llDetectedKey(0);
         openLid();
 

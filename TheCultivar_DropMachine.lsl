@@ -39,6 +39,7 @@
 string  SERVER_BASE    = "https://your-cultivar-server.com"; // SET THIS
 float   POLL_INTERVAL  = 60.0;  // seconds between server polls
 integer MAX_CLAIM_WAIT = 15;    // seconds to wait for claim response
+integer HOVER_FADE_SECS = 30;
 
 // Drop state from last poll
 integer g_dropActive   = FALSE;
@@ -62,6 +63,7 @@ integer g_listenClaim;
 
 integer g_busy = FALSE;
 integer g_celebrateUntil = 0; // unix time after which idle particles should be restored
+integer g_idleFadeAt = 0;     // unix time when hover text should be faded (0 = not scheduled)
 
 // ----------------------------------------------------------------
 vector qualColor(string quality)
@@ -311,6 +313,26 @@ default
             g_claimingAvatar = NULL_KEY;
             g_claimingName   = "";
             g_busy           = FALSE;
+            g_idleFadeAt     = llGetUnixTime() + HOVER_FADE_SECS;
+        }
+
+        // Idle fade: schedule has elapsed and no claim in progress
+        if (!g_busy && g_idleFadeAt > 0 && llGetUnixTime() >= g_idleFadeAt)
+        {
+            g_idleFadeAt = 0;
+            if (g_dropActive)
+            {
+                vector col = qualColor(g_dropQuality);
+                llSetText("THE CULTIVAR  -  DROP TERMINAL\n? " +
+                          g_dropQuality + " " + g_dropStrain + " DROP LIVE ?\n" +
+                          "Touch to claim your seed!",
+                          col, 0.0);
+            }
+            else
+            {
+                llSetText("THE CULTIVAR  -  DROP TERMINAL\nNo active drop right now.\nCheck back soon.",
+                          <0.5, 0.5, 0.5>, 0.0);
+            }
         }
 
         // Poll for drop status
@@ -320,6 +342,8 @@ default
 
     touch_start(integer nd)
     {
+        g_idleFadeAt = 0;
+        updateVisuals();
         key toucher = llDetectedKey(0);
 
         if (g_busy)
@@ -461,7 +485,7 @@ default
         if (g_listenClaim) { llListenRemove(g_listenClaim); g_listenClaim = 0; }
         llSetTimerEvent(POLL_INTERVAL);
 
-        if (msg == "No Thanks") return;
+        if (msg == "No Thanks") { g_idleFadeAt = llGetUnixTime() + HOVER_FADE_SECS; return; }
 
         if (msg == "Claim It!")
         {
