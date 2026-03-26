@@ -168,14 +168,36 @@ setIndicator(integer iState)
         llLinkParticleSystem(g_linkIndicator, []);
         return;
     }
-    string tex;
-    string tipText;
     if (iState == STATE_WATER)
     {
-        tex     = TEX_ICON_WATER;
-        tipText = "Thirsty!";
+        // No rotating icon for water  -  blue particle effect only
+        llSetLinkAlpha(g_linkIndicator, 0.0, ALL_SIDES);
+        llSetLinkPrimitiveParamsFast(g_linkIndicator,
+            [PRIM_TEXT,  "", ZERO_VECTOR, 0.0,
+             PRIM_OMEGA, ZERO_VECTOR, 0.0, 0.0]);
+        llLinkParticleSystem(g_linkIndicator, [
+            PSYS_PART_FLAGS,           PSYS_PART_INTERP_COLOR_MASK |
+                                       PSYS_PART_INTERP_SCALE_MASK |
+                                       PSYS_PART_EMISSIVE_MASK,
+            PSYS_SRC_PATTERN,          PSYS_SRC_PATTERN_EXPLODE,
+            PSYS_PART_START_COLOR,     <0.2, 0.6, 1.0>,
+            PSYS_PART_END_COLOR,       <0.0, 0.3, 0.9>,
+            PSYS_PART_START_ALPHA,     0.9,
+            PSYS_PART_END_ALPHA,       0.0,
+            PSYS_PART_START_SCALE,     <0.05, 0.05, 0.0>,
+            PSYS_PART_END_SCALE,       <0.02, 0.02, 0.0>,
+            PSYS_PART_MAX_AGE,         2.0,
+            PSYS_SRC_BURST_RATE,       0.5,
+            PSYS_SRC_BURST_PART_COUNT, 3,
+            PSYS_SRC_BURST_SPEED_MIN,  0.02,
+            PSYS_SRC_BURST_SPEED_MAX,  0.1,
+            PSYS_SRC_ACCEL,            <0.0, 0.0, 0.08>
+        ]);
+        return;
     }
-    else if (iState == STATE_FERT)
+    string tex;
+    string tipText;
+    if (iState == STATE_FERT)
     {
         tex     = TEX_ICON_FERT;
         tipText = "Needs fertilizer";
@@ -191,21 +213,7 @@ setIndicator(integer iState)
         PRIM_OMEGA,   <0.0, 0.0, 1.0>, 0.25, 1.0
     ]);
     llSetLinkAlpha(g_linkIndicator, 1.0, ALL_SIDES);
-    // Drip particles only while the water icon is active
-    if (iState == STATE_WATER)
-        llLinkParticleSystem(g_linkIndicator, [
-            PSYS_SRC_TEXTURE,          TEX_ICON_WATER,
-            PSYS_SRC_BURST_PART_COUNT, 2,
-            PSYS_SRC_BURST_RATE,       3.0,
-            PSYS_PART_START_SCALE,     <0.03, 0.03, 0.0>,
-            PSYS_PART_END_SCALE,       <0.01, 0.01, 0.0>,
-            PSYS_PART_START_ALPHA,     0.8,
-            PSYS_PART_END_ALPHA,       0.0,
-            PSYS_SRC_ACCEL,            <0.0, 0.0, -0.2>,
-            PSYS_PART_MAX_AGE,         1.2
-        ]);
-    else
-        llLinkParticleSystem(g_linkIndicator, []);
+    llLinkParticleSystem(g_linkIndicator, []);
 }
 // ----------------------------------------------------------------
 // Rotate the indicator to face the owner's camera.
@@ -298,7 +306,10 @@ updateVisuals()
         if (hrs > 0) timeStr = (string)hrs + "h " + (string)mins + "m";
         else         timeStr = (string)mins + "m";
         hoverText += "Next stage: " + timeStr + "\n";
-        if (!g_isWatered)  hoverText += "* Needs water!\n";
+        if (!g_isWatered)
+            hoverText += "* Needs water!\n";
+        else if (g_stage == 2 && !g_fertApplied)
+            hoverText += "* Fertilize!\n";
         if (g_fertApplied) hoverText += "* Fertilized\n";
     }
     else if (g_stage == 4)
@@ -494,8 +505,7 @@ default
         if (cmd == "PLANT_SEED")
         {
             g_strainName  = llList2String(parts, 1);
-            g_potType     = llList2String(parts, 2);
-            g_potUsesLeft = (integer)llList2String(parts, 3);
+            // g_potType and g_potUsesLeft stay as set by STATE_LOADED  -  authoritative
             g_isHybrid    = (llSubStringIndex(g_strainName, " x ") != -1);
             g_isLegendary = g_isHybrid &&
                             (llSubStringIndex(g_strainName, "[LEGENDARY]") != -1);
@@ -548,6 +558,9 @@ default
             llMessageLinked(LINK_SET, PCHAN_PERSIST, "SAVE_STATE", NULL_KEY);
             llRegionSayTo(g_ownerKey, 0,
                 "Watered your " + g_strainName + ".");
+            if (g_stage == 2 && !g_fertApplied)
+                llRegionSayTo(g_ownerKey, 0,
+                    g_strainName + " is in the vegetative stage  -  fertilize now for a bigger yield!");
         }
         else if (cmd == "FERT_APPLIED")
         {
