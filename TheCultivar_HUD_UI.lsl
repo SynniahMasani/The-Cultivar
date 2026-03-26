@@ -419,7 +419,7 @@ showStats()
         brandInfo = "\nBrand: " + g_brandName;
     llDialog(g_ownerKey,
         "=== STATS ===\n" + g_playerName + "\nTitle: " + g_playerTitle + brandInfo,
-        ["View Stats", "Achievements", "Set Brand Name", "Close"],
+        ["View Stats", "Achievements", "Set Brand Name", "Reset Brand", "Close"],
         DCHAN_STATS_MENU);
     llSetTimerEvent(30.0);
 }
@@ -789,6 +789,8 @@ default
                 llMessageLinked(LINK_SET, CHAN_IDENTITY, "REQUEST_ACHIEVEMENTS", NULL_KEY);
             else if (msg == "Set Brand Name")
                 showBrandNameTextBox();
+            else if (msg == "Reset Brand")
+                llMessageLinked(LINK_SET, CHAN_IDENTITY, "RESET_BRAND_NAME", NULL_KEY);
             // "Close"  -  do nothing
         }
 
