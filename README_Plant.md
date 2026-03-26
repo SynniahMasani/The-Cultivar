@@ -91,7 +91,7 @@ Premium pot applies a 5% speed bonus to all stage durations.
 | Strain              | Tier   | Yield Range |
 |---------------------|--------|-------------|
 | Schwag              | Reggie | 4–8g        |
-| Ditch Weed          | Reggie | 3–7g        |
+| Zone                | Reggie | 3–7g        |
 | Brown Frown         | Reggie | 3–6g        |
 | Blue Dream          | Mids   | 8–14g       |
 | Green Crack         | Mids   | 9–15g       |
