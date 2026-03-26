@@ -179,21 +179,10 @@ setIndicator(integer iState)
         llLinkParticleSystem(g_linkIndicator, []);
         return;
     }
-    string tex;
-    string tipText;
-    if (iState == STATE_FERT)
-    {
-        tex     = TEX_ICON_FERT;
-        tipText = "Needs fertilizer";
-    }
-    else // STATE_READY
-    {
-        tex     = TEX_ICON_READY;
-        tipText = "Ready to harvest!";
-    }
+    // STATE_READY  -  harvest-ready spinning icon
     llSetLinkPrimitiveParamsFast(g_linkIndicator, [
-        PRIM_TEXTURE, ALL_SIDES, tex, <1.0, 1.0, 0.0>, ZERO_VECTOR, 0.0,
-        PRIM_TEXT,    tipText, <0.3, 0.8, 1.0>, 1.0,
+        PRIM_TEXTURE, ALL_SIDES, TEX_ICON_READY, <1.0, 1.0, 0.0>, ZERO_VECTOR, 0.0,
+        PRIM_TEXT,    "Ready to harvest!", <0.3, 0.8, 1.0>, 1.0,
         PRIM_OMEGA,   <0.0, 0.0, 1.0>, 0.25, 1.0
     ]);
     llSetLinkAlpha(g_linkIndicator, 1.0, ALL_SIDES);
@@ -222,12 +211,15 @@ updateVisuals()
     llSetLinkAlpha(g_linkVeg,      0.0, ALL_SIDES);
     llSetLinkAlpha(g_linkFlower,   0.0, ALL_SIDES);
     llSetLinkAlpha(g_linkHarvest,  0.0, ALL_SIDES);
-    // Stop particles on all plant meshes
+    // Stop particles and clear PRIM_TEXT on all plant meshes
     llLinkParticleSystem(g_linkSeedling, []);
     llLinkParticleSystem(g_linkVeg,      []);
     llLinkParticleSystem(g_linkFlower,   []);
     llLinkParticleSystem(g_linkHarvest,  []);
-    llSetLinkPrimitiveParamsFast(g_linkHarvest, [PRIM_GLOW, ALL_SIDES, 0.0]);
+    llSetLinkPrimitiveParamsFast(g_linkSeedling, [PRIM_TEXT, "", ZERO_VECTOR, 0.0]);
+    llSetLinkPrimitiveParamsFast(g_linkVeg,      [PRIM_TEXT, "", ZERO_VECTOR, 0.0]);
+    llSetLinkPrimitiveParamsFast(g_linkFlower,   [PRIM_TEXT, "", ZERO_VECTOR, 0.0]);
+    llSetLinkPrimitiveParamsFast(g_linkHarvest,  [PRIM_GLOW, ALL_SIDES, 0.0]);
     // Force-clear any stale PRIM_TEXT on indicator (survives script resets and old script versions)
     if (g_linkIndicator != -1)
         llSetLinkPrimitiveParamsFast(g_linkIndicator, [PRIM_TEXT, "", ZERO_VECTOR, 0.0]);
@@ -295,11 +287,16 @@ updateVisuals()
             PSYS_SRC_ACCEL,            <0.0, 0.0, 0.08>
         ]);
     }
-    // Status indicator icon prim  -  show only when action is needed
+    // Fertilizer reminder: text on veg mesh when watered but not yet fertilized
+    // Clears automatically when fertilized (g_fertApplied=TRUE) or stage advances
+    if (g_stage == 2 && g_isWatered && !g_fertApplied)
+    {
+        llSetLinkPrimitiveParamsFast(g_linkVeg,
+            [PRIM_TEXT, "!! Fertilize !!", <1.0, 0.85, 0.0>, 1.0]);
+    }
+    // Status indicator icon prim  -  only for harvest-ready state
     if (g_stage == 4)
         setIndicator(STATE_READY);
-    else if (g_stage == 2 && g_isWatered && !g_fertApplied)
-        setIndicator(STATE_FERT);
     else
         setIndicator(STATE_NONE);
     // Hover text
@@ -621,8 +618,13 @@ default
             g_fertApplied    = (integer)llList2String(parts, 7);
             g_fertTier       = (integer)llList2String(parts, 8);
             // g_potType is set from object name (derivePotType) — do not load from save
-            g_potUsesLeft    = (integer)llList2String(parts, 10);
-            // Sanitize potUsesLeft for basic pots in case a corrupted value was saved
+            g_potUsesLeft = (integer)llList2String(parts, 10);
+            // parts[11] = potSpent flag (absent in old saves, defaults to 0/FALSE)
+            integer savedPotSpent = (integer)llList2String(parts, 11);
+            // Migrate from old buggy saves: potUsesLeft=0 but never explicitly spent
+            // (old code had no potSpent flag  -  treat missing flag as "not spent")
+            if (g_potType == "basic" && g_potUsesLeft <= 0 && !savedPotSpent)
+                g_potUsesLeft = 5;
             if (g_potType == "basic" && g_potUsesLeft > 5) g_potUsesLeft = 5;
             if (g_stage > 0 && g_stage < 4)
                 llSetTimerEvent(TIMER_INTERVAL);
