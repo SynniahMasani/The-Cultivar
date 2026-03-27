@@ -452,13 +452,39 @@ default
 
             // World object requesting filtered inventory (bagging table, jar, etc.)
             // TC_INVENTORY_REQUEST|itemType|requestingObjectKey
+            // Handled synchronously here (reads LinksetData directly) so the
+            // response arrives in the same script-execution slice as the request,
+            // avoiding the async link_message round-trip that can time out under
+            // region load.
             else if (cmd == "TC_INVENTORY_REQUEST")
             {
                 string filterType = llList2String(parts, 1);
-                string reqObjKey  = llList2String(parts, 2);
-                llMessageLinked(LINK_SET, CHAN_INVENTORY,
-                    "REQUEST_RAW_INVENTORY|" + filterType + "|" + reqObjKey,
-                    NULL_KEY);
+                string rawAll     = llLinksetDataRead("inv_data");
+                string output;
+
+                if (filterType == "" || filterType == "all")
+                {
+                    output = rawAll;
+                }
+                else
+                {
+                    output = "";
+                    list slots = llParseString2List(rawAll, ["^"], []);
+                    integer si;
+                    for (si = 0; si < llGetListLength(slots); si++)
+                    {
+                        string slot   = llList2String(slots, si);
+                        list   fields = llParseString2List(slot, ["~"], []);
+                        if (llList2String(fields, 0) == filterType)
+                        {
+                            if (output == "") output  = slot;
+                            else              output += "^" + slot;
+                        }
+                    }
+                }
+                // Reply directly to the requesting object on our private channel.
+                // 'id' is the sender (the world object's prim key).
+                llRegionSayTo(id, g_privateChannel, "TC_INVENTORY_DATA|" + output);
             }
 
             // World object telling HUD to add item to inventory
@@ -476,16 +502,87 @@ default
 
             // World object requesting item removal (bagging table consuming flower)
             // TC_REMOVE_ITEM|itemType|strainName|quality|qty|packager
+            // Handled synchronously here to avoid the async link_message chain
+            // timing out on the breeding station's 15-second removal window.
             else if (cmd == "TC_REMOVE_ITEM")
             {
-                // Pass 'id' (the object key) through so we can notify it of result
-                llMessageLinked(LINK_SET, CHAN_INVENTORY,
-                    "REMOVE_ITEM|"          +
-                    llList2String(parts, 1) + "|" +
-                    llList2String(parts, 2) + "|" +
-                    llList2String(parts, 3) + "|" +
-                    llList2String(parts, 4) + "|" +
-                    llList2String(parts, 5), id);
+                string iType     = llList2String(parts, 1);
+                string iStrain   = llList2String(parts, 2);
+                string iQuality  = llList2String(parts, 3);
+                integer iQty     = (integer)llList2String(parts, 4);
+                string iPackager = llList2String(parts, 5);
+
+                string rawData = llLinksetDataRead("inv_data");
+                list   inv     = [];
+
+                // Deserialize
+                list slots = llParseString2List(rawData, ["^"], []);
+                integer si;
+                for (si = 0; si < llGetListLength(slots); si++)
+                {
+                    list fields = llParseString2List(llList2String(slots, si), ["~"], []);
+                    if (llGetListLength(fields) == 5)
+                        inv += fields;
+                }
+
+                // Find matching slot (stride 5)
+                integer found = -1;
+                integer fi;
+                for (fi = 0; fi < llGetListLength(inv); fi += 5)
+                {
+                    if (llList2String(inv, fi)   == iType   &&
+                        llList2String(inv, fi+1) == iStrain &&
+                        llList2String(inv, fi+2) == iQuality &&
+                        (iPackager == "" || llList2String(inv, fi+4) == iPackager))
+                    {
+                        found = fi;
+                        fi = llGetListLength(inv); // break
+                    }
+                }
+
+                integer success = FALSE;
+                if (found != -1)
+                {
+                    integer current = (integer)llList2String(inv, found + 3);
+                    if (current >= iQty)
+                    {
+                        integer newQty = current - iQty;
+                        if (newQty <= 0)
+                            inv = llDeleteSubList(inv, found, found + 4);
+                        else
+                            inv = llListReplaceList(inv, [(string)newQty], found+3, found+3);
+                        success = TRUE;
+                    }
+                }
+
+                if (success)
+                {
+                    // Serialize and persist
+                    string serial = "";
+                    integer wi;
+                    for (wi = 0; wi < llGetListLength(inv); wi += 5)
+                    {
+                        string slot = llList2String(inv, wi)   + "~" +
+                                      llList2String(inv, wi+1) + "~" +
+                                      llList2String(inv, wi+2) + "~" +
+                                      llList2String(inv, wi+3) + "~" +
+                                      llList2String(inv, wi+4);
+                        if (serial == "") serial  = slot;
+                        else              serial += "^" + slot;
+                    }
+                    llLinksetDataWrite("inv_data", serial);
+                    // Notify HUD_Inventory to reload from storage so it stays in sync
+                    llMessageLinked(LINK_SET, CHAN_INVENTORY, "RELOAD_INVENTORY", NULL_KEY);
+                    // Notify UI
+                    llMessageLinked(LINK_SET, CHAN_UI, "ITEM_USED|" + iType + "|" + iStrain, NULL_KEY);
+                    // Notify requesting world object
+                    llRegionSayTo(id, g_privateChannel, "TC_REMOVE_OK");
+                }
+                else
+                {
+                    llMessageLinked(LINK_SET, CHAN_UI, "ITEM_FAILED|" + iType + "|" + iStrain, NULL_KEY);
+                    llRegionSayTo(id, g_privateChannel, "TC_REMOVE_FAIL");
+                }
             }
 
             // World object consuming a single item type by strain (breeding station)

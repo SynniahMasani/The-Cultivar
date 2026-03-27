@@ -599,7 +599,9 @@ default
 
             llRegionSayTo(g_ownerKey, g_hudChannel,
                 "TC_INVENTORY_REQUEST|seed_raw|" + (string)llGetKey());
-            llSetTimerEvent(15.0);
+            // 30 seconds: HUD_Comms now handles TC_INVENTORY_REQUEST synchronously,
+            // but give extra headroom for slow regions / script queue backup.
+            llSetTimerEvent(30.0);
             return;
         }
 
