@@ -227,8 +227,7 @@ default
         }
         else
         {
-            llOwnerSay("Auto-detach needs permission. Please detach this "
-                       "HUD manually from your viewer's worn items list.");
+            llOwnerSay("Auto-detach needs permission. Please detach this HUD manually from your viewer's worn items list.");
         }
     }
 }
