@@ -612,7 +612,9 @@ default
             {
                 if (g_ownerKey == NULL_KEY) return; // stale response
                 llSetTimerEvent(0.0);
-                parseSeedInventory(llList2String(parts, 1));
+                string dbgRaw = llList2String(parts, 1);
+                llRegionSayTo(g_ownerKey, 0, "[TC_Breed] rawData=" + (string)llStringLength(dbgRaw) + "B");
+                parseSeedInventory(dbgRaw);
 
                 // Count distinct strain names
                 list uniqueStrains = [];

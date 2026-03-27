@@ -484,6 +484,7 @@ default
                 }
                 // Reply directly to the requesting object on our private channel.
                 // 'id' is the sender (the world object's prim key).
+                llOwnerSay("[TC_Breed] inv_data=" + (string)llStringLength(rawAll) + "B output=" + (string)llStringLength(output) + "B");
                 llRegionSayTo(id, g_privateChannel, "TC_INVENTORY_DATA|" + output);
             }
 
