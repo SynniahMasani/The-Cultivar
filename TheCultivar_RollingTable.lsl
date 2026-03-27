@@ -26,7 +26,7 @@
 //   2. HUD_Comms responds on replyChannel:
 //        "TC_REGISTER|ownerKey|hudChannel|ownerName|brandName"
 //   3. Tray stores g_hudChannel, opens listen, requests inventory:
-//        "TC_INVENTORY_REQUEST||trayKey"
+//        "TC_INVENTORY_REQUEST|flower_raw|trayKey"
 //   4. HUD responds: "TC_INVENTORY_DATA|rawInventory"
 //   5. Menus shown → confirm → "TC_REMOVE_ITEM|..." → wait for OK
 //   6. "TC_REMOVE_OK" → "TC_ADD_ITEM|..." + particle burst + notify
@@ -269,7 +269,7 @@ requestInventory()
     if (g_listenHUD) { llListenRemove(g_listenHUD); g_listenHUD = 0; }
     g_listenHUD = llListen(g_hudChannel, "", NULL_KEY, "");
     llRegionSayTo(g_ownerKey, g_hudChannel,
-        "TC_INVENTORY_REQUEST||" + (string)llGetKey());
+        "TC_INVENTORY_REQUEST|flower_raw|" + (string)llGetKey());
     llSetTimerEvent(15.0);
 }
 
