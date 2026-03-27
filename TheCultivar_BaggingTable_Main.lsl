@@ -327,9 +327,11 @@ checkBagInventory()
         {
             warn += "\n  MISSING: " + bagName;
         }
-        else if (!(llGetInventoryPermMask(bagName, MASK_OWNER) & PERM_COPY))
+        else if (!(llGetInventoryPermMask(bagName, MASK_NEXT) & PERM_COPY))
         {
-            warn += "\n  NO-COPY (will deplete on use!): " + bagName;
+            // Check next-owner (recipient) copy permission — the buyer receives
+            // the bag, so what matters is whether THEY can copy it, not the table.
+            warn += "\n  NO-COPY for recipient (will deplete on use!): " + bagName;
         }
     }
     if (warn != "")

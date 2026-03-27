@@ -92,7 +92,18 @@ list buildGiveList()
         {
             string iname = llGetInventoryName(itype, i);
             if (!isExcluded(iname))
-                items += [iname];
+            {
+                // llGiveInventoryList silently aborts the ENTIRE delivery if
+                // even one item lacks PERM_TRANSFER in next-owner permissions
+                // (same reason scripts are excluded above).  Check every item
+                // individually so a single locked asset cannot block the rest.
+                if (llGetInventoryPermMask(iname, MASK_NEXT) & PERM_TRANSFER)
+                    items += [iname];
+                else
+                    llOwnerSay("Cannot auto-deliver '" + iname
+                        + "' (no transfer permission set). "
+                        + "Copy it manually from this object.");
+            }
         }
     }
     return items;
