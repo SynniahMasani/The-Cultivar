@@ -129,7 +129,7 @@ parseSeedInventory(string rawData)
     integer i;
     for (i = 0; i < llGetListLength(slots); i++)
     {
-        list fields = llParseString2List(llList2String(slots, i), ["~"], []);
+        list fields = llParseStringKeepNulls(llList2String(slots, i), ["~"]);
         if (llGetListLength(fields) >= 5 &&
             llList2String(fields, 0) == "seed_raw")
         {
