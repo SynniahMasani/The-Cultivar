@@ -290,6 +290,13 @@ default
             broadcastInventorySummary();
         }
 
+        // HUD_Comms wrote inv_data directly (synchronous remove) — reload to stay in sync
+        else if (cmd == "RELOAD_INVENTORY")
+        {
+            loadInventory();
+            broadcastInventorySummary();
+        }
+
         // Another script needs to know if player has enough of something
         else if (cmd == "CHECK_QTY")
         {

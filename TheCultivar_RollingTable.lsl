@@ -38,27 +38,33 @@
 //   llParticleSystem([])      — clear all particles
 //
 // DIALOG CHANNELS  (negative, distinct from BaggingTable -66001-66004):
+//   DCHAN_MAIN     = -77000  (Roll / Access / Cancel — owner only)
 //   DCHAN_STRAIN   = -77001
 //   DCHAN_ROLLTYPE = -77002
 //   DCHAN_QTY      = -77003
 //   DCHAN_CONFIRM  = -77004
+//   DCHAN_ACCESS   = -77005  (Owner Only / Public / Group — owner only)
 // ================================================================
 
 integer TC_OBJECT_PING_CHAN = -111222333;
 integer HOVER_FADE_SECS = 30;
 
+integer DCHAN_MAIN     = -77000;
 integer DCHAN_STRAIN   = -77001;
 integer DCHAN_ROLLTYPE = -77002;
 integer DCHAN_QTY      = -77003;
 integer DCHAN_CONFIRM  = -77004;
+integer DCHAN_ACCESS   = -77005;
 
 integer g_replyChannel   = 0;
 integer g_listenRegister = 0;
 integer g_listenHUD      = 0;
+integer g_listenMain     = 0;
 integer g_listenStrain   = 0;
 integer g_listenRollType = 0;
 integer g_listenQty      = 0;
 integer g_listenConfirm  = 0;
+integer g_listenAccess   = 0;
 
 key     g_ownerKey    = NULL_KEY;
 string  g_ownerName   = "";
@@ -84,6 +90,8 @@ integer g_totalCost        = 0;
 integer g_papersCount      = 0;
 integer g_removingPapers   = FALSE;
 integer g_pingRetry        = 0;
+integer g_accessMode       = 0; // 0=owner only  1=public  2=group
+integer g_inSetupMenu      = FALSE; // TRUE while main/access menus open (not yet pinging HUD)
 
 // ================================================================
 // PARTICLE SYSTEM  (self-contained, no linked prim required)
@@ -219,10 +227,65 @@ integer parsePapersCount(string rawData)
 
 closeAllListens()
 {
+    if (g_listenMain)     { llListenRemove(g_listenMain);     g_listenMain     = 0; }
+    if (g_listenAccess)   { llListenRemove(g_listenAccess);   g_listenAccess   = 0; }
     if (g_listenStrain)   { llListenRemove(g_listenStrain);   g_listenStrain   = 0; }
     if (g_listenRollType) { llListenRemove(g_listenRollType); g_listenRollType = 0; }
     if (g_listenQty)      { llListenRemove(g_listenQty);      g_listenQty      = 0; }
     if (g_listenConfirm)  { llListenRemove(g_listenConfirm);  g_listenConfirm  = 0; }
+}
+
+// ================================================================
+// ACCESS CONTROL
+// ================================================================
+
+// Persist access mode in object description as "access:N"
+loadAccessMode()
+{
+    string desc = llGetObjectDesc();
+    if (llGetSubString(desc, 0, 6) == "access:")
+        g_accessMode = (integer)llGetSubString(desc, 7, 7);
+    else
+        g_accessMode = 0; // default: owner only
+}
+
+saveAccessMode()
+{
+    llSetObjectDesc("access:" + (string)g_accessMode);
+}
+
+string accessLabel()
+{
+    if (g_accessMode == 1) return "Public";
+    if (g_accessMode == 2) return "Group";
+    return "Owner";
+}
+
+showMainMenu()
+{
+    closeAllListens();
+    g_inSetupMenu  = TRUE;
+    g_listenMain   = llListen(DCHAN_MAIN, "", g_ownerKey, "");
+    llDialog(g_ownerKey,
+        "=== THE CULTIVAR ===\nRolling Tray\nAccess: " + accessLabel() + "\n\nWhat would you like to do?",
+        ["Roll", "Access", "Cancel"],
+        DCHAN_MAIN);
+    llSetTimerEvent(30.0);
+}
+
+showAccessMenu()
+{
+    closeAllListens();
+    g_listenAccess = llListen(DCHAN_ACCESS, "", g_ownerKey, "");
+    llDialog(g_ownerKey,
+        "=== TRAY ACCESS ===\nCurrent: " + accessLabel() + "\n\n" +
+        "Owner Only  -  only you can use this tray\n" +
+        "Public  -  anyone in the region can roll\n" +
+        "Group  -  active group members only\n\n" +
+        "Select access mode:",
+        ["Owner Only", "Public", "Group", "Back"],
+        DCHAN_ACCESS);
+    llSetTimerEvent(30.0);
 }
 
 resetTransaction()
@@ -240,12 +303,8 @@ resetTransaction()
 
 updateHoverText()
 {
-    if (g_registered)
-        llSetText("THE CULTIVAR\nRolling Tray\nTouch to roll your flower",
-                  <0.9, 0.85, 0.5>, 1.0);
-    else
-        llSetText("THE CULTIVAR\nRolling Tray\nTouch to roll",
-                  <0.8, 0.7, 0.4>, 1.0);
+    llSetText("THE CULTIVAR\nRolling Tray\nTouch to roll  [" + accessLabel() + "]",
+              <0.9, 0.85, 0.5>, 1.0);
 }
 
 // ================================================================
@@ -269,7 +328,7 @@ requestInventory()
     if (g_listenHUD) { llListenRemove(g_listenHUD); g_listenHUD = 0; }
     g_listenHUD = llListen(g_hudChannel, "", NULL_KEY, "");
     llRegionSayTo(g_ownerKey, g_hudChannel,
-        "TC_INVENTORY_REQUEST|flower_raw|" + (string)llGetKey());
+        "TC_INVENTORY_REQUEST|all|" + (string)llGetKey());
     llSetTimerEvent(15.0);
 }
 
@@ -505,10 +564,12 @@ default
         g_busy              = FALSE;
         g_inRollingSequence = FALSE;
         g_removingPapers    = FALSE;
+        g_inSetupMenu       = FALSE;
         closeAllListens();
         llParticleSystem([]);
         g_ownerKey  = llGetOwner();
         g_ownerName = llGetDisplayName(g_ownerKey);
+        loadAccessMode();
         updateHoverText();
         llSetTimerEvent(HOVER_FADE_SECS);
     }
@@ -520,7 +581,12 @@ default
 
     changed(integer change)
     {
-        if (change & CHANGED_OWNER) llResetScript();
+        if (change & CHANGED_OWNER)
+        {
+            // New owner starts with owner-only access; clear stored mode
+            llSetObjectDesc("");
+            llResetScript();
+        }
     }
 
     timer()
@@ -589,35 +655,32 @@ default
         // Idle fade
         if (!g_busy)
         {
-            llSetText("THE CULTIVAR\nRolling Tray\nTouch to roll",
+            llSetText("THE CULTIVAR\nRolling Tray\nTouch to roll  [" + accessLabel() + "]",
                       <0.8, 0.7, 0.4>, 0.0);
             llSetTimerEvent(0.0);
             return;
         }
 
-        // General timeout: HUD not found or player abandoned a menu
+        // General timeout: setup menu, HUD not found, or player abandoned a menu
         closeAllListens();
-        g_busy = FALSE;
-        if (!g_registered)
+        g_busy        = FALSE;
+        g_inSetupMenu = FALSE;
+
+        if (g_selectedStrain != "")
         {
-            llRegionSayTo(g_ownerKey, 0,
-                "Couldn't connect to your HUD. Make sure your Cultivar HUD is worn.");
-        }
-        else if (g_selectedStrain != "")
-        {
+            // Player walked away mid-roll
             llRegionSayTo(g_ownerKey, 0, "Rolling session timed out.");
             resetTransaction();
         }
-        else
+        else if (g_registered)
         {
-            // HUD registered but inventory response never arrived.
-            // First failure: silently re-ping so a freshly-attached HUD
-            // that was still initialising gets a second chance.
+            // Registered but inventory response never arrived.
+            // Give a freshly-attached HUD one silent retry.
             g_registered = FALSE;
             if (g_pingRetry < 1)
             {
                 g_pingRetry++;
-                g_busy = TRUE;   // keep busy so the retry timer path fires correctly
+                g_busy = TRUE;
                 pingHUD();
                 return;
             }
@@ -625,6 +688,8 @@ default
             llRegionSayTo(g_ownerKey, 0,
                 "HUD didn't respond in time. Touch the tray to try again.");
         }
+        // else: setup-menu timeout or ping never got a reply — silently reset;
+        //       if HUD is missing the next touch will surface that error.
         llSetTimerEvent(HOVER_FADE_SECS);
     }
 
@@ -633,10 +698,23 @@ default
         updateHoverText();
         key toucher = llDetectedKey(0);
 
-        if (toucher != llGetOwner())
+        // --- Access check ---
+        integer isOwner  = (toucher == llGetOwner());
+        integer allowed  = isOwner;
+        if (!allowed)
         {
-            llRegionSayTo(toucher, 0,
-                "This rolling tray belongs to " + llGetDisplayName(llGetOwner()) + ".");
+            if      (g_accessMode == 1)                       allowed = TRUE; // public
+            else if (g_accessMode == 2 && llSameGroup(toucher)) allowed = TRUE; // group
+        }
+
+        if (!allowed)
+        {
+            string denial;
+            if (g_accessMode == 2)
+                denial = "This rolling tray is for group members only.";
+            else
+                denial = "This rolling tray belongs to " + llGetDisplayName(llGetOwner()) + ".";
+            llRegionSayTo(toucher, 0, denial);
             return;
         }
 
@@ -645,7 +723,7 @@ default
             // Block touches during the rolling animation or particle clear
             if (g_inRollingSequence || g_particleClear)
             {
-                llRegionSayTo(g_ownerKey, 0, "Hold on  -  finishing previous action...");
+                llRegionSayTo(toucher, 0, "Hold on  -  finishing previous action...");
                 return;
             }
             // Cancel any open menus / pending transaction
@@ -654,20 +732,17 @@ default
             g_busy = FALSE;
         }
 
-        g_busy      = TRUE;
-        g_pingRetry = 0;
-        g_ownerKey  = toucher;
-        g_ownerName = llGetDisplayName(toucher);
+        g_busy        = TRUE;
+        g_pingRetry   = 0;
+        g_registered  = FALSE; // Fix 1: always re-ping; never reuse a stale channel
+        g_ownerKey    = toucher;
+        g_ownerName   = llGetDisplayName(toucher);
 
-        if (g_registered)
-        {
-            // HUD already connected — skip the ping and go straight to inventory
-            requestInventory();
-        }
+        // Owner gets Roll/Access menu; allowed non-owners go straight to HUD ping
+        if (isOwner)
+            showMainMenu();
         else
-        {
             pingHUD();
-        }
     }
 
     listen(integer channel, string name, key id, string msg)
@@ -675,8 +750,37 @@ default
         list   parts = llParseString2List(msg, ["|"], []);
         string cmd   = llList2String(parts, 0);
 
+        // ---- Main menu (owner only: Roll / Access / Cancel) ----
+        if (channel == DCHAN_MAIN && id == g_ownerKey)
+        {
+            g_inSetupMenu = FALSE;
+            llSetTimerEvent(0.0);
+            if (msg == "Cancel") { g_busy = FALSE; return; }
+            if (msg == "Access") { showAccessMenu(); return; }
+            // "Roll" — fall through to HUD ping
+            pingHUD();
+            return;
+        }
+
+        // ---- Access mode selection ----
+        else if (channel == DCHAN_ACCESS && id == g_ownerKey)
+        {
+            llSetTimerEvent(0.0);
+            if (msg == "Back") { showMainMenu(); return; }
+            if      (msg == "Owner Only") g_accessMode = 0;
+            else if (msg == "Public")     g_accessMode = 1;
+            else if (msg == "Group")      g_accessMode = 2;
+            saveAccessMode();
+            updateHoverText();
+            llRegionSayTo(g_ownerKey, 0,
+                "Rolling tray access set to: " + accessLabel() + ".");
+            g_busy = FALSE;
+            llSetTimerEvent(HOVER_FADE_SECS);
+            return;
+        }
+
         // ---- HUD registration response ----
-        if (channel == g_replyChannel && cmd == "TC_REGISTER")
+        else if (channel == g_replyChannel && cmd == "TC_REGISTER")
         {
             key regOwner = (key)llList2String(parts, 1);
             if (regOwner != g_ownerKey) return;
