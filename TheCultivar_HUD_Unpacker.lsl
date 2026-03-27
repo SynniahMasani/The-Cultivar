@@ -22,9 +22,11 @@
 //      after delivery. If they deny, they are asked to detach manually.
 //
 // NOTES:
-//   INVENTORY_SCRIPT items ARE included so world-object scripts
-//   (Rolling Tray, Edibles Bench, etc.) get delivered alongside
-//   notecards, textures, and objects. Only THIS script is skipped.
+//   Scripts are intentionally NOT delivered. Any scripts that need to
+//   reach the player should be bundled inside an INVENTORY_OBJECT item
+//   (e.g. put UpdateClient inside the WeedJar object before packaging).
+//   Delivering scripts directly via llGiveInventoryList causes the entire
+//   transfer to fail silently if any script lacks PERM_TRANSFER.
 //
 //   Each new owner automatically gets a clean delivery because
 //   g_delivered is reset on both on_rez and CHANGED_OWNER.
@@ -70,11 +72,15 @@ integer isExcluded(string itemName)
 list buildGiveList()
 {
     list items;
+    // Scripts are intentionally excluded: they either run inside this HUD
+    // (and must not be re-delivered) or are already bundled inside the kit
+    // objects (INVENTORY_OBJECT entries). Including scripts here would cause
+    // llGiveInventoryList to fail silently whenever a HUD-internal script
+    // lacks PERM_TRANSFER, leaving the recipient with nothing at all.
     list types = [
         INVENTORY_OBJECT,   INVENTORY_NOTECARD,  INVENTORY_LANDMARK,
         INVENTORY_CLOTHING, INVENTORY_BODYPART,  INVENTORY_GESTURE,
-        INVENTORY_ANIMATION,INVENTORY_SOUND,     INVENTORY_TEXTURE,
-        INVENTORY_SCRIPT
+        INVENTORY_ANIMATION,INVENTORY_SOUND,     INVENTORY_TEXTURE
     ];
     integer t;
     for (t = 0; t < llGetListLength(types); ++t)

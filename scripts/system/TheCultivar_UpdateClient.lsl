@@ -184,6 +184,13 @@ default
 
     on_rez(integer start_param)
     {
+        // Clear any stale listeners left over from the previous session.
+        // If the object was taken to inventory while a ping was in-flight
+        // (g_listenReply != 0), the timer would mistake the stale handle for
+        // a live 30-second timeout and return early, skipping pingServer().
+        if (g_listenReply)  { llListenRemove(g_listenReply);  g_listenReply  = 0; }
+        if (g_listenConfirm){ llListenRemove(g_listenConfirm); g_listenConfirm = 0; }
+
         // Re-derive pin in case object key changed after copy
         g_scriptPin = derivePin();
         llSetRemoteScriptAccessPin(g_scriptPin);
