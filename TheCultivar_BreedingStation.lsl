@@ -489,23 +489,42 @@ default
 
         llSetTimerEvent(0.0);
 
-        if (g_ownerKey == NULL_KEY)
+        if (g_listenReply != 0)
         {
-            // Registration timed out — no HUD found
+            // Registration phase timed out — HUD never responded.
+            // g_ownerKey is the toucher (set before pingHUD), so we can
+            // still notify them directly before clearing state.
             if (g_listenReply) llListenRemove(g_listenReply);
             g_listenReply  = 0;
             g_replyChannel = 0;
+            key noHudOwner = g_ownerKey;
+            g_ownerKey     = NULL_KEY;
             llSetText("Breeding Station\nTouch to breed two seeds\ninto a hybrid strain",
                 <0.3, 0.8, 0.3>, 1.0);
-            llOwnerSay("No HUD found. Touch again.");
+            llRegionSayTo(noHudOwner, 0,
+                "No HUD detected. Make sure your Cultivar HUD is attached and try again.");
             llSetTimerEvent(HOVER_FADE_SECS);
         }
         else
         {
-            // Menu or remove timed out
             key timedOutOwner = g_ownerKey;
-            resetStation();
-            llRegionSayTo(timedOutOwner, 0, "Menu timed out.");
+            if (g_hybridName != "" && g_removeStep == 0)
+            {
+                // Seeds were already consumed and hybrid calculated but the
+                // naming dialog timed out.  Deliver with the default generated
+                // name so the player doesn't lose their seeds for no result.
+                if (g_isLegendary)
+                    g_hybridName = g_hybridName + " [LEGENDARY]";
+                llRegionSayTo(timedOutOwner, 0,
+                    "Name entry timed out — delivering as '" + g_hybridName + "'.");
+                deliverHybrid();
+            }
+            else
+            {
+                // Menu or remove timed out before seeds were consumed
+                resetStation();
+                llRegionSayTo(timedOutOwner, 0, "Menu timed out. Touch to try again.");
+            }
         }
     }
 
@@ -557,12 +576,18 @@ default
         // ---- HUD registration response ----
         if (channel == g_replyChannel && g_replyChannel != 0 && cmd == "TC_REGISTER")
         {
+            // Every HUD in the region listens on TC_OBJECT_PING_CHAN and will
+            // respond to our ping.  Only accept the registration that belongs
+            // to the player who actually touched this station.
+            key registeredOwner = (key)llList2String(parts, 1);
+            if (registeredOwner == NULL_KEY || registeredOwner != g_ownerKey) return;
+
             if (g_listenReply) llListenRemove(g_listenReply);
             g_listenReply  = 0;
             g_replyChannel = 0;
             llSetTimerEvent(0.0);
 
-            g_ownerKey   = (key)llList2String(parts, 1);
+            // g_ownerKey already correct; just capture HUD channel and name
             g_hudChannel = (integer)llList2String(parts, 2);
             g_ownerName  = llList2String(parts, 3);
 
@@ -635,8 +660,23 @@ default
             {
                 if (g_ownerKey == NULL_KEY) return; // stale response
                 llSetTimerEvent(0.0);
-                llRegionSayTo(g_ownerKey, 0,
-                    "Breeding failed  -  could not remove seeds from inventory. Please try again.");
+                if (g_removeStep == 2)
+                {
+                    // Parent 1 was already consumed successfully.  Return it so
+                    // the player doesn't lose a seed when the second removal fails.
+                    llRegionSayTo(g_ownerKey, g_hudChannel,
+                        "TC_ADD_ITEM|seed_raw|" + g_parent1Strain + "|"
+                        + g_parent1Quality + "|1|");
+                    llRegionSayTo(g_ownerKey, 0,
+                        "Breeding failed  -  could not remove " + g_parent2Strain
+                        + " from inventory. Your " + g_parent1Strain
+                        + " seed has been returned. Please try again.");
+                }
+                else
+                {
+                    llRegionSayTo(g_ownerKey, 0,
+                        "Breeding failed  -  could not remove seeds from inventory. Please try again.");
+                }
                 g_removeStep = 0;
                 resetStation();
                 return;

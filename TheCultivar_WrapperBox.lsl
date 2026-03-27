@@ -114,7 +114,14 @@ default
 
     changed(integer change)
     {
-        if (change & CHANGED_OWNER) llResetScript();
+        if (change & CHANGED_OWNER)
+        {
+            // Clear opened state so the new owner gets a fresh unopened box.
+            // Without this the new owner's state_entry reads wrapper_opened="1"
+            // and sees an empty box they have never actually opened.
+            llLinksetDataDelete("wrapper_opened");
+            llResetScript();
+        }
     }
 
     timer()

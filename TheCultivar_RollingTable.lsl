@@ -83,6 +83,7 @@ integer g_rollCost         = 0;
 integer g_totalCost        = 0;
 integer g_papersCount      = 0;
 integer g_removingPapers   = FALSE;
+integer g_pingRetry        = 0;
 
 // ================================================================
 // PARTICLE SYSTEM  (self-contained, no linked prim required)
@@ -609,7 +610,18 @@ default
         }
         else
         {
+            // HUD registered but inventory response never arrived.
+            // First failure: silently re-ping so a freshly-attached HUD
+            // that was still initialising gets a second chance.
             g_registered = FALSE;
+            if (g_pingRetry < 1)
+            {
+                g_pingRetry++;
+                g_busy = TRUE;   // keep busy so the retry timer path fires correctly
+                pingHUD();
+                return;
+            }
+            g_pingRetry = 0;
             llRegionSayTo(g_ownerKey, 0,
                 "HUD didn't respond in time. Touch the tray to try again.");
         }
@@ -643,6 +655,7 @@ default
         }
 
         g_busy      = TRUE;
+        g_pingRetry = 0;
         g_ownerKey  = toucher;
         g_ownerName = llGetDisplayName(toucher);
 

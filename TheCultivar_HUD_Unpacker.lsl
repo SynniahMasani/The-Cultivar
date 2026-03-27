@@ -92,7 +92,18 @@ list buildGiveList()
         {
             string iname = llGetInventoryName(itype, i);
             if (!isExcluded(iname))
-                items += [iname];
+            {
+                // llGiveInventoryList silently aborts the ENTIRE delivery if
+                // even one item lacks PERM_TRANSFER in next-owner permissions
+                // (same reason scripts are excluded above).  Check every item
+                // individually so a single locked asset cannot block the rest.
+                if (llGetInventoryPermMask(iname, MASK_NEXT) & PERM_TRANSFER)
+                    items += [iname];
+                else
+                    llOwnerSay("Cannot auto-deliver '" + iname
+                        + "' (no transfer permission set). "
+                        + "Copy it manually from this object.");
+            }
         }
     }
     return items;
@@ -159,6 +170,11 @@ default
         // The player will see one dialog — clicking Allow enables
         // the HUD to detach itself cleanly after unpacking.
         llRequestPermissions(llGetOwner(), PERMISSION_ATTACH);
+        // Safety: on some simulators on_rez fires before attach, causing
+        // llResetScript() to clear the queued attach event.  If the object
+        // is already attached when state_entry runs, trigger delivery now.
+        if (llGetAttached() != 0)
+            doUnpack();
     }
 
     on_rez(integer start_param)
