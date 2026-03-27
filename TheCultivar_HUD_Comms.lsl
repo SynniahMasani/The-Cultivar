@@ -489,14 +489,15 @@ default
             }
 
             // World object consuming a single item type by strain (breeding station)
-            // TC_CONSUME_ITEM|itemType|strainName|qty
+            // TC_CONSUME_ITEM|itemType|strainName|quality|qty
             else if (cmd == "TC_CONSUME_ITEM")
             {
                 llMessageLinked(LINK_SET, CHAN_INVENTORY,
                     "REMOVE_ITEM|"          +
                     llList2String(parts, 1) + "|" +
-                    llList2String(parts, 2) + "||" +
-                    llList2String(parts, 3) + "|", id);
+                    llList2String(parts, 2) + "|" +
+                    llList2String(parts, 3) + "|" +
+                    llList2String(parts, 4) + "|", id);
             }
 
             // World object requesting raw inventory list (breeding station, etc.)

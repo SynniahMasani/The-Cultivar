@@ -176,7 +176,8 @@ showFlowerMenu()
         string quality = llList2String(g_availableFlower, i + 1);
         string qty     = llList2String(g_availableFlower, i + 2);
         integer qIdx   = llListFindList(qualNames, [quality]);
-        string  qLabel = llList2String(qualLabels, qIdx);
+        string  qLabel = "[R]";
+        if (qIdx >= 0) qLabel = llList2String(qualLabels, qIdx);
 
         string btnLabel = llGetSubString(strain, 0, 10); // truncate for button
         buttons += [btnLabel];
