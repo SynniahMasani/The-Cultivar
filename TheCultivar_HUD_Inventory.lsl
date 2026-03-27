@@ -69,7 +69,7 @@ list deserializeInventory(string data)
     integer s;
     for (s = 0; s < llGetListLength(slots); s++)
     {
-        list fields = llParseString2List(llList2String(slots, s), ["~"], []);
+        list fields = llParseStringKeepNulls(llList2String(slots, s), ["~"]);
         if (llGetListLength(fields) == STRIDE)
             result += fields;
     }

@@ -521,7 +521,7 @@ default
                 integer si;
                 for (si = 0; si < llGetListLength(slots); si++)
                 {
-                    list fields = llParseString2List(llList2String(slots, si), ["~"], []);
+                    list fields = llParseStringKeepNulls(llList2String(slots, si), ["~"]);
                     if (llGetListLength(fields) == 5)
                         inv += fields;
                 }
