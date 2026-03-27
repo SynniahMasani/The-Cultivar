@@ -489,15 +489,20 @@ default
 
         llSetTimerEvent(0.0);
 
-        if (g_ownerKey == NULL_KEY)
+        if (g_listenReply != 0)
         {
-            // Registration timed out — no HUD found
+            // Registration phase timed out — HUD never responded.
+            // g_ownerKey is the toucher (set before pingHUD), so we can
+            // still notify them directly before clearing state.
             if (g_listenReply) llListenRemove(g_listenReply);
             g_listenReply  = 0;
             g_replyChannel = 0;
+            key noHudOwner = g_ownerKey;
+            g_ownerKey     = NULL_KEY;
             llSetText("Breeding Station\nTouch to breed two seeds\ninto a hybrid strain",
                 <0.3, 0.8, 0.3>, 1.0);
-            llOwnerSay("No HUD found. Touch again.");
+            llRegionSayTo(noHudOwner, 0,
+                "No HUD detected. Make sure your Cultivar HUD is attached and try again.");
             llSetTimerEvent(HOVER_FADE_SECS);
         }
         else
@@ -505,7 +510,7 @@ default
             // Menu or remove timed out
             key timedOutOwner = g_ownerKey;
             resetStation();
-            llRegionSayTo(timedOutOwner, 0, "Menu timed out.");
+            llRegionSayTo(timedOutOwner, 0, "Menu timed out. Touch to try again.");
         }
     }
 

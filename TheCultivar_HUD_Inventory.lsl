@@ -106,7 +106,7 @@ integer findSlot(string itemType, string strainName, string quality, string pack
         if (llList2String(g_inventory, i)   == itemType  &&
             llList2String(g_inventory, i+1) == strainName &&
             llList2String(g_inventory, i+2) == quality   &&
-            llList2String(g_inventory, i+4) == packager)
+            (packager == "" || llList2String(g_inventory, i+4) == packager))
         {
             return i;
         }

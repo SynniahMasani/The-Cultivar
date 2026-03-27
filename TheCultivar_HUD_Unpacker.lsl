@@ -159,6 +159,11 @@ default
         // The player will see one dialog — clicking Allow enables
         // the HUD to detach itself cleanly after unpacking.
         llRequestPermissions(llGetOwner(), PERMISSION_ATTACH);
+        // Safety: on some simulators on_rez fires before attach, causing
+        // llResetScript() to clear the queued attach event.  If the object
+        // is already attached when state_entry runs, trigger delivery now.
+        if (llGetAttached() != 0)
+            doUnpack();
     }
 
     on_rez(integer start_param)
