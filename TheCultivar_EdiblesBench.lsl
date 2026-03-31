@@ -520,7 +520,7 @@ default
         {
             llSetTimerEvent(0.0);
             g_busy = FALSE;
-            llRegionSayTo(g_ownerKey, 0, "Not enough flower.");
+            llRegionSayTo(g_ownerKey, 0, "How you gone cook with no product? Dummy.");
             resetTransaction();
         }
 

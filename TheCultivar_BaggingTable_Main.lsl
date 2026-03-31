@@ -389,7 +389,7 @@ default
 
         if (g_busy)
         {
-            llRegionSayTo(toucher, 0, "Hold on  -  finishing previous action...");
+            llRegionSayTo(toucher, 0, "Slow down bih! You moving too fast...");
             return;
         }
 

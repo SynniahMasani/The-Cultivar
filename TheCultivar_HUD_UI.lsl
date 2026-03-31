@@ -220,7 +220,7 @@ showMainMenu()
     g_lisMain = llListen(DCHAN_MAIN, "", g_ownerKey, "");
     llDialog(g_ownerKey,
         "=== THE CULTIVAR ===\n" +
-        g_playerName + "  ?  Rep: " + (string)g_repScore + "\n" +
+        g_playerName + " Current Rep: " + (string)g_repScore + "\n" +
         line1 + "\n" + line2,
         ["Smoke", "Inventory", "Grow",
          "Session", "Pass", "Stats",
@@ -343,7 +343,7 @@ showSessionMenu()
     else
     {
         llDialog(g_ownerKey,
-            "=== SESSION ===\nSpark a circle and invite nearby players.\n" +
+            "=== SESSION ===\nSpark a smoke sesh and invite nearby homies.\n" +
             "Everyone shares the same smoke.",
             ["Spark Session", "Close"],
             DCHAN_SESSION_MENU);

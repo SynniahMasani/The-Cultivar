@@ -194,7 +194,7 @@ default
         // Non-creator who re-rezzed an already-used pack sees it as empty.
         if (llLinksetDataRead("pack_used") == "1")
         {
-            llSetText("EMPTY\nAll seeds have been claimed.\nPurchase a new pack to get more seeds.",
+            llSetText("EMPTY\nAint nothing in here.\nStop being cheap and purchase more seeds!",
                 <0.35, 0.35, 0.35>, 0.6);
             return;
         }
@@ -284,9 +284,9 @@ default
             llSleep(0.5);
         }
 
-        llSay(0, (string)seedCount +
-            " seeds added to your HUD inventory. Happy growing!");
-        llSetText("EMPTY\nAll seeds delivered.\nNothing left to see here, bestie.\nGo grow something.",
+        llSay(0, "Here, damn! " + (string)seedCount +
+            " seeds added to your HUD inventory. Now go grow some shit!");
+        llSetText("EMPTY\nAll seeds delivered.\nNothing left to see here, dawg.\nGo grow some shit.",
             <0.35, 0.35, 0.35>, 0.6);
         llSleep(2.0);
         llDie();
