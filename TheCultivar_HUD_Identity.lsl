@@ -231,7 +231,7 @@ string achievementLabel(string aId)
     if (aId == "century_smoked")    return "Century Smoked  -  100 sessions logged!";
     if (aId == "first_grow")        return "First Harvest  -  Grew your first plant!";
     if (aId == "green_thumb")       return "Green Thumb  -  10 harvests completed!";
-    if (aId == "first_pass")        return "Selfless  -  Good shit! First time passin that gangja!";
+    if (aId == "first_pass")        return "Selfless  -  Good shit! First time passin that ganja!";
     if (aId == "first_sale")        return "First Sale  -  Made your first deal!";
     if (aId == "strain_explorer")   return "Strain Explorer  -  Tried 5 different strains!";
     if (aId == "strain_collector")  return "Strain Collector  -  Tried 15 different strains!";
