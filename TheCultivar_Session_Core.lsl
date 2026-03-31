@@ -289,12 +289,12 @@ passToNext()
     // Notify previous holder
     key prevKey = participantKey((nextIdx - 1 + count) % count);
     llRegionSayTo(prevKey, 0,
-        "You passed the " + g_strain + " to " + nextName + ".");
+        "Slid the " + g_strain + " to " + nextName + ". Smoke that shit G.");
 
     // Notify new holder
     llRegionSayTo(nextKey, 0,
         prevName + " passed you the " + g_quality + " " + g_strain +
-        ". Your turn! ?");
+        ". Dont be scared lil nigga. Smoke that shit.");
 
     // Tell new holder's HUD to play receive animation
     llRegionSayTo(nextKey, participantHUDChan(nextIdx),
@@ -344,10 +344,10 @@ passToNamed(string targetName, key requester)
             if (g_cypherMode) g_turnTimeRemaining = g_turnTimer;
 
             llRegionSayTo(requester, 0,
-                "Passed the " + g_strain + " to " + pName + ".");
+                "Slid the " + g_strain + " to " + pName + ". Smoke that shit G.");
             llRegionSayTo(targetKey, 0,
                 llGetDisplayName(requester) + " passed you the " +
-                g_quality + " " + g_strain + ". ?");
+                g_quality + " " + g_strain + ". Dont be scared lil nigga. Smoke that shit.");
 
             llRegionSayTo(targetKey, participantHUDChan(i),
                 "TC_PASS_RECEIVED|" + g_strain + "|" + g_quality);
@@ -514,8 +514,7 @@ default
                 "TC_SESSION_SYNC|" + g_strain + "|" + g_quality);
 
             llRegionSayTo(g_hostKey, 0,
-                "Session live! " + g_quality + " " + g_strain +
-                " ? Nearby players have been invited.");
+                "smoke session is in session! - passin the mufuckin " + g_strain);
 
             // Switch to periodic invite timer
             llSetTimerEvent(30.0);
