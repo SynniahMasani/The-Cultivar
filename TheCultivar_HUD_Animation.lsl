@@ -55,6 +55,9 @@ string  g_puffAnimName   = "";    // which puff anim is currently playing
 // Gender-aware animation suffix (_female or _male)
 string  g_genderSuffix   = "_female"; // default; updated on state_entry and on_rez
 
+// Animation permission flag
+integer g_hasAnimPerm = FALSE;
+
 // ----------------------------------------------------------------
 // Detect avatar body shape type and return the animation suffix
 // ----------------------------------------------------------------
@@ -83,11 +86,11 @@ string resolveAnim(string baseName)
 // ----------------------------------------------------------------
 stopCurrentAnim()
 {
-    if (g_currentAnim != "")
+    if (g_hasAnimPerm && g_currentAnim != "")
     {
         llStopAnimation(g_currentAnim);
-        g_currentAnim = "";
     }
+    g_currentAnim = "";
     if (g_puffTimerActive)
     {
         llSetTimerEvent(0.0);
@@ -128,7 +131,13 @@ startSmokeAnim(string strain, string quality, string itemType)
     g_currentAnim     = resolveAnim(buildAnimName(itemType, quality));
     g_puffCount       = 0;
 
-    // Check the animation exists in inventory before playing
+    // Check permission and animation exists in inventory before playing
+    if (!g_hasAnimPerm)
+    {
+        llOwnerSay("[Animation] Requesting animation permission...");
+        llRequestPermissions(llGetOwner(), PERMISSION_TRIGGER_ANIMATION);
+        return;
+    }
     if (llGetInventoryType(g_currentAnim) == INVENTORY_ANIMATION)
     {
         llStartAnimation(g_currentAnim);
@@ -154,6 +163,7 @@ startSmokeAnim(string strain, string quality, string itemType)
 // ----------------------------------------------------------------
 playPuffAnim()
 {
+    if (!g_hasAnimPerm) return;
     string animName = resolveAnim("smoke_puff");
     if (llGetInventoryType(animName) != INVENTORY_ANIMATION) return;
 
@@ -173,6 +183,7 @@ playPuffAnim()
 // ----------------------------------------------------------------
 playPassAnim(string direction)
 {
+    if (!g_hasAnimPerm) return;
     string animName = resolveAnim("pass_" + direction);
     if (llGetInventoryType(animName) != INVENTORY_ANIMATION) return;
 
@@ -197,12 +208,22 @@ default
     state_entry()
     {
         g_genderSuffix = getGenderSuffix();
+        g_hasAnimPerm  = FALSE;
+        llRequestPermissions(llGetOwner(), PERMISSION_TRIGGER_ANIMATION);
     }
 
     on_rez(integer start_param)
     {
         g_genderSuffix = getGenderSuffix();
+        g_hasAnimPerm  = FALSE;
         stopCurrentAnim();
+        llRequestPermissions(llGetOwner(), PERMISSION_TRIGGER_ANIMATION);
+    }
+
+    run_time_permissions(integer perm)
+    {
+        if (perm & PERMISSION_TRIGGER_ANIMATION)
+            g_hasAnimPerm = TRUE;
     }
 
     changed(integer change)
@@ -220,9 +241,9 @@ default
         if (g_puffInProgress)
         {
             g_puffInProgress = FALSE;
-            llStopAnimation(g_puffAnimName);
+            if (g_hasAnimPerm) llStopAnimation(g_puffAnimName);
             g_puffAnimName = "";
-            if (g_currentAnim != "" &&
+            if (g_hasAnimPerm && g_currentAnim != "" &&
                 llGetInventoryType(g_currentAnim) == INVENTORY_ANIMATION)
             {
                 llStartAnimation(g_currentAnim);
@@ -237,10 +258,10 @@ default
         if (g_passInProgress)
         {
             g_passInProgress = FALSE;
-            if (g_passAnimName != "")
+            if (g_hasAnimPerm && g_passAnimName != "")
                 llStopAnimation(g_passAnimName);
             g_passAnimName = "";
-            if (g_currentAnim != "" &&
+            if (g_hasAnimPerm && g_currentAnim != "" &&
                 llGetInventoryType(g_currentAnim) == INVENTORY_ANIMATION)
             {
                 llStartAnimation(g_currentAnim);
