@@ -154,9 +154,9 @@ refreshAllGlows()
 
 string qualLabel(string q)
 {
-    if (q == "mids")   return "Mids ?";
-    if (q == "loud")   return "Loud ??";
-    if (q == "exotic") return "Exotic ?";
+    if (q == "mids")   return "Mid Pack";
+    if (q == "loud")   return "Loud Pack";
+    if (q == "exotic") return "Exotic";
     return "Reggie";
 }
 
@@ -484,8 +484,8 @@ onRemoveSuccess()
         llMessageLinked(LINK_SET, CHAN_IDENTITY,
             "UPDATE_SMOKED|" + g_pendingStrain, NULL_KEY);
 
-        llOwnerSay("? Enjoying " + qualLabel(g_pendingQuality) +
-                   " " + g_pendingStrain + ".");
+        llOwnerSay("You lit up that " + qualLabel(g_pendingQuality) +
+                   " " + g_pendingStrain + ". Stay faded fr.");
 
         g_isSmoking    = TRUE;
         g_smokeStrain  = g_pendingStrain;
@@ -503,8 +503,8 @@ onRemoveSuccess()
         // Give animation
         llMessageLinked(LINK_SET, CHAN_ANIMATION, "PLAY_PASS_GIVE", NULL_KEY);
 
-        llOwnerSay("Passed " + g_pendingQuality + " " +
-                   g_pendingStrain + " to " + g_passTargetName + ". ?");
+        llOwnerSay("Slid that " + qualLabel(g_pendingQuality) + " " +
+                   g_pendingStrain + " to " + g_passTargetName + ". Pass it real.");
     }
 
     // Clear flow state
