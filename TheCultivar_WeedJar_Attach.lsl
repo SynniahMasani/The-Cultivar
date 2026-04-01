@@ -37,10 +37,10 @@ integer ATTACH_DURATION = 120;
 // Default smokeable type (can be expanded to blunts, pipes etc.)
 string  g_smokeType = "Joint"; // Joint | Blunt
 
-// Track active attachments: [smokerKey, tempChan, listenHandle, expireTime, ...]
-// Stride 4  -  listenHandle stored so it can be removed on confirmation or expiry
+// Track active attachments: [smokerKey, tempChan, listenHandle, expireTime, strain, quality]
+// Stride 6  -  strain/quality stored so listen handler can send TC_ATTACH_TO on confirmation
 list    g_attachments;
-integer ATTACH_STRIDE = 4;
+integer ATTACH_STRIDE = 6;
 
 // Cleanup timer interval
 float   CLEANUP_INTERVAL = 15.0;
@@ -100,15 +100,14 @@ rezSmokeable(key smoker, string strain, string quality)
     // Rez the smokeable  -  its script will listen for attach instructions
     llRezObject(assetName, rezPos, ZERO_VECTOR, ZERO_ROTATION, tempChan);
 
-    // Send attach instruction once it rezzes
-    // The smokeable script listens on start_param channel for instructions
-    llRegionSay(tempChan,
-        "TC_ATTACH_TO|" + (string)smoker + "|" +
-        (string)ATTACH_DURATION + "|" + strain + "|" + quality);
+    // DO NOT send TC_ATTACH_TO here  -  the smokeable's state_entry() hasn't
+    // run yet so its listener isn't open. We send TC_ATTACH_TO in listen()
+    // after we receive TC_ATTACH_CONFIRMED from the smokeable.
 
-    // Track this attachment  -  store listen handle so we can remove it later
+    // Track this attachment  -  store strain/quality so the listen handler
+    // can build the TC_ATTACH_TO message after confirmation.
     integer expireTime = llGetUnixTime() + ATTACH_DURATION + 5;
-    g_attachments += [smoker, tempChan, tempListen, expireTime];
+    g_attachments += [smoker, tempChan, tempListen, expireTime, strain, quality];
 }
 
 // ----------------------------------------------------------------
@@ -203,12 +202,22 @@ default
 
         if (cmd == "TC_ATTACH_CONFIRMED")
         {
-            // Find the stored listen handle for this channel and remove it
+            // Smokeable's listener is now open  -  send the attach instruction,
+            // then clean up our tracking entry.
             integer i;
             for (i = 0; i < llGetListLength(g_attachments); i += ATTACH_STRIDE)
             {
                 if (llList2Integer(g_attachments, i + 1) == channel)
                 {
+                    key    smoker  = (key)llList2String(g_attachments, i);
+                    string strain  = llList2String(g_attachments, i + 4);
+                    string quality = llList2String(g_attachments, i + 5);
+
+                    // Now the smokeable is listening  -  send the attach instruction
+                    llRegionSay(channel,
+                        "TC_ATTACH_TO|" + (string)smoker + "|" +
+                        (string)ATTACH_DURATION + "|" + strain + "|" + quality + "|" + g_smokeType);
+
                     llListenRemove(llList2Integer(g_attachments, i + 2));
                     g_attachments = llDeleteSubList(g_attachments, i, i + ATTACH_STRIDE - 1);
                     return;
