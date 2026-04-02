@@ -42,6 +42,7 @@ integer g_listenOwner;
 integer g_listenVisitor;
 integer g_listenItem;
 integer g_listenRegister;
+integer g_replyChannel = 0;
 
 key     g_ownerKey   = NULL_KEY;
 string  g_ownerName  = "";
@@ -71,9 +72,11 @@ pingHUD()
 {
     g_registered = FALSE;
     if (g_listenRegister) llListenRemove(g_listenRegister);
-    g_listenRegister = llListen(0, "", NULL_KEY, "");
+    g_replyChannel   = (integer)(llFrand(1000000.0) + 1000000) * -1;
+    g_listenRegister = llListen(g_replyChannel, "", NULL_KEY, "");
     llRegionSay(TC_OBJECT_PING_CHAN,
-        "TC_PING|" + (string)llGetKey() + "|stash_box");
+        "TC_PING|" + (string)llGetKey() + "|stash_box|" +
+        (string)g_replyChannel);
     llSetTimerEvent(8.0);
 }
 
@@ -168,8 +171,8 @@ updateDisplay()
             vector  col     = qualColor(quality);
             string  dname   = llList2String(g_contents, i * CONT_STRIDE + 1);
             string  cat     = llList2String(g_contents, i * CONT_STRIDE + 3);
-            string  catIcon = "?";
-            if (cat == "jar") catIcon = "?";
+            string  catIcon = "[bag]";
+            if (cat == "jar") catIcon = "[jar]";
 
             llSetLinkPrimitiveParamsFast(linkNum, [
                 PRIM_COLOR, ALL_SIDES, col, 1.0,
@@ -201,13 +204,13 @@ updateDisplay()
         llSetLinkPrimitiveParamsFast(6, [
             PRIM_COLOR, ALL_SIDES, <0.9, 0.2, 0.2>, 1.0,
             PRIM_GLOW,  ALL_SIDES, 0.05,
-            PRIM_TEXT,  "?", <0.9, 0.2, 0.2>, 1.0
+            PRIM_TEXT,  "LOCKED", <0.9, 0.2, 0.2>, 1.0
         ]);
     else
         llSetLinkPrimitiveParamsFast(6, [
             PRIM_COLOR, ALL_SIDES, <0.2, 0.9, 0.3>, 1.0,
             PRIM_GLOW,  ALL_SIDES, 0.04,
-            PRIM_TEXT,  "?", <0.2, 0.9, 0.3>, 1.0
+            PRIM_TEXT,  "OPEN", <0.2, 0.9, 0.3>, 1.0
         ]);
 
     // Ambient particles when stocked (link 7)
@@ -257,7 +260,7 @@ updateHoverText()
 {
     integer count = llGetListLength(g_contents) / CONT_STRIDE;
     string  lockStr = "";
-    if (g_locked) lockStr = " ?";
+    if (g_locked) lockStr = " [locked]";
     if (count == 0)
     {
         llSetText("THE CULTIVAR\nStash Box [Empty]" + lockStr +
@@ -285,7 +288,7 @@ updateHoverText()
     }
     if (jars > 0)
     {
-        if (contents != "") contents += "  ?  ";
+        if (contents != "") contents += " | ";
         string jarPl = "";
         if (jars > 1) jarPl = "s";
         contents += (string)jars + " jar" + jarPl;
@@ -339,8 +342,8 @@ showContentsList(key viewer, integer ownerView)
         string dname   = llList2String(g_contents, i * CONT_STRIDE + 1);
         string quality = llList2String(g_contents, i * CONT_STRIDE + 2);
         string cat     = llList2String(g_contents, i * CONT_STRIDE + 3);
-        string catIcon = "?";
-        if (cat == "jar") catIcon = "?";
+        string catIcon = "[bag]";
+        if (cat == "jar") catIcon = "[jar]";
         msg += catIcon + " " + quality + " " + dname + "\n";
     }
 
@@ -403,8 +406,6 @@ default
         g_ownerKey   = llGetOwner();
         g_ownerName  = llGetDisplayName(g_ownerKey);
         g_hudChannel = deriveHUDChannel(g_ownerKey);
-        if (g_listenRegister) llListenRemove(g_listenRegister);
-        g_listenRegister = llListen(0, "", NULL_KEY, "");
         rebuildContents();
         updateDisplay();
         updateHoverText();
@@ -436,7 +437,7 @@ default
         {
             integer count = llGetListLength(g_contents) / CONT_STRIDE;
             string  lockStr = "";
-            if (g_locked) lockStr = " ?";
+            if (g_locked) lockStr = " [locked]";
             if (count == 0)
                 llSetText("THE CULTIVAR\nStash Box [Empty]" + lockStr +
                           "\nOwner: " + g_ownerName,
@@ -485,7 +486,7 @@ default
         list   parts = llParseString2List(msg, ["|"], []);
         string cmd   = llList2String(parts, 0);
 
-        if (channel == 0 && cmd == "TC_REGISTER")
+        if (channel == g_replyChannel && cmd == "TC_REGISTER")
         {
             key regOwner = (key)llList2String(parts, 1);
             if (regOwner != g_ownerKey) return;
