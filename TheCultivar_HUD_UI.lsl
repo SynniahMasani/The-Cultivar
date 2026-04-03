@@ -385,7 +385,13 @@ showSessionItemMenu()
         else if (iType == "spliff") typeLabel = "Spliff";
         else if (iType == "flower_raw") typeLabel = "Flower";
 
-        string label = llGetSubString(quality + " " + strain, 0, 11);
+        string typePrefix;
+        if (iType == "joint")           typePrefix = "J ";
+        else if (iType == "blunt")      typePrefix = "B ";
+        else if (iType == "spliff")     typePrefix = "S ";
+        else                            typePrefix = "F ";
+
+        string label = llGetSubString(typePrefix + quality + " " + strain, 0, 11);
         buttons  += [label];
         menuText += typeLabel + "  " + quality + " " + strain +
                     "  x" + (string)qty + "\n";
@@ -749,9 +755,15 @@ default
             integer i;
             for (i = 0; i < count; i++)
             {
+                string iType   = llList2String(g_availableItems, i * ITEM_STRIDE);
                 string quality = llList2String(g_availableItems, i * ITEM_STRIDE + 2);
                 string strain  = llList2String(g_availableItems, i * ITEM_STRIDE + 1);
-                string label   = llGetSubString(quality + " " + strain, 0, 11);
+                string typePrefix;
+                if (iType == "joint")           typePrefix = "J ";
+                else if (iType == "blunt")      typePrefix = "B ";
+                else if (iType == "spliff")     typePrefix = "S ";
+                else                            typePrefix = "F ";
+                string label   = llGetSubString(typePrefix + quality + " " + strain, 0, 11);
                 if (label == msg)
                 {
                     // Fire TC_SESSION_START to the session object
