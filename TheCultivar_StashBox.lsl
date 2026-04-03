@@ -1,6 +1,6 @@
 // ================================================================
 // THE CULTIVAR  -  Stash Box Script
-// Version: 1.0
+// Version: 1.1
 //
 // A lockable display container for weed jars and bags.
 // Owner drops items in, it reads and displays the contents.
@@ -10,9 +10,12 @@
 //   Owner drops TC_Bag_* or TC_WeedJar_* objects into the box.
 //   Box reads its inventory on CHANGED_INVENTORY and builds a
 //   display of what's inside, organized by item type and quality.
-//   Visitors can browse. If unlocked, they can request items
-//   (owner gets a notification and can approve or decline).
-//   Owner can lock the box  -  no visitor interaction at all.
+//   Owner can also use the "Store" button to deposit raw flower
+//   directly from their HUD virtual inventory. Stored flower is
+//   persisted in linkset data ("stash_v_items") and displayed
+//   alongside physical bag/jar objects. Taking a virtual item
+//   returns it to the owner's HUD inventory.
+//   Visitors can browse. Owner can lock the box.
 //
 // DISPLAY MODE:
 //   The box shows a visual summary via hover text and slot prims.
@@ -37,11 +40,14 @@ integer HOVER_FADE_SECS = 30;
 integer DCHAN_OWNER   = -120001;
 integer DCHAN_VISITOR = -120002;
 integer DCHAN_ITEM    = -120003;
+integer DCHAN_STORE   = -120004;
 
 integer g_listenOwner;
 integer g_listenVisitor;
 integer g_listenItem;
 integer g_listenRegister;
+integer g_listenStore;
+integer g_listenHUD;               // permanent listen on derived HUD channel
 integer g_replyChannel = 0;
 
 key     g_ownerKey   = NULL_KEY;
@@ -52,13 +58,21 @@ integer g_locked     = FALSE;
 
 // Contents parsed from inventory
 // Stride 4: [invName, displayName, quality, itemCategory]
-// itemCategory: "bag" | "jar" | "other"
+// itemCategory: "bag" | "jar" | "virtual" | "other"
+// For virtual items invName encodes: "virtual|itemType|strain|quality|qty|packager"
 list    g_contents;
 integer CONT_STRIDE = 4;
 
 // Pending visitor request
 key     g_pendingVisitor  = NULL_KEY;
 string  g_pendingItemName = "";
+
+// Pending virtual store (waiting for TC_REMOVE_OK from HUD before committing)
+string  g_pendingVirtType    = "";
+string  g_pendingVirtStrain  = "";
+string  g_pendingVirtQuality = "";
+integer g_pendingVirtQty     = 0;
+string  g_pendingVirtPackager = "";
 
 // ----------------------------------------------------------------
 integer deriveHUDChannel(key id)
@@ -87,6 +101,99 @@ vector qualColor(string quality)
     if (quality == "exotic") return <0.7, 0.3,  1.0>;
     if (quality == "mixed")  return <0.6, 0.6,  0.8>;
     return <0.55, 0.45, 0.3>;
+}
+
+// ----------------------------------------------------------------
+// Virtual stash helpers  -  persist flower from HUD inventory
+// Format per slot: itemType~strain~quality~qty~packager
+// Multiple slots separated by "^", stored under "stash_v_items"
+// ----------------------------------------------------------------
+list readVirtualStash()
+{
+    string data = llLinksetDataRead("stash_v_items");
+    if (data == "") return [];
+    list result;
+    list slots = llParseString2List(data, ["^"], []);
+    integer i;
+    for (i = 0; i < llGetListLength(slots); i++)
+    {
+        list f = llParseStringKeepNulls(llList2String(slots, i), ["~"], []);
+        if (llGetListLength(f) == 5)
+            result += f;
+    }
+    return result;
+}
+
+saveVirtualStash(list items)
+{
+    string serial = "";
+    integer i;
+    for (i = 0; i < llGetListLength(items); i += 5)
+    {
+        string slot = llList2String(items, i)   + "~" +
+                      llList2String(items, i+1) + "~" +
+                      llList2String(items, i+2) + "~" +
+                      llList2String(items, i+3) + "~" +
+                      llList2String(items, i+4);
+        if (serial == "") serial = slot;
+        else serial += "^" + slot;
+    }
+    llLinksetDataWrite("stash_v_items", serial);
+}
+
+addToVirtualStash(string itemType, string strain, string quality,
+                  integer qty, string packager)
+{
+    list items = readVirtualStash();
+    integer found = -1;
+    integer i;
+    for (i = 0; i < llGetListLength(items); i += 5)
+    {
+        if (llList2String(items, i)   == itemType &&
+            llList2String(items, i+1) == strain   &&
+            llList2String(items, i+2) == quality  &&
+            llList2String(items, i+4) == packager)
+        {
+            found = i;
+            i = llGetListLength(items); // break
+        }
+    }
+    if (found != -1)
+    {
+        integer current = (integer)llList2String(items, found + 3);
+        items = llListReplaceList(items, [(string)(current + qty)], found+3, found+3);
+    }
+    else
+    {
+        items += [itemType, strain, quality, (string)qty, packager];
+    }
+    saveVirtualStash(items);
+}
+
+// Removes a virtual item identified by its encoded invName key.
+// invName format: "virtual|itemType|strain|quality|qty|packager"
+removeVirtualItem(string invName)
+{
+    list kp    = llParseString2List(invName, ["|"], []);
+    string iType    = llList2String(kp, 1);
+    string iStrain  = llList2String(kp, 2);
+    string iQuality = llList2String(kp, 3);
+    string iPacker  = llList2String(kp, 5);
+
+    list items = readVirtualStash();
+    integer i;
+    for (i = 0; i < llGetListLength(items); i += 5)
+    {
+        if (llList2String(items, i)   == iType    &&
+            llList2String(items, i+1) == iStrain  &&
+            llList2String(items, i+2) == iQuality &&
+            llList2String(items, i+4) == iPacker)
+        {
+            items = llDeleteSubList(items, i, i + 4);
+            saveVirtualStash(items);
+            return;
+        }
+    }
 }
 
 // ----------------------------------------------------------------
@@ -128,17 +235,19 @@ list parseItemName(string invName)
 }
 
 // ----------------------------------------------------------------
-// Rebuild contents list from inventory
+// Rebuild contents list from physical inventory + virtual stash
 // ----------------------------------------------------------------
 rebuildContents()
 {
     g_contents = [];
+
+    // Physical SL inventory objects
     integer count = llGetInventoryNumber(INVENTORY_OBJECT);
     integer i;
     for (i = 0; i < count; i++)
     {
         string invName = llGetInventoryName(INVENTORY_OBJECT, i);
-        // Skip the session object and other TC_ system objects
+        // Skip TC system objects
         if (llSubStringIndex(invName, "TC_Session") == 0) jump skip;
         if (llSubStringIndex(invName, "TC_Smoke")   == 0) jump skip;
 
@@ -150,6 +259,29 @@ rebuildContents()
             llList2String(parsed, 2)   // category
         ];
         @skip;
+    }
+
+    // Virtual stash items (flower deposited from HUD)
+    list vItems = readVirtualStash();
+    for (i = 0; i < llGetListLength(vItems); i += 5)
+    {
+        string iType    = llList2String(vItems, i);
+        string iStrain  = llList2String(vItems, i+1);
+        string iQuality = llList2String(vItems, i+2);
+        string iQty     = llList2String(vItems, i+3);
+        string iPacker  = llList2String(vItems, i+4);
+
+        string dname;
+        if (iType == "flower_raw")
+            dname = iStrain + " " + iQty + "g";
+        else
+            dname = iStrain + " x" + iQty;
+
+        // Encode all fields into invName so the take handler can decode it
+        string vKey = "virtual|" + iType + "|" + iStrain + "|" +
+                      iQuality + "|" + iQty + "|" + iPacker;
+
+        g_contents += [vKey, dname, iQuality, "virtual"];
     }
 }
 
@@ -318,7 +450,7 @@ showOwnerMenu()
         "=== YOUR STASH BOX ===\n" +
         (string)count + " item" + itemPl + " stored\n" +
         lockStatus,
-        [lockBtn, "View Contents", "Take Item", "Close"],
+        [lockBtn, "View Contents", "Take Item", "Store", "Close"],
         DCHAN_OWNER);
     llSetTimerEvent(30.0);
 }
@@ -331,7 +463,13 @@ showContentsList(key viewer, integer ownerView)
     integer count = llGetListLength(g_contents) / CONT_STRIDE;
     if (count == 0)
     {
-        llRegionSayTo(viewer, 0, "The stash box is empty.");
+        if (ownerView)
+            llRegionSayTo(viewer, 0,
+                "The stash box is empty.\n" +
+                "Use 'Store' from the menu to deposit flower from your HUD,\n" +
+                "or drag TC_Bag_* / TC_WeedJar_* objects into the box via Edit.");
+        else
+            llRegionSayTo(viewer, 0, "The stash box is empty.");
         return;
     }
 
@@ -371,6 +509,62 @@ showContentsList(key viewer, integer ownerView)
 }
 
 // ----------------------------------------------------------------
+// STORE MENU  -  owner picks flower to deposit from HUD inventory
+// invData is the raw TC_INVENTORY_DATA payload (flower_raw slots)
+// ----------------------------------------------------------------
+showStoreMenu(string invData)
+{
+    if (invData == "")
+    {
+        llRegionSayTo(g_ownerKey, 0,
+            "No flower in your inventory to stash. Harvest some first.");
+        return;
+    }
+
+    list   slots   = llParseString2List(invData, ["^"], []);
+    list   buttons;
+    string menuText = "=== STASH FLOWER ===\nChoose what to store:\n\n";
+    list qualNames  = ["reggie","mids","loud","exotic"];
+    list qualLabels = ["[R]","[M]","[L]","[E]"];
+
+    integer i;
+    for (i = 0; i < llGetListLength(slots) && llGetListLength(buttons) < 9; i++)
+    {
+        list fields = llParseStringKeepNulls(llList2String(slots, i), ["~"], []);
+        if (llGetListLength(fields) < 4) jump skip_ss;
+        if (llList2String(fields, 0) != "flower_raw") jump skip_ss;
+
+        string iStrain  = llList2String(fields, 1);
+        string iQuality = llList2String(fields, 2);
+        integer iQty    = (integer)llList2String(fields, 3);
+        if (iQty <= 0) jump skip_ss;
+
+        integer qIdx   = llListFindList(qualNames, [iQuality]);
+        string  qLabel = llList2String(qualLabels, qIdx);
+        buttons  += [llGetSubString(iStrain, 0, 10)];
+        menuText += qLabel + " " + iStrain + "  -  " + (string)iQty + "g\n";
+        @skip_ss;
+    }
+
+    if (llGetListLength(buttons) == 0)
+    {
+        llRegionSayTo(g_ownerKey, 0,
+            "No raw flower in your inventory to stash.");
+        return;
+    }
+
+    buttons += ["Cancel"];
+
+    if (g_listenStore) llListenRemove(g_listenStore);
+    g_listenStore = llListen(DCHAN_STORE, "", g_ownerKey, "");
+    llDialog(g_ownerKey, menuText, buttons, DCHAN_STORE);
+    llSetTimerEvent(30.0);
+
+    // Cache raw data so the response handler can match the selection
+    llLinksetDataWrite("stash_temp_inv", invData);
+}
+
+// ----------------------------------------------------------------
 // VISITOR MENU  -  only shown if unlocked
 // ----------------------------------------------------------------
 showVisitorMenu(key visitor)
@@ -396,6 +590,8 @@ closeAllListens()
     if (g_listenOwner)    { llListenRemove(g_listenOwner);    g_listenOwner    = 0; }
     if (g_listenVisitor)  { llListenRemove(g_listenVisitor);  g_listenVisitor  = 0; }
     if (g_listenItem)     { llListenRemove(g_listenItem);     g_listenItem     = 0; }
+    if (g_listenStore)    { llListenRemove(g_listenStore);    g_listenStore    = 0; }
+    // g_listenHUD is permanent  -  never closed here
 }
 
 // ================================================================
@@ -406,6 +602,9 @@ default
         g_ownerKey   = llGetOwner();
         g_ownerName  = llGetDisplayName(g_ownerKey);
         g_hudChannel = deriveHUDChannel(g_ownerKey);
+        // Permanent listen so TC_INVENTORY_DATA and TC_REMOVE_OK/FAIL arrive
+        if (g_listenHUD) llListenRemove(g_listenHUD);
+        g_listenHUD = llListen(g_hudChannel, "", NULL_KEY, "");
         rebuildContents();
         updateDisplay();
         updateHoverText();
@@ -433,7 +632,7 @@ default
     timer()
     {
         // Idle fade: no dialog listens open — fade hover text and stop timer
-        if (!g_listenOwner && !g_listenVisitor && !g_listenItem && !g_listenRegister)
+        if (!g_listenOwner && !g_listenVisitor && !g_listenItem && !g_listenRegister && !g_listenStore)
         {
             integer count = llGetListLength(g_contents) / CONT_STRIDE;
             string  lockStr = "";
@@ -497,7 +696,11 @@ default
 
             string intent = llLinksetDataRead("stash_intent");
             llLinksetDataDelete("stash_intent");
-            if (intent == "owner_menu") showOwnerMenu();
+            if (intent == "owner_menu")
+                showOwnerMenu();
+            else if (intent == "store_menu")
+                llRegionSayTo(g_ownerKey, g_hudChannel,
+                    "TC_INVENTORY_REQUEST|flower_raw|" + (string)llGetKey());
         }
 
         else if (channel == DCHAN_OWNER && id == g_ownerKey)
@@ -521,6 +724,12 @@ default
             }
             else if (msg == "View Contents" || msg == "Take Item")
                 showContentsList(g_ownerKey, TRUE);
+
+            else if (msg == "Store")
+            {
+                llLinksetDataWrite("stash_intent", "store_menu");
+                pingHUD();
+            }
         }
 
         else if (channel == DCHAN_ITEM && id == g_ownerKey)
@@ -531,7 +740,7 @@ default
             if (msg == "Back")  { showOwnerMenu(); return; }
             if (msg == "Close") return;
 
-            // Match truncated name to actual inventory item
+            // Match truncated name to inventory item (physical or virtual)
             integer count = llGetListLength(g_contents) / CONT_STRIDE;
             integer i;
             for (i = 0; i < count; i++)
@@ -540,7 +749,26 @@ default
                 string invName = llList2String(g_contents, i * CONT_STRIDE + 0);
                 if (llGetSubString(dname, 0, 11) == msg)
                 {
-                    if (llGetInventoryType(invName) == INVENTORY_OBJECT)
+                    if (llSubStringIndex(invName, "virtual|") == 0)
+                    {
+                        // Virtual stash item  -  return grams to HUD
+                        list kp       = llParseString2List(invName, ["|"], []);
+                        string iType  = llList2String(kp, 1);
+                        string iStrain= llList2String(kp, 2);
+                        string iQual  = llList2String(kp, 3);
+                        string iQty   = llList2String(kp, 4);
+                        string iPack  = llList2String(kp, 5);
+                        removeVirtualItem(invName);
+                        llRegionSayTo(g_ownerKey, g_hudChannel,
+                            "TC_ADD_ITEM|" + iType + "|" + iStrain + "|" +
+                            iQual + "|" + iQty + "|" + iPack);
+                        llOwnerSay("Retrieved " + iQty + "g of " + iQual +
+                                   " " + iStrain + " from stash.");
+                        rebuildContents();
+                        updateDisplay();
+                        updateHoverText();
+                    }
+                    else if (llGetInventoryType(invName) == INVENTORY_OBJECT)
                     {
                         llGiveInventory(g_ownerKey, invName);
                         llOwnerSay("Returned " + dname + " to your inventory.");
@@ -557,6 +785,85 @@ default
 
             if (msg == "View Contents")
                 showContentsList(id, FALSE);
+        }
+
+        // ---- Store picker response ----
+        else if (channel == DCHAN_STORE && id == g_ownerKey)
+        {
+            llSetTimerEvent(0.0);
+            if (g_listenStore) { llListenRemove(g_listenStore); g_listenStore = 0; }
+
+            if (msg == "Cancel") return;
+
+            string tempInv = llLinksetDataRead("stash_temp_inv");
+            llLinksetDataDelete("stash_temp_inv");
+            list slots = llParseString2List(tempInv, ["^"], []);
+
+            integer si;
+            for (si = 0; si < llGetListLength(slots); si++)
+            {
+                list fields = llParseStringKeepNulls(llList2String(slots, si), ["~"], []);
+                if (llGetListLength(fields) < 5) jump skip_sp;
+                if (llList2String(fields, 0) != "flower_raw") jump skip_sp;
+
+                string iStrain = llList2String(fields, 1);
+                if (llGetSubString(iStrain, 0, 10) == msg)
+                {
+                    string  iQuality = llList2String(fields, 2);
+                    integer iQty     = (integer)llList2String(fields, 3);
+                    string  iPacker  = llList2String(fields, 4);
+
+                    if (iQty <= 0)
+                    {
+                        llRegionSayTo(g_ownerKey, 0, "Nothing to stash.");
+                        return;
+                    }
+
+                    // Save pending data; commit only after HUD confirms removal
+                    g_pendingVirtType     = "flower_raw";
+                    g_pendingVirtStrain   = iStrain;
+                    g_pendingVirtQuality  = iQuality;
+                    g_pendingVirtQty      = iQty;
+                    g_pendingVirtPackager = iPacker;
+
+                    llRegionSayTo(g_ownerKey, g_hudChannel,
+                        "TC_REMOVE_ITEM|flower_raw|" + iStrain + "|" +
+                        iQuality + "|" + (string)iQty + "|" + iPacker);
+                    return;
+                }
+                @skip_sp;
+            }
+            llRegionSayTo(g_ownerKey, 0, "Couldn't find that item. Try again.");
+        }
+
+        // ---- HUD replies (inventory data, remove confirmation) ----
+        else if (channel == g_hudChannel)
+        {
+            if (cmd == "TC_INVENTORY_DATA")
+            {
+                // HUD is responding to our TC_INVENTORY_REQUEST for the store menu
+                showStoreMenu(llList2String(parts, 1));
+            }
+            else if (cmd == "TC_REMOVE_OK")
+            {
+                if (g_pendingVirtType == "") return;
+                // HUD confirmed the removal  -  now save to stash
+                addToVirtualStash(g_pendingVirtType, g_pendingVirtStrain,
+                                  g_pendingVirtQuality, g_pendingVirtQty,
+                                  g_pendingVirtPackager);
+                llOwnerSay("Stashed " + (string)g_pendingVirtQty + "g of " +
+                           g_pendingVirtQuality + " " + g_pendingVirtStrain + ".");
+                g_pendingVirtType = "";
+                rebuildContents();
+                updateDisplay();
+                updateHoverText();
+            }
+            else if (cmd == "TC_REMOVE_FAIL")
+            {
+                g_pendingVirtType = "";
+                llRegionSayTo(g_ownerKey, 0,
+                    "Couldn't stash that item  -  not enough in your inventory.");
+            }
         }
     }
 }
