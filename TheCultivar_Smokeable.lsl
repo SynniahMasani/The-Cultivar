@@ -32,6 +32,7 @@ integer g_smokeDuration = 300;
 string  g_strain  = "";
 string  g_quality = "reggie";
 integer g_attached = FALSE;
+integer g_hasAttachPerm = FALSE;
 
 // ----------------------------------------------------------------
 // Quality-specific smoke particle color
@@ -140,6 +141,9 @@ default
         }
         else
         {
+            // Request PERMISSION_ATTACH so llDetachFromAvatar() works later
+            llRequestPermissions(attachedTo, PERMISSION_ATTACH);
+
             // Just attached  -  start particles
             if (!g_attached)
             {
@@ -149,6 +153,12 @@ default
                 llSetTimerEvent((float)g_smokeDuration);
             }
         }
+    }
+
+    run_time_permissions(integer perm)
+    {
+        if (perm & PERMISSION_ATTACH)
+            g_hasAttachPerm = TRUE;
     }
 
     timer()
@@ -163,8 +173,10 @@ default
         {
             // Attach duration expired  -  time to go
             llParticleSystem([]);
-            llDetachFromAvatar();
-            // llDie() is called in attach(NULL_KEY)
+            if (g_hasAttachPerm)
+                llDetachFromAvatar(); // llDie() is called in attach(NULL_KEY)
+            else
+                llDie(); // permission not granted, die directly
         }
     }
 
