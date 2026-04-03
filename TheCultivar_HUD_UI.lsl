@@ -511,8 +511,18 @@ onRemoveSuccess()
                 propName = "TC_Smoke_Joint_Reggie";
             if (llGetInventoryType(propName) == INVENTORY_OBJECT)
             {
-                llGiveInventory(g_ownerKey, propName);
-                llOwnerSay("Wear the smokeable from your inventory to show it in hand.");
+                // Determine duration so the rezzed smokeable knows how long to stay attached
+                integer smokeDuration = 300; // joint default
+                if (g_pendingItemType == "blunt")  smokeDuration = 600;
+                else if (g_pendingItemType == "spliff") smokeDuration = 420;
+
+                // Rez near the avatar so TheCultivar_Smokeable.lsl can temp-attach it.
+                // Positive start_param = smoke duration (distinguishes from jar's negative channel).
+                vector ownerPos = llList2Vector(
+                    llGetObjectDetails(g_ownerKey, [OBJECT_POS]), 0);
+                if (ownerPos != ZERO_VECTOR)
+                    llRezObject(propName, ownerPos + <0.0, 0.0, 0.3>,
+                                ZERO_VECTOR, ZERO_ROTATION, smokeDuration);
             }
         }
     }
