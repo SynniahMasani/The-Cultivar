@@ -202,7 +202,7 @@ updateHoverText()
         "THE CULTIVAR\n" +
         g_strain + "  [" + qualLabel + "]\n" +
         fillStr + "  " + (string)g_grams + "g / " + (string)g_capacity + "g\n" +
-        "Packed by " + g_packager + "  ?  " + accessStr,
+        "Packed by " + g_packager + " | " + accessStr,
         qualityColor(), 1.0);
 }
 
@@ -415,7 +415,7 @@ default
                     "THE CULTIVAR\n" +
                     g_strain + "  [" + qualLabel + "]\n" +
                     fillStr + "  " + (string)g_grams + "g / " + (string)g_capacity + "g\n" +
-                    "Packed by " + g_packager + "  ?  " + accessStr,
+                    "Packed by " + g_packager + " | " + accessStr,
                     qualityColor(), 0.0);
             }
             llSetTimerEvent(0.0);

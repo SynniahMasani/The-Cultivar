@@ -127,6 +127,12 @@ giveToInventory(key smoker, string quality)
             "Smokeable added to your inventory " +
             "(can't auto-attach here  -  rez disabled in this area).");
     }
+    else
+    {
+        llRegionSayTo(smoker, 0,
+            "[Jar] Smokeable prop not found in jar inventory. " +
+            "Place TC_Smoke_Joint_* or TC_Smoke_Blunt_* objects inside the jar.");
+    }
 }
 
 // ----------------------------------------------------------------

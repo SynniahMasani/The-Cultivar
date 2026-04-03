@@ -198,7 +198,7 @@ updateVisuals()
             llSetLinkPrimitiveParamsFast(g_linkStatus, [
                 PRIM_COLOR, ALL_SIDES, <0.2, 0.9, 0.2>, 1.0,
                 PRIM_TEXT,
-                    "✦ " + tierName + autoStr + "\n" +
+                    tierName + autoStr + "\n" +
                     "-" + (string)llList2Integer(TIER_BONUS, g_tier) + "% grow time\n" +
                     plantsStr,
                     <0.2, 0.9, 0.2>, 1.0
@@ -267,7 +267,7 @@ showOwnerMenu()
     llDialog(g_ownerKey,
         "=== GROW LIGHT ===\n" +
         llList2String(TIER_NAMES, g_tier) + "\n" +
-        stateLabel + "  ?  " +
+        stateLabel + " | " +
         (string)g_plantsFound + " plant" + plantSuffix + " in range",
         ["Turn On", "Turn Off", "Auto Mode", "Close"],
         DCHAN_OWNER);

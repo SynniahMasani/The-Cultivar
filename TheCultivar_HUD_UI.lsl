@@ -491,6 +491,24 @@ onRemoveSuccess()
         g_smokeStrain  = g_pendingStrain;
         g_smokeQuality = g_pendingQuality;
         setButtonGlow(LINK_BTN_SMOKE, 0.1);
+
+        // Give smokeable prop from HUD inventory so it appears in hand
+        if (g_pendingItemType == "joint" || g_pendingItemType == "blunt" ||
+            g_pendingItemType == "spliff")
+        {
+            string qCap = llToUpper(llGetSubString(g_pendingQuality, 0, 0)) +
+                          llGetSubString(g_pendingQuality, 1, -1);
+            string tCap = llToUpper(llGetSubString(g_pendingItemType, 0, 0)) +
+                          llGetSubString(g_pendingItemType, 1, -1);
+            string propName = "TC_Smoke_" + tCap + "_" + qCap;
+            if (llGetInventoryType(propName) != INVENTORY_OBJECT)
+                propName = "TC_Smoke_Joint_Reggie";
+            if (llGetInventoryType(propName) == INVENTORY_OBJECT)
+            {
+                llGiveInventory(g_ownerKey, propName);
+                llOwnerSay("Wear the smokeable from your inventory to show it in hand.");
+            }
+        }
     }
     else if (g_flowContext == "pass")
     {
