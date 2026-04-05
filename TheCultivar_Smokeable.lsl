@@ -111,6 +111,18 @@ default
 {
     state_entry()
     {
+        // Guard: only run inside a properly named smokeable object
+        // (TC_Smoke_Joint_*, TC_Smoke_Blunt_*, etc.).  If this script
+        // is accidentally present in the session object or any other
+        // non-smokeable prop it must NOT fire the attach logic — that
+        // would attempt to temp-attach the wrong object to the avatar's
+        // hand, causing it to "pop up" at unexpected world positions.
+        if (llSubStringIndex(llGetObjectName(), "TC_Smoke_") != 0)
+        {
+            llSetScriptState(llGetScriptName(), FALSE);
+            return;
+        }
+
         // Object was just rezzed  -  listen on start_param channel
         // for attach instructions from the jar's attach script
         g_listenChan  = llGetStartParameter();
