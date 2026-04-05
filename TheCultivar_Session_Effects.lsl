@@ -39,14 +39,28 @@ float   PULSE_MAX  = 0.18;
 integer g_passCleanupAt = 0;
 
 // ----------------------------------------------------------------
-// Quality color
+// Quality start color (primary / glow ring / ember)
+// reggie + mids : dull earthy tones
+// loud + exotic : vivid hues for multi-color smoke
 // ----------------------------------------------------------------
 vector qualColor(string quality)
 {
-    if (quality == "mids")   return <1.0, 0.85, 0.2>;
-    if (quality == "loud")   return <0.2, 0.85, 0.3>;
-    if (quality == "exotic") return <0.7, 0.3,  1.0>;
-    return <0.7, 0.6, 0.45>; // reggie
+    if (quality == "mids")   return <0.3,  0.42, 0.18>;  // muted olive green
+    if (quality == "loud")   return <0.0,  0.6,  1.0>;   // vivid sky blue
+    if (quality == "exotic") return <1.0,  0.1,  0.8>;   // vivid magenta/pink
+    return <0.38, 0.28, 0.16>; // reggie - dull brown
+}
+
+// ----------------------------------------------------------------
+// Quality end color - used for particle interpolation so smoke
+// shifts through multiple hues on loud/exotic, stays dull on lower.
+// ----------------------------------------------------------------
+vector qualColorEnd(string quality)
+{
+    if (quality == "mids")   return <0.38, 0.40, 0.30>;  // grey-green
+    if (quality == "loud")   return <0.0,  1.0,  0.55>;  // cyan-green
+    if (quality == "exotic") return <0.15, 0.85, 1.0>;   // bright cyan
+    return <0.48, 0.46, 0.42>; // reggie - ashy grey
 }
 
 // ----------------------------------------------------------------
@@ -63,7 +77,7 @@ startAmbientSmoke()
             PSYS_PART_EMISSIVE_MASK,
         PSYS_SRC_PATTERN,           PSYS_SRC_PATTERN_ANGLE_CONE,
         PSYS_PART_START_COLOR,      col,
-        PSYS_PART_END_COLOR,        <0.9, 0.9, 0.9>,
+        PSYS_PART_END_COLOR,        qualColorEnd(g_quality),
         PSYS_PART_START_ALPHA,      0.45,
         PSYS_PART_END_ALPHA,        0.0,
         PSYS_PART_START_SCALE,      <0.04, 0.04, 0.0>,
@@ -131,7 +145,7 @@ playPassEffect(key fromKey, key toKey)
         PSYS_SRC_PATTERN,           PSYS_SRC_PATTERN_ANGLE_CONE,
         PSYS_SRC_TARGET_KEY,        toKey,
         PSYS_PART_START_COLOR,      col,
-        PSYS_PART_END_COLOR,        <1.0, 1.0, 1.0>,
+        PSYS_PART_END_COLOR,        qualColorEnd(g_quality),
         PSYS_PART_START_ALPHA,      0.8,
         PSYS_PART_END_ALPHA,        0.0,
         PSYS_PART_START_SCALE,      <0.03, 0.03, 0.0>,
