@@ -114,8 +114,9 @@ default
         // Object was just rezzed  -  listen on start_param channel
         // for attach instructions from the jar's attach script
         g_listenChan  = llGetStartParameter();
-        if (g_listenChan != 0)
+        if (g_listenChan < 0)
         {
+            // Negative: listen channel from the jar's attach script
             g_listenAttach = llListen(g_listenChan, "", NULL_KEY, "");
             // Confirm we're listening
             llRegionSay(g_listenChan, "TC_ATTACH_CONFIRMED");
@@ -124,8 +125,14 @@ default
         }
         else
         {
-            // No channel  -  probably rezzed manually for testing
-            // Just attach to owner's hand
+            // Zero = manual test rez; positive = smoke duration passed by HUD
+            if (g_listenChan > 0)
+            {
+                g_smokeDuration = g_listenChan;
+                if (g_listenChan >= 600)     g_itemType = "blunt";
+                else if (g_listenChan >= 420) g_itemType = "spliff";
+                else                          g_itemType = "joint";
+            }
             g_targetAvatar = llGetOwner();
             attachToHand();
         }
