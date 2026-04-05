@@ -94,16 +94,16 @@ attachToHand()
     // Since the jar is owned by the avatar and rezzes the object,
     // the rezzed object is owned by the jar owner (= the avatar).
 
-    llAttachToAvatarTemp(ATTACH_RHAND); // right hand attachment point
-    g_attached = TRUE;
-    startSmokeParticles();
-    llPlaySound("smoke_inhale", 0.4);
+    // Notify now so the player gets immediate feedback;
+    // position/particles/timer are started inside the attach() event
+    // once SL confirms the object has actually landed on the hand.
     llRegionSayTo(g_targetAvatar, 0,
         "Lit. " + g_itemType + " will last " +
         (string)(g_smokeDuration / 60) + " minutes.");
 
-    // Start the detach countdown
-    llSetTimerEvent((float)g_smokeDuration);
+    llAttachToAvatarTemp(ATTACH_RHAND); // right hand attachment point
+    // g_attached, particles, and timer are set in the attach() event
+    // to guarantee the object is on the hand before effects start.
 }
 
 // ================================================================
@@ -148,6 +148,13 @@ default
         }
         else
         {
+            // Snap to the attachment point so the object doesn't appear
+            // at the world-space offset it had when rezzed.
+            // <0, 90, 0> degrees orients most joint/blunt meshes naturally
+            // along the hand's forward axis; adjust if your mesh needs it.
+            llSetLocalRot(llEuler2Rot(<0.0, 90.0, 0.0> * DEG_TO_RAD));
+            llSetPos(ZERO_VECTOR);
+
             // Request PERMISSION_ATTACH so llDetachFromAvatar() works later
             llRequestPermissions(attachedTo, PERMISSION_ATTACH);
 
