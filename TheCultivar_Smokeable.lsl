@@ -1,6 +1,6 @@
 // ================================================================
 // THE CULTIVAR  -  Smokeable Object Script
-// Version: 2.1
+// Version: 2.2
 // Lives inside: TC_Smoke_Joint_Reggie, TC_Smoke_Joint_Mids,
 //               TC_Smoke_Joint_Loud, TC_Smoke_Joint_Exotic,
 //               TC_Smoke_Blunt_Reggie, TC_Smoke_Blunt_Mids, etc.
@@ -11,10 +11,12 @@
 // This script:
 //   1. Parses type+quality from its own object name on rez
 //   2. Derives the owner's HUD private channel
-//   3. After a short delay, temp-attaches to ATTACH_RHAND
-//   4. Sends TC_SMOKE_ATTACH_READY to HUD after attaching
-//   5. Runs smoke particles and a touch dialog
-//   6. Auto-detaches and notifies HUD (TC_SMOKE_FINISHED) when done
+//   3. Requests PERMISSION_ATTACH from owner
+//   4. On permission granted, temp-attaches to ATTACH_RHAND
+//   5. After attach, re-requests permissions for later detach
+//   6. Sends TC_SMOKE_ATTACH_READY to HUD
+//   7. Runs smoke particles and a touch dialog
+//   8. Auto-detaches and notifies HUD (TC_SMOKE_FINISHED) when done
 //
 // No jar-protocol logic (TC_ATTACH_TO) — the HUD_Comms script
 // rezzes this object and it self-attaches. HUD_Comms handles
@@ -25,8 +27,7 @@ string  g_itemType      = "joint";
 string  g_quality       = "reggie";
 integer g_smokeDuration = 300;
 integer g_attached      = FALSE;
-integer g_attachRetries = 0;
-integer g_hasAttachPerm = FALSE;
+integer g_hasDetachPerm = FALSE;
 integer g_hudChannel    = 0;
 integer g_lisHUD        = 0;
 integer g_lisDialog     = 0;
@@ -52,7 +53,6 @@ list parseItemName(string objName)
 {
     if (llSubStringIndex(objName, "TC_Smoke_") != 0)
         return ["joint", "reggie"];
-    // Strip "TC_Smoke_" prefix (9 chars)
     string rest = llGetSubString(objName, 9, -1);
     list   parts = llParseString2List(rest, ["_"], []);
     if (llGetListLength(parts) < 2)
@@ -91,7 +91,6 @@ integer getSmokeDuration(string itemType, string quality)
         if (quality == "exotic") return 1200;
         return 600;
     }
-    // joint (default)
     if (quality == "mids")   return 360;
     if (quality == "loud")   return 480;
     if (quality == "exotic") return 600;
@@ -106,7 +105,7 @@ vector qualityColor(string quality)
     if (quality == "mids")   return <0.9, 0.85, 0.5>;
     if (quality == "loud")   return <0.6, 0.9,  0.5>;
     if (quality == "exotic") return <0.8, 0.6,  1.0>;
-    return <0.75, 0.7, 0.6>; // reggie — pale grey-tan
+    return <0.75, 0.7, 0.6>;
 }
 
 // ----------------------------------------------------------------
@@ -147,8 +146,8 @@ smokeFinished()
     if (g_lisHUD)    { llListenRemove(g_lisHUD);    g_lisHUD    = 0; }
     if (g_lisDialog) { llListenRemove(g_lisDialog); g_lisDialog = 0; }
     llSay(g_hudChannel, "TC_SMOKE_FINISHED");
-    if (g_hasAttachPerm)
-        llDetachFromAvatar(); // llDie() fires in attach(NULL_KEY)
+    if (g_hasDetachPerm)
+        llDetachFromAvatar();
     else
         llDie();
 }
@@ -184,25 +183,50 @@ default
         g_hudChannel = deriveHUDChannel(llGetOwner());
 
         llOwnerSay("DEBUG PROP: state_entry " + llGetObjectName() +
-                   " owner=" + (string)llGetOwner() +
-                   " hudChan=" + (string)g_hudChannel);
+                   " owner=" + (string)llGetOwner());
     }
 
     on_rez(integer start_param)
     {
-        // Object has been rezzed in-world — start polling for agent context
-        g_attachRetries = 0;
-        llOwnerSay("DEBUG PROP: on_rez fired, polling for agent context");
-        llSetTimerEvent(0.25);
+        // Request PERMISSION_ATTACH from owner before attempting temp-attach.
+        // llAttachToAvatarTemp requires this permission to be granted first.
+        llOwnerSay("DEBUG PROP: on_rez, requesting PERMISSION_ATTACH");
+        llRequestPermissions(llGetOwner(), PERMISSION_ATTACH);
+
+        // Safety timeout — if permissions + attach don't complete in 10s, die
+        llSetTimerEvent(10.0);
+    }
+
+    run_time_permissions(integer perm)
+    {
+        if (perm & PERMISSION_ATTACH)
+        {
+            if (!g_attached)
+            {
+                // Pre-attach permission granted — now temp-attach to right hand
+                llOwnerSay("DEBUG PROP: PERMISSION_ATTACH granted, calling llAttachToAvatarTemp");
+                llAttachToAvatarTemp(ATTACH_RHAND);
+            }
+            else
+            {
+                // Post-attach permission re-grant — we can now detach by script
+                llOwnerSay("DEBUG PROP: post-attach PERMISSION_ATTACH granted");
+                g_hasDetachPerm = TRUE;
+            }
+        }
+        else
+        {
+            llOwnerSay("DEBUG PROP: PERMISSION_ATTACH denied, dying");
+            llDie();
+        }
     }
 
     attach(key attachedTo)
     {
-        llOwnerSay("DEBUG PROP: attach event attachedTo=" + (string)attachedTo);
+        llOwnerSay("DEBUG PROP: attach event, attachedTo=" + (string)attachedTo);
 
         if (attachedTo == NULL_KEY)
         {
-            // Detached — clean up and die
             llParticleSystem([]);
             llDie();
         }
@@ -212,7 +236,9 @@ default
             llSetLocalRot(llEuler2Rot(<0.0, 90.0, 0.0> * DEG_TO_RAD));
             llSetPos(<0.02, 0.0, 0.0>);
 
-            // Request PERMISSION_ATTACH so llDetachFromAvatar() works later
+            // Re-request PERMISSION_ATTACH after attach for later detach.
+            // Ownership context changes after temp-attach, so the pre-attach
+            // grant may not carry over for llDetachFromAvatar().
             llRequestPermissions(attachedTo, PERMISSION_ATTACH);
 
             if (!g_attached)
@@ -220,7 +246,6 @@ default
                 g_attached = TRUE;
                 llSetTimerEvent(0.0);
 
-                // Announce to HUD: we are on the avatar and ready
                 llOwnerSay("DEBUG PROP: sending TC_SMOKE_ATTACH_READY on chan " +
                            (string)g_hudChannel);
                 llSay(g_hudChannel,
@@ -236,12 +261,6 @@ default
                 llSetTimerEvent((float)g_smokeDuration);
             }
         }
-    }
-
-    run_time_permissions(integer perm)
-    {
-        if (perm & PERMISSION_ATTACH)
-            g_hasAttachPerm = TRUE;
     }
 
     touch_start(integer nd)
@@ -261,45 +280,14 @@ default
 
     timer()
     {
-        if (g_attached)
+        if (!g_attached)
         {
-            // Smoke duration expired naturally
-            smokeFinished();
-            return;
-        }
-
-        // Not yet attached — poll for agent context then attempt attach
-        key owner = llGetOwner();
-
-        if (llGetAgentSize(owner) != ZERO_VECTOR)
-        {
-            // Owner recognized as in-world agent — attach now
-            llOwnerSay("DEBUG PROP: agent confirmed (retry " +
-                       (string)g_attachRetries + "), attaching");
-            llAttachToAvatarTemp(ATTACH_RHAND);
-            // Give attach() 5 seconds to fire, then give up
-            llSetTimerEvent(5.0);
-            // Use high retry count to mark that we've attempted
-            g_attachRetries = 100;
-        }
-        else if (g_attachRetries >= 100)
-        {
-            // Already attempted attach, but attach() never fired
-            llOwnerSay("DEBUG PROP: attach never completed, dying");
+            llOwnerSay("DEBUG PROP: timed out waiting for attach, dying");
             llDie();
         }
         else
         {
-            g_attachRetries += 1;
-            llOwnerSay("DEBUG PROP: waiting for agent context (attempt " +
-                       (string)g_attachRetries + ")");
-            if (g_attachRetries > 20)
-            {
-                // 20 * 0.25s = 5 seconds — agent never appeared, give up
-                llOwnerSay("DEBUG PROP: owner never became agent, dying");
-                llDie();
-            }
-            // Keep polling at 0.25s
+            smokeFinished();
         }
     }
 
