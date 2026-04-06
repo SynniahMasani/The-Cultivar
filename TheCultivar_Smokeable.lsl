@@ -1,6 +1,6 @@
 // ================================================================
 // THE CULTIVAR  -  Smokeable Object Script
-// Version: 2.0
+// Version: 2.1
 // Lives inside: TC_Smoke_Joint_Reggie, TC_Smoke_Joint_Mids,
 //               TC_Smoke_Joint_Loud, TC_Smoke_Joint_Exotic,
 //               TC_Smoke_Blunt_Reggie, TC_Smoke_Blunt_Mids, etc.
@@ -11,7 +11,7 @@
 // This script:
 //   1. Parses type+quality from its own object name on rez
 //   2. Derives the owner's HUD private channel
-//   3. Temp-attaches to ATTACH_RHAND immediately in state_entry
+//   3. After a short delay, temp-attaches to ATTACH_RHAND
 //   4. Sends TC_SMOKE_ATTACH_READY to HUD after attaching
 //   5. Runs smoke particles and a touch dialog
 //   6. Auto-detaches and notifies HUD (TC_SMOKE_FINISHED) when done
@@ -25,6 +25,7 @@ string  g_itemType      = "joint";
 string  g_quality       = "reggie";
 integer g_smokeDuration = 300;
 integer g_attached      = FALSE;
+integer g_attachAttempted = FALSE;
 integer g_hasAttachPerm = FALSE;
 integer g_hudChannel    = 0;
 integer g_lisHUD        = 0;
@@ -185,14 +186,13 @@ default
         llOwnerSay("DEBUG PROP: state_entry " + llGetObjectName() +
                    " owner=" + (string)llGetOwner() +
                    " hudChan=" + (string)g_hudChannel);
+    }
 
-        // Attach to right hand immediately — jar rezzed us near the owner
-        // so llAttachToAvatarTemp is valid at this point.
-        llOwnerSay("DEBUG PROP: calling llAttachToAvatarTemp ATTACH_RHAND");
-        llAttachToAvatarTemp(ATTACH_RHAND);
-
-        // Safety timeout in case attach event never fires
-        llSetTimerEvent(5.0);
+    on_rez(integer start_param)
+    {
+        // Object has been rezzed in-world — delay attach to let sim settle
+        llOwnerSay("DEBUG PROP: on_rez fired, starting 0.5s attach delay");
+        llSetTimerEvent(0.5);
     }
 
     attach(key attachedTo)
@@ -262,9 +262,21 @@ default
     {
         if (!g_attached)
         {
-            // Safety: attach never completed within 5 seconds
-            llOwnerSay("DEBUG PROP: attach never completed, dying");
-            llDie();
+            if (!g_attachAttempted)
+            {
+                // First timer: delayed attach attempt
+                g_attachAttempted = TRUE;
+                llOwnerSay("DEBUG PROP: calling llAttachToAvatarTemp ATTACH_RHAND (delayed)");
+                llAttachToAvatarTemp(ATTACH_RHAND);
+                // Safety timeout — if attach() doesn't fire within 5s, die
+                llSetTimerEvent(5.0);
+            }
+            else
+            {
+                // Second timer: attach never completed
+                llOwnerSay("DEBUG PROP: attach never completed after delay, dying");
+                llDie();
+            }
         }
         else
         {
