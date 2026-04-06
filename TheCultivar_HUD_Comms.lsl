@@ -265,7 +265,7 @@ default
                     llGetObjectDetails(g_ownerKey, [OBJECT_POS]), 0);
                 if (ownerPos == ZERO_VECTOR)
                     ownerPos = llGetPos();
-                // Rez just above the owner; smokeable self-attaches to ATTACH_MOUTH
+                // Rez just above the owner; smokeable self-attaches to ATTACH_RHAND
                 llRezObject(propName, ownerPos + <0.0, 0.0, 0.3>,
                             ZERO_VECTOR, ZERO_ROTATION, 0);
             }
