@@ -259,13 +259,21 @@ default
             if (llGetInventoryType(propName) != INVENTORY_OBJECT)
                 propName = "TC_Smoke_Joint_Reggie";
 
+            llOwnerSay("DEBUG HUD: propName=" + propName +
+                       " invType=" + (string)llGetInventoryType(propName));
+
             if (llGetInventoryType(propName) == INVENTORY_OBJECT)
             {
                 vector ownerPos = llList2Vector(
                     llGetObjectDetails(g_ownerKey, [OBJECT_POS]), 0);
+                llOwnerSay("DEBUG HUD: ownerPos=" + (string)ownerPos);
                 if (ownerPos == ZERO_VECTOR)
+                {
+                    llOwnerSay("DEBUG HUD: ownerPos was ZERO_VECTOR, using llGetPos fallback");
                     ownerPos = llGetPos();
+                }
                 // Rez just above the owner; smokeable self-attaches to ATTACH_RHAND
+                llOwnerSay("DEBUG HUD: rezzing at " + (string)(ownerPos + <0.0, 0.0, 0.3>));
                 llRezObject(propName, ownerPos + <0.0, 0.0, 0.3>,
                             ZERO_VECTOR, ZERO_ROTATION, 0);
             }

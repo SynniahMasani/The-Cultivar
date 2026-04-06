@@ -182,8 +182,13 @@ default
         // Derive owner's HUD channel
         g_hudChannel = deriveHUDChannel(llGetOwner());
 
+        llOwnerSay("DEBUG PROP: state_entry " + llGetObjectName() +
+                   " owner=" + (string)llGetOwner() +
+                   " hudChan=" + (string)g_hudChannel);
+
         // Attach to right hand immediately — jar rezzed us near the owner
         // so llAttachToAvatarTemp is valid at this point.
+        llOwnerSay("DEBUG PROP: calling llAttachToAvatarTemp ATTACH_RHAND");
         llAttachToAvatarTemp(ATTACH_RHAND);
 
         // Safety timeout in case attach event never fires
@@ -192,6 +197,8 @@ default
 
     attach(key attachedTo)
     {
+        llOwnerSay("DEBUG PROP: attach event attachedTo=" + (string)attachedTo);
+
         if (attachedTo == NULL_KEY)
         {
             // Detached — clean up and die
@@ -213,6 +220,8 @@ default
                 llSetTimerEvent(0.0);
 
                 // Announce to HUD: we are on the avatar and ready
+                llOwnerSay("DEBUG PROP: sending TC_SMOKE_ATTACH_READY on chan " +
+                           (string)g_hudChannel);
                 llSay(g_hudChannel,
                     "TC_SMOKE_ATTACH_READY|" + g_itemType + "|" + g_quality);
 
@@ -254,6 +263,7 @@ default
         if (!g_attached)
         {
             // Safety: attach never completed within 5 seconds
+            llOwnerSay("DEBUG PROP: attach never completed, dying");
             llDie();
         }
         else
