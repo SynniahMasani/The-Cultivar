@@ -25,7 +25,7 @@ string  g_itemType      = "joint";
 string  g_quality       = "reggie";
 integer g_smokeDuration = 300;
 integer g_attached      = FALSE;
-integer g_attachAttempted = FALSE;
+integer g_attachRetries = 0;
 integer g_hasAttachPerm = FALSE;
 integer g_hudChannel    = 0;
 integer g_lisHUD        = 0;
@@ -190,9 +190,10 @@ default
 
     on_rez(integer start_param)
     {
-        // Object has been rezzed in-world — delay attach to let sim settle
-        llOwnerSay("DEBUG PROP: on_rez fired, starting 0.5s attach delay");
-        llSetTimerEvent(0.5);
+        // Object has been rezzed in-world — start polling for agent context
+        g_attachRetries = 0;
+        llOwnerSay("DEBUG PROP: on_rez fired, polling for agent context");
+        llSetTimerEvent(0.25);
     }
 
     attach(key attachedTo)
@@ -260,28 +261,45 @@ default
 
     timer()
     {
-        if (!g_attached)
-        {
-            if (!g_attachAttempted)
-            {
-                // First timer: delayed attach attempt
-                g_attachAttempted = TRUE;
-                llOwnerSay("DEBUG PROP: calling llAttachToAvatarTemp ATTACH_RHAND (delayed)");
-                llAttachToAvatarTemp(ATTACH_RHAND);
-                // Safety timeout — if attach() doesn't fire within 5s, die
-                llSetTimerEvent(5.0);
-            }
-            else
-            {
-                // Second timer: attach never completed
-                llOwnerSay("DEBUG PROP: attach never completed after delay, dying");
-                llDie();
-            }
-        }
-        else
+        if (g_attached)
         {
             // Smoke duration expired naturally
             smokeFinished();
+            return;
+        }
+
+        // Not yet attached — poll for agent context then attempt attach
+        key owner = llGetOwner();
+
+        if (llGetAgentSize(owner) != ZERO_VECTOR)
+        {
+            // Owner recognized as in-world agent — attach now
+            llOwnerSay("DEBUG PROP: agent confirmed (retry " +
+                       (string)g_attachRetries + "), attaching");
+            llAttachToAvatarTemp(ATTACH_RHAND);
+            // Give attach() 5 seconds to fire, then give up
+            llSetTimerEvent(5.0);
+            // Use high retry count to mark that we've attempted
+            g_attachRetries = 100;
+        }
+        else if (g_attachRetries >= 100)
+        {
+            // Already attempted attach, but attach() never fired
+            llOwnerSay("DEBUG PROP: attach never completed, dying");
+            llDie();
+        }
+        else
+        {
+            g_attachRetries += 1;
+            llOwnerSay("DEBUG PROP: waiting for agent context (attempt " +
+                       (string)g_attachRetries + ")");
+            if (g_attachRetries > 20)
+            {
+                // 20 * 0.25s = 5 seconds — agent never appeared, give up
+                llOwnerSay("DEBUG PROP: owner never became agent, dying");
+                llDie();
+            }
+            // Keep polling at 0.25s
         }
     }
 
