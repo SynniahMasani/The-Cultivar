@@ -164,8 +164,14 @@ default
             // at the world-space offset it had when rezzed.
             // <0, 90, 0> degrees orients most joint/blunt meshes naturally
             // along the hand's forward axis; adjust if your mesh needs it.
+            // NOTE: llSetLocalPos (not llSetPos) is required here — llSetPos
+            // uses region/world-space coordinates even on attached objects,
+            // so ZERO_VECTOR would pin it to the sim corner and it would not
+            // track the hand bone during animations.  llSetLocalPos uses the
+            // attachment point's own local coordinate space, so the object
+            // moves with the bone correctly.
             llSetLocalRot(llEuler2Rot(<0.0, 90.0, 0.0> * DEG_TO_RAD));
-            llSetPos(ZERO_VECTOR);
+            llSetLocalPos(ZERO_VECTOR);
 
             // Request PERMISSION_ATTACH so llDetachFromAvatar() works later
             llRequestPermissions(attachedTo, PERMISSION_ATTACH);
