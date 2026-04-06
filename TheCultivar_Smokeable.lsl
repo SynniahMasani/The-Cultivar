@@ -1,38 +1,101 @@
 // ================================================================
 // THE CULTIVAR  -  Smokeable Object Script
-// Version: 1.1
+// Version: 2.0
 // Lives inside: TC_Smoke_Joint_Reggie, TC_Smoke_Joint_Mids,
 //               TC_Smoke_Joint_Loud, TC_Smoke_Joint_Exotic,
-//               TC_Smoke_Blunt_Reggie, etc.
+//               TC_Smoke_Blunt_Reggie, TC_Smoke_Blunt_Mids, etc.
 //
-// This script handles the object that gets temp-attached to the
-// player's right hand. It:
-//   - Listens for the attach instruction on start_param channel
-//   - Attaches itself to the smoker's right hand
-//   - Runs a smoke particle effect and sound
-//   - Auto-detaches after ATTACH_DURATION seconds
-//   - Self-destructs cleanly
+// Name format: TC_Smoke_[Type]_[Quality]
+//   e.g. TC_Smoke_Joint_Loud, TC_Smoke_Blunt_Exotic
 //
-// The object should have these permissions set:
-//   - Copy : YES (needed for the jar to give it out)
-//   - Transfer : YES
-//   - Modify : NO (protect your mesh/textures)
+// This script:
+//   1. Parses type+quality from its own object name on rez
+//   2. Derives the owner's HUD private channel
+//   3. Temp-attaches to ATTACH_MOUTH immediately in state_entry
+//   4. Sends TC_SMOKE_ATTACH_READY to HUD after attaching
+//   5. Runs smoke particles and a touch dialog
+//   6. Auto-detaches and notifies HUD (TC_SMOKE_FINISHED) when done
 //
-// PARTICLE SYSTEM:
-//   Subtle, quality-aware smoke that reacts to avatar movement
-//   by using PSYS_SRC_PATTERN_ANGLE to emit forward from the tip
+// No jar-protocol logic (TC_ATTACH_TO) — the HUD_Comms script
+// rezzes this object and it self-attaches. HUD_Comms handles
+// TC_SMOKE_ATTACH_READY and TC_SMOKE_FINISHED on the private channel.
 // ================================================================
 
-integer g_listenChan  = 0;
-integer g_listenAttach;
-key     g_targetAvatar = NULL_KEY;
-integer g_attachDuration = 120;
-string  g_itemType = "joint";
+string  g_itemType      = "joint";
+string  g_quality       = "reggie";
 integer g_smokeDuration = 300;
-string  g_strain  = "";
-string  g_quality = "reggie";
-integer g_attached = FALSE;
+integer g_attached      = FALSE;
 integer g_hasAttachPerm = FALSE;
+integer g_hudChannel    = 0;
+integer g_lisHUD        = 0;
+integer g_lisDialog     = 0;
+
+integer DCHAN_PUFF = -130001;
+
+// ----------------------------------------------------------------
+// Derive the same private channel the HUD uses
+// ----------------------------------------------------------------
+integer deriveHUDChannel(key ownerID)
+{
+    string h = llGetSubString((string)ownerID, 0, 6);
+    h = llDumpList2String(llParseString2List(h, ["-"], []), "");
+    return (integer)("0x" + h) * -1;
+}
+
+// ----------------------------------------------------------------
+// Parse type and quality from object name
+// TC_Smoke_Joint_Loud  -> ["joint", "loud"]
+// TC_Smoke_Blunt_Exotic -> ["blunt", "exotic"]
+// ----------------------------------------------------------------
+list parseItemName(string objName)
+{
+    if (llSubStringIndex(objName, "TC_Smoke_") != 0)
+        return ["joint", "reggie"];
+    // Strip "TC_Smoke_" prefix (9 chars)
+    string rest = llGetSubString(objName, 9, -1);
+    list   parts = llParseString2List(rest, ["_"], []);
+    if (llGetListLength(parts) < 2)
+        return ["joint", "reggie"];
+    return [llToLower(llList2String(parts, 0)),
+            llToLower(llList2String(parts, 1))];
+}
+
+// ----------------------------------------------------------------
+// Duration table — seconds per type+quality
+//   joint:  reggie=300  mids=360  loud=480  exotic=600
+//   blunt:  reggie=480  mids=600  loud=720  exotic=900
+//   spliff: reggie=240  mids=300  loud=360  exotic=480
+//   edible: reggie=600  mids=720  loud=900  exotic=1200
+// ----------------------------------------------------------------
+integer getSmokeDuration(string itemType, string quality)
+{
+    if (itemType == "blunt")
+    {
+        if (quality == "mids")   return 600;
+        if (quality == "loud")   return 720;
+        if (quality == "exotic") return 900;
+        return 480;
+    }
+    if (itemType == "spliff")
+    {
+        if (quality == "mids")   return 300;
+        if (quality == "loud")   return 360;
+        if (quality == "exotic") return 480;
+        return 240;
+    }
+    if (itemType == "edible")
+    {
+        if (quality == "mids")   return 720;
+        if (quality == "loud")   return 900;
+        if (quality == "exotic") return 1200;
+        return 600;
+    }
+    // joint (default)
+    if (quality == "mids")   return 360;
+    if (quality == "loud")   return 480;
+    if (quality == "exotic") return 600;
+    return 300;
+}
 
 // ----------------------------------------------------------------
 // Quality-specific smoke particle color
@@ -42,11 +105,11 @@ vector qualityColor(string quality)
     if (quality == "mids")   return <0.9, 0.85, 0.5>;
     if (quality == "loud")   return <0.6, 0.9,  0.5>;
     if (quality == "exotic") return <0.8, 0.6,  1.0>;
-    return <0.75, 0.7, 0.6>; // reggie  -  pale grey-tan
+    return <0.75, 0.7, 0.6>; // reggie — pale grey-tan
 }
 
 // ----------------------------------------------------------------
-// Smoke particle system  -  tip of the joint/blunt
+// Smoke particle system
 // ----------------------------------------------------------------
 startSmokeParticles()
 {
@@ -55,55 +118,47 @@ startSmokeParticles()
         PSYS_PART_FLAGS,
             PSYS_PART_INTERP_COLOR_MASK |
             PSYS_PART_INTERP_SCALE_MASK |
-            PSYS_PART_WIND_MASK |           // reacts to virtual wind
+            PSYS_PART_WIND_MASK |
             PSYS_PART_EMISSIVE_MASK,
-        PSYS_SRC_PATTERN,       PSYS_SRC_PATTERN_ANGLE_CONE,
-        PSYS_PART_START_COLOR,  col,
-        PSYS_PART_END_COLOR,    <0.95, 0.95, 0.95>,
-        PSYS_PART_START_ALPHA,  0.55,
-        PSYS_PART_END_ALPHA,    0.0,
-        PSYS_PART_START_SCALE,  <0.02, 0.02, 0.0>,
-        PSYS_PART_END_SCALE,    <0.08, 0.08, 0.0>,
-        PSYS_PART_MAX_AGE,      5.0,
-        PSYS_SRC_BURST_RATE,    0.2,
+        PSYS_SRC_PATTERN,          PSYS_SRC_PATTERN_ANGLE_CONE,
+        PSYS_PART_START_COLOR,     col,
+        PSYS_PART_END_COLOR,       <0.95, 0.95, 0.95>,
+        PSYS_PART_START_ALPHA,     0.55,
+        PSYS_PART_END_ALPHA,       0.0,
+        PSYS_PART_START_SCALE,     <0.02, 0.02, 0.0>,
+        PSYS_PART_END_SCALE,       <0.08, 0.08, 0.0>,
+        PSYS_PART_MAX_AGE,         5.0,
+        PSYS_SRC_BURST_RATE,       0.2,
         PSYS_SRC_BURST_PART_COUNT, 2,
         PSYS_SRC_BURST_SPEED_MIN,  0.02,
         PSYS_SRC_BURST_SPEED_MAX,  0.05,
-        PSYS_SRC_ANGLE_BEGIN,   0.0,
-        PSYS_SRC_ANGLE_END,     0.15     // tight cone from tip
+        PSYS_SRC_ANGLE_BEGIN,      0.0,
+        PSYS_SRC_ANGLE_END,        0.15
     ]);
 }
 
 // ----------------------------------------------------------------
-// Attempt temp-attach to target avatar's right hand
+// Notify HUD and detach
 // ----------------------------------------------------------------
-attachToHand()
+smokeFinished()
 {
-    // llAttachToAvatarTemp requires the script to be owned by the target
-    // This only works after the object is transferred to them
-    // The rez-then-attach flow: jar rezzes near avatar, object
-    // changes owner on rez (if jar owner == object owner and
-    // avatar is within range), then attaches.
-    //
-    // Practical approach in SL: use llAttachToAvatarTemp() which
-    // attaches without needing to go through inventory.
-    // This requires the avatar to have "Allow Scripts to Attach"
-    // enabled (on by default in most regions).
-    //
-    // The object must be owned by the attaching avatar for this to work.
-    // Since the jar is owned by the avatar and rezzes the object,
-    // the rezzed object is owned by the jar owner (= the avatar).
+    llParticleSystem([]);
+    if (g_lisHUD)    { llListenRemove(g_lisHUD);    g_lisHUD    = 0; }
+    if (g_lisDialog) { llListenRemove(g_lisDialog); g_lisDialog = 0; }
+    llSay(g_hudChannel, "TC_SMOKE_FINISHED");
+    if (g_hasAttachPerm)
+        llDetachFromAvatar(); // llDie() fires in attach(NULL_KEY)
+    else
+        llDie();
+}
 
-    // Notify now so the player gets immediate feedback;
-    // position/particles/timer are started inside the attach() event
-    // once SL confirms the object has actually landed on the hand.
-    llRegionSayTo(g_targetAvatar, 0,
-        "Lit. " + g_itemType + " will last " +
-        (string)(g_smokeDuration / 60) + " minutes.");
-
-    llAttachToAvatarTemp(ATTACH_RHAND); // right hand attachment point
-    // g_attached, particles, and timer are set in the attach() event
-    // to guarantee the object is on the hand before effects start.
+// ----------------------------------------------------------------
+// Give a copy to target and detach from current wearer
+// ----------------------------------------------------------------
+passSmokeable(key target)
+{
+    llGiveInventory(target, llGetObjectName());
+    smokeFinished();
 }
 
 // ================================================================
@@ -112,76 +167,62 @@ default
     state_entry()
     {
         // Guard: only run inside a properly named smokeable object
-        // (TC_Smoke_Joint_*, TC_Smoke_Blunt_*, etc.).  If this script
-        // is accidentally present in the session object or any other
-        // non-smokeable prop it must NOT fire the attach logic — that
-        // would attempt to temp-attach the wrong object to the avatar's
-        // hand, causing it to "pop up" at unexpected world positions.
         if (llSubStringIndex(llGetObjectName(), "TC_Smoke_") != 0)
         {
             llSetScriptState(llGetScriptName(), FALSE);
             return;
         }
 
-        // Object was just rezzed  -  listen on start_param channel
-        // for attach instructions from the jar's attach script
-        g_listenChan  = llGetStartParameter();
-        if (g_listenChan < 0)
-        {
-            // Negative: listen channel from the jar's attach script
-            g_listenAttach = llListen(g_listenChan, "", NULL_KEY, "");
-            // Confirm we're listening
-            llRegionSay(g_listenChan, "TC_ATTACH_CONFIRMED");
-            // Safety timeout  -  die if no instructions arrive
-            llSetTimerEvent(10.0);
-        }
-        else
-        {
-            // Zero = manual test rez; positive = smoke duration passed by HUD
-            if (g_listenChan > 0)
-            {
-                g_smokeDuration = g_listenChan;
-                if (g_listenChan >= 600)     g_itemType = "blunt";
-                else if (g_listenChan >= 420) g_itemType = "spliff";
-                else                          g_itemType = "joint";
-            }
-            g_targetAvatar = llGetOwner();
-            attachToHand();
-        }
+        // Parse type+quality from object name
+        list parsed     = parseItemName(llGetObjectName());
+        g_itemType      = llList2String(parsed, 0);
+        g_quality       = llList2String(parsed, 1);
+        g_smokeDuration = getSmokeDuration(g_itemType, g_quality);
+
+        // Derive owner's HUD channel
+        g_hudChannel = deriveHUDChannel(llGetOwner());
+
+        // Attach to mouth immediately — HUD_Comms rezzed us near the owner
+        // so llAttachToAvatarTemp is valid at this point.
+        llAttachToAvatarTemp(ATTACH_MOUTH);
+
+        // Safety timeout in case attach event never fires
+        llSetTimerEvent(5.0);
     }
 
     attach(key attachedTo)
     {
         if (attachedTo == NULL_KEY)
         {
-            // Detached  -  clean up and die
+            // Detached — clean up and die
             llParticleSystem([]);
             llDie();
         }
         else
         {
-            // Snap to the attachment point so the object doesn't appear
-            // at the world-space offset it had when rezzed.
-            // <0, 90, 0> degrees orients most joint/blunt meshes naturally
-            // along the hand's forward axis; adjust if your mesh needs it.
-            // NOTE: llSetLocalPos (not llSetPos) is required here — llSetPos
-            // uses region/world-space coordinates even on attached objects,
-            // so ZERO_VECTOR would pin it to the sim corner and it would not
-            // track the hand bone during animations.  llSetLocalPos uses the
-            // attachment point's own local coordinate space, so the object
-            // moves with the bone correctly.
-            llSetLocalRot(llEuler2Rot(<0.0, 90.0, 0.0> * DEG_TO_RAD));
+            // Snap to attachment point in local space
+            llSetLocalRot(llEuler2Rot(<0.0, 0.0, 0.0> * DEG_TO_RAD));
             llSetLocalPos(ZERO_VECTOR);
 
             // Request PERMISSION_ATTACH so llDetachFromAvatar() works later
             llRequestPermissions(attachedTo, PERMISSION_ATTACH);
 
-            // Just attached  -  start particles
             if (!g_attached)
             {
                 g_attached = TRUE;
+                llSetTimerEvent(0.0);
+
+                // Announce to HUD: we are on the avatar and ready
+                llSay(g_hudChannel,
+                    "TC_SMOKE_ATTACH_READY|" + g_itemType + "|" + g_quality);
+
                 startSmokeParticles();
                 llPlaySound("smoke_inhale", 0.4);
+
+                // Listen on HUD channel for early-end signal
+                g_lisHUD = llListen(g_hudChannel, "", NULL_KEY, "TC_END_SMOKE");
+
+                // Start smoke duration countdown
                 llSetTimerEvent((float)g_smokeDuration);
             }
         }
@@ -193,69 +234,55 @@ default
             g_hasAttachPerm = TRUE;
     }
 
+    touch_start(integer nd)
+    {
+        key toucher = llDetectedKey(0);
+        if (toucher != llGetOwner()) return;
+        if (g_lisDialog) { llListenRemove(g_lisDialog); g_lisDialog = 0; }
+        g_lisDialog = llListen(DCHAN_PUFF, "", toucher, "");
+        integer minsLeft = g_smokeDuration / 60;
+        llDialog(toucher,
+            "=== " + g_itemType + " ===\n" +
+            g_quality + " quality\n" +
+            "~" + (string)minsLeft + " min remaining",
+            ["Take a Puff", "Put It Out"],
+            DCHAN_PUFF);
+    }
+
     timer()
     {
         if (!g_attached)
         {
-            // Setup timeout  -  no attach instructions received
-            llListenRemove(g_listenAttach);
+            // Safety: attach never completed within 5 seconds
             llDie();
         }
         else
         {
-            // Attach duration expired  -  time to go
-            llParticleSystem([]);
-            if (g_hasAttachPerm)
-                llDetachFromAvatar(); // llDie() is called in attach(NULL_KEY)
-            else
-                llDie(); // permission not granted, die directly
+            // Smoke duration expired naturally
+            smokeFinished();
         }
     }
 
     listen(integer channel, string name, key id, string msg)
     {
-        if (channel != g_listenChan) return;
-
-        list   parts = llParseString2List(msg, ["|"], []);
-        string cmd   = llList2String(parts, 0);
-
-        if (cmd == "TC_ATTACH_TO")
+        if (channel == g_hudChannel && msg == "TC_END_SMOKE")
         {
-            // TC_ATTACH_TO|smokerKey|duration|strain|quality|itemType
-            g_targetAvatar   = (key)llList2String(parts, 1);
-            g_attachDuration = (integer)llList2String(parts, 2);
-            g_strain         = llList2String(parts, 3);
-            g_quality        = llList2String(parts, 4);
-            g_itemType       = llList2String(parts, 5);
-            if (g_itemType == "") g_itemType = "joint";
+            smokeFinished();
+            return;
+        }
 
-            if (g_itemType == "blunt")
-                g_smokeDuration = 600;
-            else if (g_itemType == "spliff")
-                g_smokeDuration = 420;
-            else
-                g_smokeDuration = 300;
-
-            llListenRemove(g_listenAttach);
-            llSetTimerEvent(0.0);
-
-            // Only the owner of this object can attach it
-            // The jar rezzed this so it's owned by the jar owner
-            // If the smoker IS the jar owner, attach directly
-            if (g_targetAvatar == llGetOwner())
+        if (channel == DCHAN_PUFF)
+        {
+            if (g_lisDialog) { llListenRemove(g_lisDialog); g_lisDialog = 0; }
+            if (msg == "Put It Out")
             {
-                attachToHand();
+                smokeFinished();
             }
-            else
+            else if (msg == "Take a Puff")
             {
-                // Smoker is someone else  -  temp-attach across owners isn't
-                // possible in LSL. WeedJar_Attach should have caught this
-                // case and called giveToInventory() before ever rezzing us,
-                // but as a safety fallback we give the object by name.
-                llGiveInventory(g_targetAvatar, llGetObjectName());
-                llRegionSayTo(g_targetAvatar, 0,
-                    "? Smokeable in your inventory  -  wear it to light up!");
-                llDie();
+                llOwnerSay("You take a deep puff of that " +
+                           g_quality + " " + g_itemType + ". Stay elevated.");
+                llPlaySound("smoke_inhale", 0.3);
             }
         }
     }

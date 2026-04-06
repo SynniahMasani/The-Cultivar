@@ -37,13 +37,15 @@
 integer TC_OBJECT_PING_CHAN = -111222333;
 integer HOVER_FADE_SECS = 30;
 
-integer DCHAN_OWNER   = -120001;
-integer DCHAN_VISITOR = -120002;
-integer DCHAN_ITEM    = -120003;
-integer DCHAN_STORE   = -120004;
+integer DCHAN_OWNER        = -120001;
+integer DCHAN_VISITOR      = -120002;
+integer DCHAN_ITEM         = -120003;
+integer DCHAN_STORE        = -120004;
+integer DCHAN_VISITOR_ITEM = -120005;
 
 integer g_listenOwner;
 integer g_listenVisitor;
+integer g_listenVisitorItem;       // picks specific item to take
 integer g_listenItem;
 integer g_listenRegister;
 integer g_listenStore;
@@ -66,6 +68,10 @@ integer CONT_STRIDE = 4;
 // Pending visitor request
 key     g_pendingVisitor  = NULL_KEY;
 string  g_pendingItemName = "";
+
+// Visitors who have already taken one item this session
+// Resets whenever inventory changes
+list    g_visitorsTaken = [];
 
 // Pending virtual store (waiting for TC_REMOVE_OK from HUD before committing)
 string  g_pendingVirtType    = "";
@@ -391,24 +397,37 @@ updateDisplay()
 updateHoverText()
 {
     integer count = llGetListLength(g_contents) / CONT_STRIDE;
-    string  lockStr = "";
-    if (g_locked) lockStr = " [locked]";
+
+    string lockLabel;
+    vector lockColor;
+    if (g_locked)
+    {
+        lockLabel = "[LOCKED]";
+        lockColor = <0.9, 0.4, 0.4>;
+    }
+    else
+    {
+        lockLabel = "[OPEN]";
+        lockColor = <0.4, 0.9, 0.4>;
+    }
+
     if (count == 0)
     {
-        llSetText("THE CULTIVAR\nStash Box [Empty]" + lockStr +
+        llSetText("THE CULTIVAR\nStash Box [Empty] " + lockLabel +
                   "\nOwner: " + g_ownerName,
-                  <0.5, 0.5, 0.5>, 0.8);
+                  lockColor, 0.8);
         return;
     }
 
     // Count by category
-    integer bags = 0; integer jars = 0;
+    integer bags = 0; integer jars = 0; integer virtuals = 0;
     integer i;
     for (i = 0; i < count; i++)
     {
         string cat = llList2String(g_contents, i * CONT_STRIDE + 3);
-        if (cat == "bag") bags++;
-        else if (cat == "jar") jars++;
+        if (cat == "bag")         bags++;
+        else if (cat == "jar")    jars++;
+        else if (cat == "virtual") virtuals++;
     }
 
     string contents = "";
@@ -425,10 +444,15 @@ updateHoverText()
         if (jars > 1) jarPl = "s";
         contents += (string)jars + " jar" + jarPl;
     }
+    if (virtuals > 0)
+    {
+        if (contents != "") contents += " | ";
+        contents += (string)virtuals + " stash'd";
+    }
 
-    llSetText("THE CULTIVAR\nStash Box" + lockStr + "\n" +
+    llSetText("THE CULTIVAR\nStash Box " + lockLabel + "\n" +
               contents + "\nOwner: " + g_ownerName,
-              <0.4, 0.9, 0.4>, 1.0);
+              lockColor, 1.0);
 }
 
 // ----------------------------------------------------------------
@@ -575,22 +599,72 @@ showVisitorMenu(key visitor)
     integer count = llGetListLength(g_contents) / CONT_STRIDE;
     string visItemPl = "";
     if (count != 1) visItemPl = "s";
+
+    // Count physical (giveable) items
+    integer physCount = 0;
+    integer i;
+    for (i = 0; i < count; i++)
+    {
+        string cat = llList2String(g_contents, i * CONT_STRIDE + 3);
+        if (cat == "bag" || cat == "jar") physCount++;
+    }
+
+    list buttons = ["View Contents", "Close"];
+    if (physCount > 0)
+        buttons = ["View Contents", "Take One", "Close"];
+
     llDialog(visitor,
         "=== " + g_ownerName + "'s Stash Box ===\n" +
         (string)count + " item" + visItemPl + " inside\n" +
-        "Touch to browse contents.",
-        ["View Contents", "Close"], DCHAN_VISITOR);
+        "Browse or grab something.",
+        buttons, DCHAN_VISITOR);
+    llSetTimerEvent(30.0);
+}
+
+// ----------------------------------------------------------------
+// VISITOR ITEM PICKER  -  shows physical items for visitor to take
+// ----------------------------------------------------------------
+showVisitorItemPicker(key visitor)
+{
+    integer count = llGetListLength(g_contents) / CONT_STRIDE;
+    list   buttons;
+    string menuText = "=== TAKE ONE ===\n" +
+                      g_ownerName + "'s stash\nChoose an item:\n\n";
+    integer i;
+    for (i = 0; i < count && llGetListLength(buttons) < 9; i++)
+    {
+        string cat    = llList2String(g_contents, i * CONT_STRIDE + 3);
+        string dname  = llList2String(g_contents, i * CONT_STRIDE + 1);
+        if (cat == "bag" || cat == "jar")
+        {
+            buttons  += [llGetSubString(dname, 0, 11)];
+            menuText += dname + "\n";
+        }
+    }
+    if (llGetListLength(buttons) == 0)
+    {
+        llRegionSayTo(visitor, 0, "Nothing left to take.");
+        return;
+    }
+    buttons += ["Cancel"];
+
+    g_pendingVisitor = visitor;
+    if (g_listenVisitorItem) llListenRemove(g_listenVisitorItem);
+    // Key the listener to g_pendingVisitor to prevent channel injection by others
+    g_listenVisitorItem = llListen(DCHAN_VISITOR_ITEM, "", g_pendingVisitor, "");
+    llDialog(visitor, menuText, buttons, DCHAN_VISITOR_ITEM);
     llSetTimerEvent(30.0);
 }
 
 // ----------------------------------------------------------------
 closeAllListens()
 {
-    if (g_listenRegister) { llListenRemove(g_listenRegister); g_listenRegister = 0; }
-    if (g_listenOwner)    { llListenRemove(g_listenOwner);    g_listenOwner    = 0; }
-    if (g_listenVisitor)  { llListenRemove(g_listenVisitor);  g_listenVisitor  = 0; }
-    if (g_listenItem)     { llListenRemove(g_listenItem);     g_listenItem     = 0; }
-    if (g_listenStore)    { llListenRemove(g_listenStore);    g_listenStore    = 0; }
+    if (g_listenRegister)    { llListenRemove(g_listenRegister);    g_listenRegister    = 0; }
+    if (g_listenOwner)       { llListenRemove(g_listenOwner);       g_listenOwner       = 0; }
+    if (g_listenVisitor)     { llListenRemove(g_listenVisitor);     g_listenVisitor     = 0; }
+    if (g_listenVisitorItem) { llListenRemove(g_listenVisitorItem); g_listenVisitorItem = 0; }
+    if (g_listenItem)        { llListenRemove(g_listenItem);        g_listenItem        = 0; }
+    if (g_listenStore)       { llListenRemove(g_listenStore);       g_listenStore       = 0; }
     // g_listenHUD is permanent  -  never closed here
 }
 
@@ -622,6 +696,8 @@ default
         }
         if (change & CHANGED_INVENTORY)
         {
+            // Reset per-session visitor take tracking on every restock
+            g_visitorsTaken = [];
             rebuildContents();
             updateDisplay();
             updateHoverText();
@@ -632,19 +708,22 @@ default
     timer()
     {
         // Idle fade: no dialog listens open — fade hover text and stop timer
-        if (!g_listenOwner && !g_listenVisitor && !g_listenItem && !g_listenRegister && !g_listenStore)
+        if (!g_listenOwner && !g_listenVisitor && !g_listenVisitorItem &&
+            !g_listenItem && !g_listenRegister && !g_listenStore)
         {
             integer count = llGetListLength(g_contents) / CONT_STRIDE;
-            string  lockStr = "";
-            if (g_locked) lockStr = " [locked]";
+            string lockLabel;
+            vector lockColor;
+            if (g_locked) { lockLabel = "[LOCKED]"; lockColor = <0.9, 0.4, 0.4>; }
+            else           { lockLabel = "[OPEN]";   lockColor = <0.4, 0.9, 0.4>; }
             if (count == 0)
-                llSetText("THE CULTIVAR\nStash Box [Empty]" + lockStr +
+                llSetText("THE CULTIVAR\nStash Box [Empty] " + lockLabel +
                           "\nOwner: " + g_ownerName,
-                          <0.5, 0.5, 0.5>, 0.0);
+                          lockColor, 0.0);
             else
-                llSetText("THE CULTIVAR\nStash Box" + lockStr +
+                llSetText("THE CULTIVAR\nStash Box " + lockLabel +
                           "\nOwner: " + g_ownerName,
-                          <0.4, 0.9, 0.4>, 0.0);
+                          lockColor, 0.0);
             llSetTimerEvent(0.0);
             return;
         }
@@ -785,6 +864,61 @@ default
 
             if (msg == "View Contents")
                 showContentsList(id, FALSE);
+            else if (msg == "Take One")
+            {
+                // One-per-session check
+                if (llListFindList(g_visitorsTaken, [(string)id]) != -1)
+                {
+                    llRegionSayTo(id, 0,
+                        "You already grabbed from this stash.");
+                    return;
+                }
+                showVisitorItemPicker(id);
+            }
+        }
+
+        else if (channel == DCHAN_VISITOR_ITEM)
+        {
+            llSetTimerEvent(0.0);
+            if (g_listenVisitorItem)
+            {
+                llListenRemove(g_listenVisitorItem);
+                g_listenVisitorItem = 0;
+            }
+
+            // Only respond to the visitor we opened the picker for
+            if (id != g_pendingVisitor) return;
+            g_pendingVisitor = NULL_KEY;
+
+            if (msg == "Cancel") return;
+
+            // Match truncated label to a physical item and give it
+            integer count = llGetListLength(g_contents) / CONT_STRIDE;
+            integer i;
+            for (i = 0; i < count; i++)
+            {
+                string cat     = llList2String(g_contents, i * CONT_STRIDE + 3);
+                string dname   = llList2String(g_contents, i * CONT_STRIDE + 1);
+                string invName = llList2String(g_contents, i * CONT_STRIDE + 0);
+                if ((cat == "bag" || cat == "jar") &&
+                    llGetSubString(dname, 0, 11) == msg)
+                {
+                    if (llGetInventoryType(invName) == INVENTORY_OBJECT)
+                    {
+                        llGiveInventory(id, invName);
+                        g_visitorsTaken += [(string)id];
+                        llRegionSayTo(id, 0,
+                            "Enjoy the " + dname + ". ?");
+                    }
+                    else
+                    {
+                        llRegionSayTo(id, 0,
+                            "That item is no longer available.");
+                    }
+                    return;
+                }
+            }
+            llRegionSayTo(id, 0, "Couldn't find that item. Try again.");
         }
 
         // ---- Store picker response ----
