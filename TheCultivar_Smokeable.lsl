@@ -11,7 +11,7 @@
 // This script:
 //   1. Parses type+quality from its own object name on rez
 //   2. Derives the owner's HUD private channel
-//   3. Temp-attaches to ATTACH_MOUTH immediately in state_entry
+//   3. Temp-attaches to ATTACH_RHAND immediately in state_entry
 //   4. Sends TC_SMOKE_ATTACH_READY to HUD after attaching
 //   5. Runs smoke particles and a touch dialog
 //   6. Auto-detaches and notifies HUD (TC_SMOKE_FINISHED) when done
@@ -182,9 +182,9 @@ default
         // Derive owner's HUD channel
         g_hudChannel = deriveHUDChannel(llGetOwner());
 
-        // Attach to mouth immediately — HUD_Comms rezzed us near the owner
+        // Attach to right hand immediately — jar rezzed us near the owner
         // so llAttachToAvatarTemp is valid at this point.
-        llAttachToAvatarTemp(ATTACH_MOUTH);
+        llAttachToAvatarTemp(ATTACH_RHAND);
 
         // Safety timeout in case attach event never fires
         llSetTimerEvent(5.0);
@@ -200,9 +200,9 @@ default
         }
         else
         {
-            // Snap to attachment point in local space
-            llSetLocalRot(llEuler2Rot(<0.0, 0.0, 0.0> * DEG_TO_RAD));
-            llSetPos(<0.0, 0.0, 0.0>);
+            // Snap to right hand — orient mesh along hand's forward axis
+            llSetLocalRot(llEuler2Rot(<0.0, 90.0, 0.0> * DEG_TO_RAD));
+            llSetPos(<0.02, 0.0, 0.0>);
 
             // Request PERMISSION_ATTACH so llDetachFromAvatar() works later
             llRequestPermissions(attachedTo, PERMISSION_ATTACH);
