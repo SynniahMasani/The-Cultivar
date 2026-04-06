@@ -202,7 +202,7 @@ default
         {
             // Snap to attachment point in local space
             llSetLocalRot(llEuler2Rot(<0.0, 0.0, 0.0> * DEG_TO_RAD));
-            llSetLocalPos(<0.0, 0.0, 0.0>);
+            llSetPos(<0.0, 0.0, 0.0>);
 
             // Request PERMISSION_ATTACH so llDetachFromAvatar() works later
             llRequestPermissions(attachedTo, PERMISSION_ATTACH);
