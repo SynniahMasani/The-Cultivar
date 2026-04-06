@@ -44,6 +44,54 @@ integer g_inSession = FALSE;
 key     g_sessionObjectKey = NULL_KEY;
 string  g_sessionHost = "";
 
+// MyStory integration channel (replace with actual channel when known)
+integer g_myStoryChannel = -140200; // TODO: Replace with actual MyStory channel
+
+// Active smokeable tracking
+string  g_smokingItemType = "";
+string  g_smokingQuality  = "";
+string  g_smokingStrain   = "";
+
+// ----------------------------------------------------------------
+// Duration table — matches TheCultivar_Smokeable.lsl
+// ----------------------------------------------------------------
+integer getSmokeDuration(string itemType, string quality)
+{
+    if (itemType == "blunt")
+    {
+        if (quality == "mids")   return 600;
+        if (quality == "loud")   return 720;
+        if (quality == "exotic") return 900;
+        return 480;
+    }
+    if (itemType == "spliff")
+    {
+        if (quality == "mids")   return 300;
+        if (quality == "loud")   return 360;
+        if (quality == "exotic") return 480;
+        return 240;
+    }
+    if (itemType == "edible")
+    {
+        if (quality == "mids")   return 720;
+        if (quality == "loud")   return 900;
+        if (quality == "exotic") return 1200;
+        return 600;
+    }
+    // joint (default)
+    if (quality == "mids")   return 360;
+    if (quality == "loud")   return 480;
+    if (quality == "exotic") return 600;
+    return 300;
+}
+
+// Capitalize first letter of a string
+string capitalize(string s)
+{
+    if (s == "") return s;
+    return llToUpper(llGetSubString(s, 0, 0)) + llGetSubString(s, 1, -1);
+}
+
 // ----------------------------------------------------------------
 // Derive a private channel from the owner's UUID
 // Consistent across rezzings, unique per player
@@ -197,6 +245,49 @@ default
                 llRegionSayTo(id, g_privateChannel, "TC_REMOVE_FAIL");
         }
 
+        // HUD_UI requests a smokeable prop to be rezzed and attached
+        // TC_SMOKE_START|itemType|quality|strain
+        else if (cmd == "TC_SMOKE_START")
+        {
+            g_smokingItemType = llList2String(parts, 1);
+            g_smokingQuality  = llList2String(parts, 2);
+            g_smokingStrain   = llList2String(parts, 3);
+
+            string propName = "TC_Smoke_" + capitalize(g_smokingItemType) +
+                              "_" + capitalize(g_smokingQuality);
+            // Fallback if exact prop not present
+            if (llGetInventoryType(propName) != INVENTORY_OBJECT)
+                propName = "TC_Smoke_Joint_Reggie";
+
+            if (llGetInventoryType(propName) == INVENTORY_OBJECT)
+            {
+                vector ownerPos = llList2Vector(
+                    llGetObjectDetails(g_ownerKey, [OBJECT_POS]), 0);
+                if (ownerPos == ZERO_VECTOR)
+                    ownerPos = llGetPos();
+                // Rez just above the owner; smokeable self-attaches to ATTACH_MOUTH
+                llRezObject(propName, ownerPos + <0.0, 0.0, 0.3>,
+                            ZERO_VECTOR, ZERO_ROTATION, 0);
+            }
+            else
+            {
+                llOwnerSay("[TC] Smoke prop '" + propName + "' not found in HUD.");
+            }
+        }
+
+        // HUD_UI requests early end of current smoke
+        else if (cmd == "END_SMOKE_EARLY")
+        {
+            llSay(g_privateChannel, "TC_END_SMOKE");
+            llMessageLinked(LINK_SET, CHAN_ANIMATION, "STOP_SMOKE_ANIM", NULL_KEY);
+        }
+
+        // HUD_UI fires MyStory trigger directly
+        else if (cmd == "MYSTORY_TRIGGER")
+        {
+            llSay(g_myStoryChannel, "Start Effects");
+        }
+
         // Inventory manager responds with raw data  -  forward to requesting world object
         else if (cmd == "RAW_INVENTORY")
         {
@@ -244,8 +335,32 @@ default
         // ---- Messages on our private channel (from world objects) ----
         else if (channel == g_privateChannel)
         {
+            // Smokeable has attached to the avatar and is ready
+            // TC_SMOKE_ATTACH_READY|itemType|quality
+            if (cmd == "TC_SMOKE_ATTACH_READY")
+            {
+                // Derive duration and forward SMOKE_STARTED to UI with duration
+                integer duration = getSmokeDuration(g_smokingItemType, g_smokingQuality);
+                llMessageLinked(LINK_SET, CHAN_ANIMATION,
+                    "START_SMOKE_ANIM|" + g_smokingStrain + "|" + g_smokingQuality,
+                    NULL_KEY);
+                llMessageLinked(LINK_SET, CHAN_UI,
+                    "SMOKE_STARTED|" + g_smokingStrain + "|" + g_smokingQuality +
+                    "|" + (string)duration, NULL_KEY);
+            }
+
+            // Smokeable finished (natural end or put out)  -  clear smoke state
+            else if (cmd == "TC_SMOKE_FINISHED")
+            {
+                g_smokingItemType = "";
+                g_smokingQuality  = "";
+                g_smokingStrain   = "";
+                llMessageLinked(LINK_SET, CHAN_ANIMATION, "STOP_SMOKE_ANIM", NULL_KEY);
+                llMessageLinked(LINK_SET, CHAN_UI, "SMOKE_STOPPED", NULL_KEY);
+            }
+
             // Plant reports a successful harvest
-            if (cmd == "TC_HARVEST_RESULT")
+            else if (cmd == "TC_HARVEST_RESULT")
             {
                 // TC_HARVEST_RESULT|strainName|quality|qty
                 string strain  = llList2String(parts, 1);
@@ -284,7 +399,14 @@ default
                     "START_SMOKE_ANIM|" + strain + "|" + quality, NULL_KEY);
                 // Tell UI to light the smoke button and update state
                 llMessageLinked(LINK_SET, CHAN_UI,
-                    "SMOKE_STARTED|" + strain + "|" + quality, NULL_KEY);
+                    "SMOKE_STARTED|" + strain + "|" + quality + "|0", NULL_KEY);
+
+                // MyStory quality-tiered trigger
+                integer qualTier = 1;
+                if (quality == "mids")       qualTier = 2;
+                else if (quality == "loud")  qualTier = 3;
+                else if (quality == "exotic") qualTier = 4;
+                llSay(g_myStoryChannel, "Start Effects " + (string)qualTier);
             }
 
             // Session object sends sync signal to start animation

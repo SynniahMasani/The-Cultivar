@@ -52,6 +52,7 @@ integer DCHAN_SESSION_ITEM   = -11008;
 integer DCHAN_INVENTORY      = -11009;
 integer DCHAN_STATS_MENU     = -11010;
 integer DCHAN_BRAND_NAME     = -11011;
+integer DCHAN_SMOKE_ACTIVE   = -11020;
 
 // ---- Listener handles ----
 integer g_lisMain;
@@ -65,6 +66,7 @@ integer g_lisSessionItem;
 integer g_lisInv;
 integer g_lisStatsMenu;
 integer g_lisBrandName;
+integer g_lisSmokeActive;
 
 // ---- Owner info ----
 key     g_ownerKey  = NULL_KEY;
@@ -80,9 +82,10 @@ string  g_playerTitle    = "Seedling";
 string  g_inventoryDisplay = "Loading...";
 
 // ---- Current state ----
-integer g_isSmoking     = FALSE;
-string  g_smokeStrain   = "";
-string  g_smokeQuality  = "";
+integer g_isSmoking          = FALSE;
+string  g_smokeStrain        = "";
+string  g_smokeQuality       = "";
+integer g_smokeTimeRemaining = 0;
 integer g_inSession     = FALSE;
 key     g_sessionObjKey = NULL_KEY;
 string  g_sessionHost   = "";
@@ -133,6 +136,7 @@ closeAllListens()
     if (g_lisInv)           { llListenRemove(g_lisInv);           g_lisInv           = 0; }
     if (g_lisStatsMenu)     { llListenRemove(g_lisStatsMenu);     g_lisStatsMenu     = 0; }
     if (g_lisBrandName)     { llListenRemove(g_lisBrandName);     g_lisBrandName     = 0; }
+    if (g_lisSmokeActive)   { llListenRemove(g_lisSmokeActive);   g_lisSmokeActive   = 0; }
 }
 
 setButtonGlow(integer link, float glow)
@@ -256,6 +260,23 @@ showEdibleTypeMenu()
         "=== EDIBLE ===\nChoose type:",
         ["Brownie", "Gummies", "Drink", "Back"],
         DCHAN_EDIBLE_TYPE);
+    llSetTimerEvent(30.0);
+}
+
+// Active smoke HUD menu  -  shown when already smoking and btn_smoke is touched
+showActiveSmokeMenu()
+{
+    closeAllListens();
+    integer minsLeft = g_smokeTimeRemaining / 60;
+    string timeStr;
+    if (minsLeft > 0) timeStr = "~" + (string)minsLeft + " min left";
+    else              timeStr = "almost done";
+    g_lisSmokeActive = llListen(DCHAN_SMOKE_ACTIVE, "", g_ownerKey, "");
+    llDialog(g_ownerKey,
+        "=== SMOKING ===\n" +
+        g_smokeQuality + " " + g_smokeStrain + "\n" + timeStr,
+        ["Take a Puff", "Put It Out", "Pass It", "Close"],
+        DCHAN_SMOKE_ACTIVE);
     llSetTimerEvent(30.0);
 }
 
@@ -498,32 +519,13 @@ onRemoveSuccess()
         g_smokeQuality = g_pendingQuality;
         setButtonGlow(LINK_BTN_SMOKE, 0.1);
 
-        // Give smokeable prop from HUD inventory so it appears in hand
+        // Tell Comms to rez the smoke prop and attach it (joint/blunt/spliff only)
         if (g_pendingItemType == "joint" || g_pendingItemType == "blunt" ||
             g_pendingItemType == "spliff")
         {
-            string qCap = llToUpper(llGetSubString(g_pendingQuality, 0, 0)) +
-                          llGetSubString(g_pendingQuality, 1, -1);
-            string tCap = llToUpper(llGetSubString(g_pendingItemType, 0, 0)) +
-                          llGetSubString(g_pendingItemType, 1, -1);
-            string propName = "TC_Smoke_" + tCap + "_" + qCap;
-            if (llGetInventoryType(propName) != INVENTORY_OBJECT)
-                propName = "TC_Smoke_Joint_Reggie";
-            if (llGetInventoryType(propName) == INVENTORY_OBJECT)
-            {
-                // Determine duration so the rezzed smokeable knows how long to stay attached
-                integer smokeDuration = 300; // joint default
-                if (g_pendingItemType == "blunt")  smokeDuration = 600;
-                else if (g_pendingItemType == "spliff") smokeDuration = 420;
-
-                // Rez near the avatar so TheCultivar_Smokeable.lsl can temp-attach it.
-                // Positive start_param = smoke duration (distinguishes from jar's negative channel).
-                vector ownerPos = llList2Vector(
-                    llGetObjectDetails(g_ownerKey, [OBJECT_POS]), 0);
-                if (ownerPos != ZERO_VECTOR)
-                    llRezObject(propName, ownerPos + <0.0, 0.0, 0.3>,
-                                ZERO_VECTOR, ZERO_ROTATION, smokeDuration);
-            }
+            llMessageLinked(LINK_SET, CHAN_COMMS,
+                "TC_SMOKE_START|" + g_pendingItemType + "|" +
+                g_pendingQuality + "|" + g_pendingStrain, NULL_KEY);
         }
     }
     else if (g_flowContext == "pass")
@@ -601,7 +603,11 @@ default
         if (llDetectedKey(0) != g_ownerKey) return;
         string primName = llGetLinkName(llDetectedLinkNumber(0));
 
-        if      (primName == "btn_smoke")     showSmokeTypeMenu();
+        if      (primName == "btn_smoke")
+        {
+            if (g_isSmoking) showActiveSmokeMenu();
+            else             showSmokeTypeMenu();
+        }
         else if (primName == "btn_inventory") showInventoryMenu();
         else if (primName == "btn_grow")
             llOwnerSay("Touch any plant or pot on your land to check its status.");
@@ -628,7 +634,11 @@ default
         // ---- MAIN MENU ----
         if (channel == DCHAN_MAIN)
         {
-            if      (msg == "Smoke")     showSmokeTypeMenu();
+            if      (msg == "Smoke")
+            {
+                if (g_isSmoking) showActiveSmokeMenu();
+                else             showSmokeTypeMenu();
+            }
             else if (msg == "Inventory") showInventoryMenu();
             else if (msg == "Grow")
                 llOwnerSay("Touch a plant to check its grow status.");
@@ -793,6 +803,30 @@ default
             }
         }
 
+        // ---- ACTIVE SMOKE MENU ----
+        else if (channel == DCHAN_SMOKE_ACTIVE)
+        {
+            if (msg == "Put It Out")
+            {
+                llMessageLinked(LINK_SET, CHAN_COMMS, "END_SMOKE_EARLY", NULL_KEY);
+                g_isSmoking          = FALSE;
+                g_smokeStrain        = "";
+                g_smokeQuality       = "";
+                g_smokeTimeRemaining = 0;
+                setButtonGlow(LINK_BTN_SMOKE, 0.0);
+            }
+            else if (msg == "Take a Puff")
+            {
+                llOwnerSay("You take a puff. Stay elevated.");
+            }
+            else if (msg == "Pass It")
+            {
+                g_flowContext = "pass";
+                showPassPlayerMenu();
+            }
+            // "Close"  -  do nothing
+        }
+
         // ---- SESSION INVITE RESPONSE (from another player's session) ----
         else if (channel == DCHAN_SESSION_INVITE)
         {
@@ -893,22 +927,25 @@ default
             else if (cmd == "ITEM_FAILED")
                 onRemoveFail();
 
-            // World object (jar, weed piece, session) fired TC_SMOKED  - 
+            // World object (jar, weed piece, session) fired TC_SMOKED  -
             // Comms already started the animation, we just update state + glow
+            // SMOKE_STARTED|strain|quality|duration
             else if (cmd == "SMOKE_STARTED")
             {
-                g_isSmoking    = TRUE;
-                g_smokeStrain  = llList2String(parts, 1);
-                g_smokeQuality = llList2String(parts, 2);
+                g_isSmoking          = TRUE;
+                g_smokeStrain        = llList2String(parts, 1);
+                g_smokeQuality       = llList2String(parts, 2);
+                g_smokeTimeRemaining = (integer)llList2String(parts, 3);
                 setButtonGlow(LINK_BTN_SMOKE, 0.1);
             }
 
-            // Smoke animation stopped (duration expired)
+            // Smoke finished (natural end or put out via smokeable touch dialog)
             else if (cmd == "SMOKE_STOPPED")
             {
-                g_isSmoking    = FALSE;
-                g_smokeStrain  = "";
-                g_smokeQuality = "";
+                g_isSmoking          = FALSE;
+                g_smokeStrain        = "";
+                g_smokeQuality       = "";
+                g_smokeTimeRemaining = 0;
                 setButtonGlow(LINK_BTN_SMOKE, 0.0);
             }
 
