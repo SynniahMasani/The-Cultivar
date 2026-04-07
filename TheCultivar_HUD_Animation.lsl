@@ -171,20 +171,50 @@ string resolveAnim(string baseName)
 }
 
 // ----------------------------------------------------------------
-// Stop whatever is currently playing
+// Stop whatever is currently playing.
+//
+// IMPORTANT: this must FULLY tear down every animation that may be
+// running on the avatar, not just the current idle. If a puff or
+// pass overlay is mid-cycle when we're asked to stop, the avatar
+// will keep playing it forever unless we explicitly llStopAnimation
+// on the overlay name AND clear its in-progress flag. Leaving stale
+// flags also corrupts the next smoke session because the timer()
+// handler dispatches based on g_puffInProgress / g_passInProgress.
 // ----------------------------------------------------------------
 stopCurrentAnim()
 {
-    if (g_hasAnimPerm && g_currentAnim != "")
+    if (g_hasAnimPerm)
     {
-        llStopAnimation(g_currentAnim);
+        // Stop the idle loop
+        if (g_currentAnim != "")
+            llStopAnimation(g_currentAnim);
+        // Stop any in-flight puff overlay
+        if (g_puffAnimName != "")
+            llStopAnimation(g_puffAnimName);
+        // Stop any in-flight pass animation
+        if (g_passAnimName != "")
+            llStopAnimation(g_passAnimName);
     }
-    g_currentAnim = "";
+
+    // Clear ALL animation tracking state so the next start
+    // begins from a clean slate regardless of where the previous
+    // one was in its puff/pass cycle.
+    g_currentAnim     = "";
+    g_currentStrain   = "";
+    g_currentQuality  = "";
+    g_currentItemType = "";
+    g_puffAnimName    = "";
+    g_passAnimName    = "";
+    g_puffInProgress  = FALSE;
+    g_passInProgress  = FALSE;
+
+    // Cancel the puff timer if running
     if (g_puffTimerActive)
     {
         llSetTimerEvent(0.0);
         g_puffTimerActive = FALSE;
     }
+
     // Clear RLV effects
     fxClearHigh();
     // Notify UI so it can turn off the smoke button glow and clear state
