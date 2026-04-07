@@ -583,7 +583,9 @@ onRemoveSuccess()
                    g_pendingStrain + " to " + g_passTargetName + ". Pass it real.");
     }
 
-    // Clear flow state
+    // Clear flow state (including g_availableItems so the parsed
+    // inventory snapshot doesn't linger in heap after a smoke/pass
+    // flow completes — important for HUD memory pressure).
     g_flowContext     = "none";
     g_pendingItemType = "";
     g_pendingStrain   = "";
@@ -591,6 +593,7 @@ onRemoveSuccess()
     g_pendingPackager = "";
     g_passTarget      = NULL_KEY;
     g_passTargetName  = "";
+    g_availableItems  = [];
 }
 
 onRemoveFail()
@@ -802,7 +805,8 @@ default
                     (string)g_pendingResumeSecs, NULL_KEY);
 
                 g_pendingResumeSecs = 0;
-                g_flowContext = "none";
+                g_flowContext       = "none";
+                g_availableItems    = [];
                 return;
             }
             if (msg == "Start Fresh")
@@ -906,7 +910,8 @@ default
                         "START_SESSION|" + (string)g_pendingSessionObjKey,
                         NULL_KEY);
                     g_pendingSessionObjKey = NULL_KEY;
-                    g_flowContext = "none";
+                    g_flowContext          = "none";
+                    g_availableItems       = [];
                     return;
                 }
             }
@@ -1020,6 +1025,11 @@ default
     // ----------------------------------------------------------------
     link_message(integer sender, integer num, string msg, key id)
     {
+        // Early bail-out: this script only cares about CHAN_UI and
+        // CHAN_COMMS (RAW_INVENTORY relay). Skipping the llParseString
+        // allocation for every other channel keeps heap churn down.
+        if (num != CHAN_UI && num != CHAN_COMMS) return;
+
         list   parts = llParseString2List(msg, ["|"], []);
         string cmd   = llList2String(parts, 0);
 
@@ -1059,15 +1069,19 @@ default
                 onRemoveFail();
 
             // World object (jar, weed piece, session) fired TC_SMOKED  -
-            // Comms already started the animation, we just update state + glow
+            // Comms already started the animation, we just update state + glow.
             // SMOKE_STARTED|strain|quality|duration
+            // Minimal work: only touch what onRemoveSuccess didn't already set.
             else if (cmd == "SMOKE_STARTED")
             {
-                g_isSmoking          = TRUE;
-                g_smokeStrain        = llList2String(parts, 1);
-                g_smokeQuality       = llList2String(parts, 2);
+                if (!g_isSmoking)
+                {
+                    g_isSmoking    = TRUE;
+                    g_smokeStrain  = llList2String(parts, 1);
+                    g_smokeQuality = llList2String(parts, 2);
+                    setButtonGlow(LINK_BTN_SMOKE, 0.1);
+                }
                 g_smokeTimeRemaining = (integer)llList2String(parts, 3);
-                setButtonGlow(LINK_BTN_SMOKE, 0.1);
             }
 
             // Smoke finished (natural end or put out via smokeable touch dialog)
@@ -1077,6 +1091,7 @@ default
                 g_smokeStrain        = "";
                 g_smokeQuality       = "";
                 g_smokeTimeRemaining = 0;
+                g_availableItems     = [];
                 setButtonGlow(LINK_BTN_SMOKE, 0.0);
             }
 
