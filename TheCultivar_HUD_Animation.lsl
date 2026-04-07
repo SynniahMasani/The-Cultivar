@@ -58,6 +58,95 @@ string  g_genderSuffix   = "_female"; // default; updated on state_entry and on_
 // Animation permission flag
 integer g_hasAnimPerm = FALSE;
 
+// Pending start request: if startSmokeAnim is called before perms are
+// granted, we stash the args and replay them inside onPermissionsReady.
+integer g_startPending  = FALSE;
+string  g_pendingStrain   = "";
+string  g_pendingQuality  = "";
+string  g_pendingItemType = "";
+
+// RLV high-effects state
+integer g_fxActive = FALSE;
+
+// ================================================================
+// Hybrid permission layer  -  try Experience first, fall back to classic
+// ================================================================
+integer PERM_NONE    = 0;
+integer PERM_XP      = 1;
+integer PERM_CLASSIC = 2;
+
+integer g_permMode    = 0;
+key     g_permAgent   = NULL_KEY;
+integer g_classicMask = 0;       // PERMISSION_TRIGGER_ANIMATION here
+string  g_permReason  = "";
+
+requestHybridPermissions(key agent, string reason)
+{
+    g_permAgent  = agent;
+    g_permReason = reason;
+    g_permMode   = PERM_NONE;
+    llRequestExperiencePermissions(agent, "");
+}
+
+// ----------------------------------------------------------------
+// RLV high effects (visual blur + warm tint while smoking)
+// Mode 2 = blur. Quality scales the intensity:
+//   reggie  -> very subtle
+//   mids    -> light
+//   loud    -> moderate
+//   exotic  -> strong
+// Requires an RLV-compatible viewer; non-RLV viewers ignore the
+// commands silently. Toggle stored in linkset data hud_fx_enabled.
+// ----------------------------------------------------------------
+fxStartHigh(string quality)
+{
+    if (llLinksetDataRead("hud_fx_enabled") != "1") return;
+    if (g_fxActive) return;
+
+    float blur     = 0.10;
+    float distMin  = 5.0;
+    float distMax  = 25.0;
+    string tintCol = "1.0;0.92;0.80;0.10"; // warm amber, light alpha
+
+    if (quality == "mids")
+    {
+        blur = 0.18;
+        tintCol = "1.0;0.90;0.75;0.14";
+    }
+    else if (quality == "loud")
+    {
+        blur = 0.28;
+        tintCol = "1.0;0.85;0.70;0.18";
+        distMax = 30.0;
+    }
+    else if (quality == "exotic")
+    {
+        blur = 0.40;
+        tintCol = "0.95;0.78;0.95;0.22"; // hint of purple haze
+        distMax = 40.0;
+    }
+
+    // Configure and activate sphere effect
+    llOwnerSay("@setsphere_mode:2=force");
+    llOwnerSay("@setsphere_origin:0=force");
+    llOwnerSay("@setsphere_distmin:" + (string)distMin + "=force");
+    llOwnerSay("@setsphere_distmax:" + (string)distMax + "=force");
+    llOwnerSay("@setsphere_distextend:1=force");
+    llOwnerSay("@setsphere_param:" + (string)blur + "=force");
+    llOwnerSay("@setsphere_tint:" + tintCol + "=force");
+    llOwnerSay("@setsphere=force");
+
+    g_fxActive = TRUE;
+}
+
+fxClearHigh()
+{
+    if (!g_fxActive) return;
+    llOwnerSay("@setsphere_mode:0=force");
+    llOwnerSay("@setsphere=clear");
+    g_fxActive = FALSE;
+}
+
 // ----------------------------------------------------------------
 // Detect avatar body shape type and return the animation suffix
 // ----------------------------------------------------------------
@@ -96,6 +185,8 @@ stopCurrentAnim()
         llSetTimerEvent(0.0);
         g_puffTimerActive = FALSE;
     }
+    // Clear RLV effects
+    fxClearHigh();
     // Notify UI so it can turn off the smoke button glow and clear state
     llMessageLinked(LINK_SET, CHAN_UI, "SMOKE_STOPPED", NULL_KEY);
 }
@@ -122,6 +213,17 @@ string buildAnimName(string itemType, string quality)
 // ----------------------------------------------------------------
 startSmokeAnim(string strain, string quality, string itemType)
 {
+    // Check permission first  -  if not ready, queue and request via hybrid
+    if (!g_hasAnimPerm)
+    {
+        g_pendingStrain   = strain;
+        g_pendingQuality  = quality;
+        g_pendingItemType = itemType;
+        g_startPending    = TRUE;
+        requestHybridPermissions(llGetOwner(), "Play Cultivar smoking animations");
+        return;
+    }
+
     stopCurrentAnim();
 
     g_currentStrain   = strain;
@@ -129,13 +231,6 @@ startSmokeAnim(string strain, string quality, string itemType)
     g_currentItemType = itemType;
     g_currentAnim     = resolveAnim(buildAnimName(itemType, quality));
 
-    // Check permission and animation exists in inventory before playing
-    if (!g_hasAnimPerm)
-    {
-        llOwnerSay("[Animation] Requesting animation permission...");
-        llRequestPermissions(llGetOwner(), PERMISSION_TRIGGER_ANIMATION);
-        return;
-    }
     if (llGetInventoryType(g_currentAnim) == INVENTORY_ANIMATION)
     {
         llStartAnimation(g_currentAnim);
@@ -153,6 +248,9 @@ startSmokeAnim(string strain, string quality, string itemType)
     // Start puff timer
     llSetTimerEvent(PUFF_INTERVAL);
     g_puffTimerActive = TRUE;
+
+    // RLV high effects (no-op if disabled or non-RLV viewer)
+    fxStartHigh(quality);
 }
 
 // ----------------------------------------------------------------
@@ -200,6 +298,28 @@ playPassAnim(string direction)
     llSetTimerEvent(2.0);
 }
 
+// ----------------------------------------------------------------
+// Permission ready/failed callbacks (script-specific)
+// ----------------------------------------------------------------
+onPermissionsReady()
+{
+    g_hasAnimPerm = TRUE;
+    // If a smoke-anim start was queued before perms landed, replay it
+    if (g_startPending)
+    {
+        g_startPending = FALSE;
+        startSmokeAnim(g_pendingStrain, g_pendingQuality, g_pendingItemType);
+    }
+}
+
+onPermissionsFailed(string reasonText)
+{
+    g_hasAnimPerm = FALSE;
+    g_startPending = FALSE;
+    llOwnerSay("[Animation] Permission failed: " + reasonText +
+               " — smoking animations disabled.");
+}
+
 // ================================================================
 default
 {
@@ -207,21 +327,50 @@ default
     {
         g_genderSuffix = getGenderSuffix();
         g_hasAnimPerm  = FALSE;
-        llRequestPermissions(llGetOwner(), PERMISSION_TRIGGER_ANIMATION);
+        g_classicMask  = PERMISSION_TRIGGER_ANIMATION;
+        requestHybridPermissions(llGetOwner(), "Play Cultivar smoking animations");
     }
 
     on_rez(integer start_param)
     {
         g_genderSuffix = getGenderSuffix();
         g_hasAnimPerm  = FALSE;
+        g_classicMask  = PERMISSION_TRIGGER_ANIMATION;
         stopCurrentAnim();
-        llRequestPermissions(llGetOwner(), PERMISSION_TRIGGER_ANIMATION);
+        requestHybridPermissions(llGetOwner(), "Play Cultivar smoking animations");
+    }
+
+    experience_permissions(key agent)
+    {
+        g_permMode = PERM_XP;
+        if (llGetPermissions() & PERMISSION_TRIGGER_ANIMATION)
+            onPermissionsReady();
+        else
+        {
+            llOwnerSay("Experience didn't grant animation perm, using standard prompt.");
+            llRequestPermissions(agent, g_classicMask);
+        }
+    }
+
+    experience_permissions_denied(key agent, integer reason)
+    {
+        llOwnerSay("Experience not available here (" +
+                   llGetExperienceErrorMessage(reason) +
+                   "). Using standard permission prompt.");
+        llRequestPermissions(agent, g_classicMask);
     }
 
     run_time_permissions(integer perm)
     {
-        if (perm & PERMISSION_TRIGGER_ANIMATION)
-            g_hasAnimPerm = TRUE;
+        if ((perm & g_classicMask) == g_classicMask)
+        {
+            g_permMode = PERM_CLASSIC;
+            onPermissionsReady();
+        }
+        else
+        {
+            onPermissionsFailed("classic permissions denied");
+        }
     }
 
     changed(integer change)
@@ -334,6 +483,18 @@ default
             {
                 startSmokeAnim(g_currentStrain, newQuality, g_currentItemType);
             }
+        }
+
+        // Live FX toggle from settings menu
+        else if (cmd == "FX_START")
+        {
+            string quality = llList2String(parts, 1);
+            if (quality == "") quality = g_currentQuality;
+            fxStartHigh(quality);
+        }
+        else if (cmd == "FX_CLEAR")
+        {
+            fxClearHigh();
         }
     }
 }

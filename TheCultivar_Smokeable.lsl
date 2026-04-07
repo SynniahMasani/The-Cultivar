@@ -39,6 +39,32 @@ float   INTERACT_LOCKOUT = 5.0;
 
 integer DCHAN_PUFF = -130001;
 
+// ================================================================
+// Hybrid permission layer  -  try Experience first, fall back to classic
+// ================================================================
+integer PERM_NONE    = 0;
+integer PERM_XP      = 1;
+integer PERM_CLASSIC = 2;
+
+integer g_permMode    = 0;       // PERM_NONE / PERM_XP / PERM_CLASSIC
+key     g_permAgent   = NULL_KEY;
+integer g_classicMask = 0;       // PERMISSION_ATTACH for this script
+string  g_permReason  = "";
+
+// Forward declarations conceptually  -  LSL has no real forward decls,
+// so onPermissionsReady() and onPermissionsFailed() are defined below
+// and called from the event handlers further down.
+
+requestHybridPermissions(key agent, string reason)
+{
+    g_permAgent  = agent;
+    g_permReason = reason;
+    g_permMode   = PERM_NONE;
+    // Try Experience permissions first  -  silently quiet on XP-enabled
+    // parcels, falls through to experience_permissions_denied otherwise.
+    llRequestExperiencePermissions(agent, "");
+}
+
 // ----------------------------------------------------------------
 // Derive the same private channel the HUD uses
 // ----------------------------------------------------------------
@@ -131,14 +157,18 @@ startSmokeParticles()
         PSYS_PART_START_ALPHA,     0.55,
         PSYS_PART_END_ALPHA,       0.0,
         PSYS_PART_START_SCALE,     <0.02, 0.02, 0.0>,
-        PSYS_PART_END_SCALE,       <0.08, 0.08, 0.0>,
+        PSYS_PART_END_SCALE,       <0.10, 0.10, 0.0>,
         PSYS_PART_MAX_AGE,         5.0,
         PSYS_SRC_BURST_RATE,       0.2,
         PSYS_SRC_BURST_PART_COUNT, 2,
-        PSYS_SRC_BURST_SPEED_MIN,  0.02,
-        PSYS_SRC_BURST_SPEED_MAX,  0.05,
+        // Bumped from 0.02-0.05 to 0.15-0.3 so particles escape larger
+        // meshes (blunts/spliffs) instead of being born inside the prim
+        PSYS_SRC_BURST_SPEED_MIN,  0.15,
+        PSYS_SRC_BURST_SPEED_MAX,  0.30,
+        // Slight upward drift so smoke always rises away from the prim
+        PSYS_SRC_ACCEL,            <0.0, 0.0, 0.05>,
         PSYS_SRC_ANGLE_BEGIN,      0.0,
-        PSYS_SRC_ANGLE_END,        0.15
+        PSYS_SRC_ANGLE_END,        0.35
     ]);
 }
 
@@ -166,6 +196,32 @@ passSmokeable(key target)
     smokeFinished();
 }
 
+// ----------------------------------------------------------------
+// Permission ready/failed callbacks (script-specific)
+// ----------------------------------------------------------------
+onPermissionsReady()
+{
+    // Either the Experience or classic flow granted PERMISSION_ATTACH.
+    if (!g_attached)
+    {
+        llOwnerSay("DEBUG PROP: permissions ready (mode=" + (string)g_permMode +
+                   "), calling llAttachToAvatarTemp");
+        llAttachToAvatarTemp(ATTACH_RHAND);
+    }
+    else
+    {
+        // Post-attach re-grant  -  we can now detach by script
+        llOwnerSay("DEBUG PROP: post-attach permissions ready, detach enabled");
+        g_hasDetachPerm = TRUE;
+    }
+}
+
+onPermissionsFailed(string reasonText)
+{
+    llOwnerSay("[Smokeable] Permission failed: " + reasonText + " — cannot attach.");
+    llDie();
+}
+
 // ================================================================
 default
 {
@@ -187,42 +243,58 @@ default
         // Derive owner's HUD channel
         g_hudChannel = deriveHUDChannel(llGetOwner());
 
+        // This script only needs PERMISSION_ATTACH from the avatar
+        g_classicMask = PERMISSION_ATTACH;
+
         llOwnerSay("DEBUG PROP: state_entry " + llGetObjectName() +
                    " owner=" + (string)llGetOwner());
     }
 
     on_rez(integer start_param)
     {
-        // Request PERMISSION_ATTACH from owner before attempting temp-attach.
-        // llAttachToAvatarTemp requires this permission to be granted first.
-        llOwnerSay("DEBUG PROP: on_rez, requesting PERMISSION_ATTACH");
-        llRequestPermissions(llGetOwner(), PERMISSION_ATTACH);
+        // Try Experience permissions first; falls back to classic via the
+        // experience_permissions_denied event if Experience isn't available.
+        llOwnerSay("DEBUG PROP: on_rez, requesting hybrid permissions");
+        requestHybridPermissions(llGetOwner(), "Attach smokeable");
 
         // Safety timeout — if permissions + attach don't complete in 10s, die
         llSetTimerEvent(10.0);
     }
 
+    experience_permissions(key agent)
+    {
+        g_permMode = PERM_XP;
+        llOwnerSay("DEBUG PROP: Experience permissions granted");
+        // Verify we actually got PERMISSION_ATTACH from the Experience
+        if (llGetPermissions() & PERMISSION_ATTACH)
+            onPermissionsReady();
+        else
+        {
+            // XP granted something but not what we need — fall back to classic
+            llOwnerSay("Experience didn't grant attach perm, using standard prompt.");
+            llRequestPermissions(agent, g_classicMask);
+        }
+    }
+
+    experience_permissions_denied(key agent, integer reason)
+    {
+        // Single subtle owner-say with the readable reason, then fall back
+        llOwnerSay("Experience not available here (" +
+                   llGetExperienceErrorMessage(reason) +
+                   "). Using standard permission prompt.");
+        llRequestPermissions(agent, g_classicMask);
+    }
+
     run_time_permissions(integer perm)
     {
-        if (perm & PERMISSION_ATTACH)
+        if ((perm & g_classicMask) == g_classicMask)
         {
-            if (!g_attached)
-            {
-                // Pre-attach permission granted — now temp-attach to right hand
-                llOwnerSay("DEBUG PROP: PERMISSION_ATTACH granted, calling llAttachToAvatarTemp");
-                llAttachToAvatarTemp(ATTACH_RHAND);
-            }
-            else
-            {
-                // Post-attach permission re-grant — we can now detach by script
-                llOwnerSay("DEBUG PROP: post-attach PERMISSION_ATTACH granted");
-                g_hasDetachPerm = TRUE;
-            }
+            g_permMode = PERM_CLASSIC;
+            onPermissionsReady();
         }
         else
         {
-            llOwnerSay("DEBUG PROP: PERMISSION_ATTACH denied, dying");
-            llDie();
+            onPermissionsFailed("classic permissions denied");
         }
     }
 
@@ -241,10 +313,11 @@ default
             llSetLocalRot(llEuler2Rot(<90.0, 274.0, 270.0> * DEG_TO_RAD));
             llSetPos(<0.04991, -0.0339, 0.01178>);
 
-            // Re-request PERMISSION_ATTACH after attach for later detach.
+            // Re-request permissions after attach for later detach.
             // Ownership context changes after temp-attach, so the pre-attach
-            // grant may not carry over for llDetachFromAvatar().
-            llRequestPermissions(attachedTo, PERMISSION_ATTACH);
+            // grant may not carry over for llDetachFromAvatar(). Re-runs the
+            // hybrid flow (XP first, classic fallback).
+            requestHybridPermissions(attachedTo, "Detach smokeable");
 
             if (!g_attached)
             {
