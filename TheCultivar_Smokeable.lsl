@@ -166,6 +166,10 @@ startSmokeParticles()
 {
     vector startCol = qualityColor(g_quality);
     vector endCol   = qualityColorEnd(g_quality);
+    llOwnerSay("DEBUG PROP: startSmokeParticles type=" + g_itemType +
+               " quality=" + g_quality +
+               " start=" + (string)startCol +
+               " end=" + (string)endCol);
 
     // Per-itemType thickness tuning. Blunts get beefier smoke than
     // joints / spliffs so the larger mesh doesn't visually swallow
@@ -233,6 +237,11 @@ smokeFinished(integer savePause)
         remaining = g_smokeDuration - elapsed;
         if (remaining < 15) remaining = 0; // not worth resuming
     }
+    llOwnerSay("DEBUG PROP: smokeFinished savePause=" + (string)savePause +
+               " elapsed=" + (string)(llGetUnixTime() - g_smokeStartTime) +
+               " duration=" + (string)g_smokeDuration +
+               " remaining=" + (string)remaining +
+               " hasDetachPerm=" + (string)g_hasDetachPerm);
 
     llParticleSystem([]);
     if (g_lisHUD)    { llListenRemove(g_lisHUD);    g_lisHUD    = 0; }
@@ -286,8 +295,24 @@ onPermissionsReady()
 
 onPermissionsFailed(string reasonText)
 {
-    llOwnerSay("[Smokeable] Permission failed: " + reasonText + " — cannot attach.");
-    llDie();
+    // CRITICAL: only die if we never attached. After a successful
+    // attach, a failed re-request for detach permission must NOT kill
+    // the prop  -  that was the cause of smoke vanishing 1-2 seconds
+    // after the joint appeared (XP unavailable -> classic prompt for
+    // detach -> player dismissed -> llDie -> particles gone).
+    // We just lose the ability to script-detach gracefully; the prop
+    // can still smoke for its full duration and detach via llDie()
+    // at the end of smokeFinished().
+    if (!g_attached)
+    {
+        llOwnerSay("[Smokeable] Permission failed pre-attach: " +
+                   reasonText + " — cannot attach.");
+        llDie();
+        return;
+    }
+    llOwnerSay("DEBUG PROP: post-attach detach perm failed (" +
+               reasonText + ") — keeping smoke alive, will llDie() at end.");
+    g_hasDetachPerm = FALSE;
 }
 
 // ================================================================
@@ -439,6 +464,9 @@ default
 
     timer()
     {
+        llOwnerSay("DEBUG PROP: timer fired attached=" + (string)g_attached +
+                   " canInteract=" + (string)g_canInteract +
+                   " smokeStartTime=" + (string)g_smokeStartTime);
         if (!g_attached)
         {
             llOwnerSay("DEBUG PROP: timed out waiting for attach, dying");
@@ -449,13 +477,16 @@ default
         if (!g_canInteract)
         {
             // Lockout period ended — enable touch dialog, start smoke countdown
-            g_canInteract   = TRUE;
+            g_canInteract    = TRUE;
             g_smokeStartTime = llGetUnixTime();
+            llOwnerSay("DEBUG PROP: lockout ended, starting smoke duration timer " +
+                       (string)g_smokeDuration + "s");
             llSetTimerEvent((float)g_smokeDuration);
             return;
         }
 
         // Smoke duration expired naturally — do not save a pause entry
+        llOwnerSay("DEBUG PROP: smoke duration expired naturally");
         smokeFinished(FALSE);
     }
 
