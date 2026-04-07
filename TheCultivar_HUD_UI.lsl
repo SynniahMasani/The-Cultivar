@@ -444,9 +444,17 @@ showStats()
     string brandInfo = "";
     if (g_brandName != "" && g_brandName != g_playerName)
         brandInfo = "\nBrand: " + g_brandName;
+
+    // Read RLV high-effects toggle (default off)
+    string fxLabel = "FX: Off";
+    if (llLinksetDataRead("hud_fx_enabled") == "1")
+        fxLabel = "FX: On";
+
     llDialog(g_ownerKey,
-        "=== STATS ===\n" + g_playerName + "\nTitle: " + g_playerTitle + brandInfo,
-        ["View Stats", "Achievements", "Set Brand Name", "Reset Brand", "Close"],
+        "=== STATS ===\n" + g_playerName + "\nTitle: " + g_playerTitle + brandInfo +
+        "\n\nFX = on-screen visual effects while high (RLV).",
+        ["View Stats", "Achievements", "Set Brand Name",
+         "Reset Brand", fxLabel, "Close"],
         DCHAN_STATS_MENU);
     llSetTimerEvent(30.0);
 }
@@ -865,6 +873,28 @@ default
                 showBrandNameTextBox();
             else if (msg == "Reset Brand")
                 llMessageLinked(LINK_SET, CHAN_IDENTITY, "RESET_BRAND_NAME", NULL_KEY);
+            else if (msg == "FX: On" || msg == "FX: Off")
+            {
+                // Toggle RLV high-effects setting
+                if (llLinksetDataRead("hud_fx_enabled") == "1")
+                {
+                    llLinksetDataWrite("hud_fx_enabled", "0");
+                    llOwnerSay("Visual high effects disabled.");
+                    // If currently smoking, clear effects immediately
+                    llMessageLinked(LINK_SET, CHAN_ANIMATION, "FX_CLEAR", NULL_KEY);
+                }
+                else
+                {
+                    llLinksetDataWrite("hud_fx_enabled", "1");
+                    llOwnerSay("Visual high effects enabled. Requires RLV-compatible viewer.");
+                    // If currently smoking, start effects immediately
+                    if (g_isSmoking)
+                        llMessageLinked(LINK_SET, CHAN_ANIMATION,
+                            "FX_START|" + g_smokeQuality, NULL_KEY);
+                }
+                showStats(); // re-show with updated label
+                return;
+            }
             // "Close"  -  do nothing
         }
 
