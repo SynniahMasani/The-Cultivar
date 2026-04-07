@@ -52,6 +52,15 @@ string  g_smokingItemType = "";
 string  g_smokingQuality  = "";
 string  g_smokingStrain   = "";
 
+// Session rez gating: HUD_UI sets this to TRUE via ARM_SESSION_REZ
+// before rezzing TC_SessionObject. We only forward TC_SESSION_REZZED
+// pings to the UI while this is TRUE, so unrelated nearby session
+// objects (or replayed pings) cannot auto-open the Spark menu.
+// Self-clears after SESSION_REZ_WINDOW seconds via timer.
+integer g_awaitingSessionRez   = FALSE;
+integer g_sessionRezArmedAt    = 0;
+integer SESSION_REZ_WINDOW_SEC = 15;
+
 // ----------------------------------------------------------------
 // Duration table — matches TheCultivar_Smokeable.lsl
 // ----------------------------------------------------------------
@@ -167,6 +176,17 @@ default
         if (cmd == "REGISTER_OBJECT")
         {
             registerWithObject((key)llList2String(parts, 1));
+        }
+
+        // UI is about to rez TC_SessionObject  -  open the gate so the
+        // next TC_SESSION_REZZED ping forwards to the UI. Without this
+        // arm step, all TC_SESSION_REZZED pings are silently dropped.
+        else if (cmd == "ARM_SESSION_REZ")
+        {
+            g_awaitingSessionRez = TRUE;
+            g_sessionRezArmedAt  = llGetUnixTime();
+            llOwnerSay("DEBUG COMMS: ARM_SESSION_REZ — gate open " +
+                       (string)SESSION_REZ_WINDOW_SEC + "s");
         }
 
         // Player initiated a session as host  -  update state, notify UI
@@ -347,9 +367,25 @@ default
         // ---- Session object rezzed  -  it announces itself so HUD can fire TC_SESSION_START ----
         else if (channel == TC_OBJECT_PING_CHAN && cmd == "TC_SESSION_REZZED")
         {
+            // GUARD: only forward if HUD_UI armed the gate via
+            // ARM_SESSION_REZ in the last SESSION_REZ_WINDOW_SEC seconds.
+            // Without this, ANY nearby session-object rez would auto-open
+            // the player's spark menu.
+            integer ageOK = (llGetUnixTime() - g_sessionRezArmedAt) <
+                            SESSION_REZ_WINDOW_SEC;
+            if (!g_awaitingSessionRez || !ageOK)
+            {
+                llOwnerSay("DEBUG COMMS: dropping TC_SESSION_REZZED  -  " +
+                           "awaiting=" + (string)g_awaitingSessionRez +
+                           " ageOK=" + (string)ageOK);
+                g_awaitingSessionRez = FALSE;
+                return;
+            }
             // TC_SESSION_REZZED|sessionObjectKey|sessionChannel
             key sessObjKey = (key)llList2String(parts, 1);
-            // Forward to UI so it can complete the session start flow
+            llOwnerSay("DEBUG COMMS: forwarding SESSION_OBJECT_READY for " +
+                       (string)sessObjKey);
+            g_awaitingSessionRez = FALSE; // single-shot
             llMessageLinked(LINK_SET, CHAN_UI,
                 "SESSION_OBJECT_READY|" + (string)sessObjKey, NULL_KEY);
         }

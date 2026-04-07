@@ -514,9 +514,12 @@ startSession()
         llOwnerSay("[Error] TC_SessionObject not in HUD inventory.");
         return;
     }
+    // Arm the session-rez gate in HUD_Comms BEFORE rezzing so the
+    // outgoing TC_SESSION_REZZED ping is actually forwarded to us.
+    g_flowContext = "session_spark";
+    llMessageLinked(LINK_SET, CHAN_COMMS, "ARM_SESSION_REZ", NULL_KEY);
     vector pos = llGetPos() + llRot2Fwd(llGetRot()) * 1.2 + <0,0,0.1>;
     llRezObject("TC_SessionObject", pos, ZERO_VECTOR, ZERO_ROTATION, 0);
-    g_flowContext = "session_spark";
 }
 
 
@@ -1053,6 +1056,38 @@ default
                 llOwnerSay(llDeleteSubString(msg, 0, 10));
                 return;
             }
+            // SMOKE_STOPPED is a single token  -  handle WITHOUT
+            // allocating a parts list. This is the critical fast path
+            // for the Put It Out flow that was blowing the heap.
+            if (msg == "SMOKE_STOPPED")
+            {
+                llOwnerSay("DEBUG UI: SMOKE_STOPPED (fast) was g_isSmoking=" +
+                           (string)g_isSmoking +
+                           " mem used=" + (string)llGetUsedMemory() +
+                           " free=" + (string)llGetFreeMemory() +
+                           " -> UNLOCKED smoke btn");
+                g_isSmoking          = FALSE;
+                g_smokeStrain        = "";
+                g_smokeQuality       = "";
+                g_smokeTimeRemaining = 0;
+                g_availableItems     = [];
+                g_flowContext        = "none";
+                setButtonGlow(LINK_BTN_SMOKE, 0.0);
+                return;
+            }
+            // ITEM_USED / ITEM_FAILED carry an item-name suffix but the
+            // dispatch only cares about the command. Detect with prefix
+            // match and skip the parts allocation.
+            if (llSubStringIndex(msg, "ITEM_USED|") == 0 || msg == "ITEM_USED")
+            {
+                onRemoveSuccess();
+                return;
+            }
+            if (llSubStringIndex(msg, "ITEM_FAILED|") == 0 || msg == "ITEM_FAILED")
+            {
+                onRemoveFail();
+                return;
+            }
         }
 
         list   parts = llParseString2List(msg, ["|"], []);
@@ -1077,16 +1112,9 @@ default
                     g_playerTitle = llList2String(parts, 14);
             }
 
-            // (UPDATE_INVENTORY_DISPLAY and SHOW_STATS are fast-pathed
-            // above the parts allocation to keep heap usage down.)
-
-            // Item consumed successfully  -  trigger animation (HUD-menu smoke flow)
-            else if (cmd == "ITEM_USED")
-                onRemoveSuccess();
-
-            // Item consumption failed
-            else if (cmd == "ITEM_FAILED")
-                onRemoveFail();
+            // (UPDATE_INVENTORY_DISPLAY, SHOW_STATS, SMOKE_STOPPED,
+            // ITEM_USED and ITEM_FAILED are fast-pathed above the parts
+            // allocation to keep heap usage down on the smoke flow.)
 
             // World object (jar, weed piece, session) fired TC_SMOKED  -
             // Comms already started the animation, we just update state + glow.
@@ -1094,6 +1122,8 @@ default
             // Minimal work: only touch what onRemoveSuccess didn't already set.
             else if (cmd == "SMOKE_STARTED")
             {
+                llOwnerSay("DEBUG UI: SMOKE_STARTED received, was g_isSmoking=" +
+                           (string)g_isSmoking + " -> TRUE; LOCKED smoke btn");
                 if (!g_isSmoking)
                 {
                     g_isSmoking    = TRUE;
@@ -1104,22 +1134,23 @@ default
                 g_smokeTimeRemaining = (integer)llList2String(parts, 3);
             }
 
-            // Smoke finished (natural end or put out via smokeable touch dialog)
-            else if (cmd == "SMOKE_STOPPED")
-            {
-                g_isSmoking          = FALSE;
-                g_smokeStrain        = "";
-                g_smokeQuality       = "";
-                g_smokeTimeRemaining = 0;
-                g_availableItems     = [];
-                setButtonGlow(LINK_BTN_SMOKE, 0.0);
-            }
-
             // ---- SESSION EVENTS ----
 
-            // Session object rezzed  -  show item picker
+            // Session object rezzed  -  show item picker.
+            // GUARD: only honour this when the player explicitly asked
+            // for a session via Spark Session. Without the gate, ANY
+            // nearby session-object rez (or replay of an old TC_SESSION_REZZED
+            // ping) would auto-open the spark menu.
             else if (cmd == "SESSION_OBJECT_READY")
             {
+                llOwnerSay("DEBUG UI: SESSION_OBJECT_READY received, " +
+                           "flowContext=" + g_flowContext);
+                if (g_flowContext != "session_spark")
+                {
+                    llOwnerSay("DEBUG UI: ignoring SESSION_OBJECT_READY  -  " +
+                               "no pending session_spark flow");
+                    return;
+                }
                 g_pendingSessionObjKey = (key)llList2String(parts, 1);
                 // Request spark-able inventory (joints, blunts, spliffs, flower)
                 llMessageLinked(LINK_SET, CHAN_INVENTORY,
