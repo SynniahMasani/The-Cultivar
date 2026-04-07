@@ -255,9 +255,7 @@ default
                 llSay(g_hudChannel,
                     "TC_SMOKE_ATTACH_READY|" + g_itemType + "|" + g_quality);
 
-                // Particles disabled — no texture UUID configured. Uncomment
-                // and set PSYS_SRC_TEXTURE in startSmokeParticles to re-enable.
-                // startSmokeParticles();
+                startSmokeParticles();
                 llPlaySound("smoke_inhale", 0.4);
 
                 // Listen on HUD channel for early-end signal
