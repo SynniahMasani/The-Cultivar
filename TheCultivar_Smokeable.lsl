@@ -132,7 +132,7 @@ integer getSmokeDuration(string itemType, string quality)
 }
 
 // ----------------------------------------------------------------
-// Quality-specific smoke particle color
+// Quality-specific smoke particle start color
 // ----------------------------------------------------------------
 vector qualityColor(string quality)
 {
@@ -142,12 +142,53 @@ vector qualityColor(string quality)
     return <0.75, 0.7, 0.6>;
 }
 
+// End color: reggie/mids fade to pale gray (normal dissipation),
+// while loud and exotic hold a vivid tint for longer so the high-tier
+// smoke actually reads as colorful in the air instead of washing out
+// to white within half a second.
+vector qualityColorEnd(string quality)
+{
+    if (quality == "loud")   return <0.55, 0.85, 0.55>; // lingering green
+    if (quality == "exotic") return <0.70, 0.55, 0.95>; // lingering purple
+    if (quality == "mids")   return <0.90, 0.88, 0.75>; // warm off-white
+    return <0.92, 0.92, 0.92>;                          // reggie: plain gray
+}
+
 // ----------------------------------------------------------------
 // Smoke particle system
+//
+// Color branches only on quality (joints and blunts of the same
+// quality produce the same hue). itemType controls how THICK the
+// smoke is  -  blunts are larger props so they get wider end
+// scale and more particles per burst to look visually chunkier.
 // ----------------------------------------------------------------
 startSmokeParticles()
 {
-    vector col = qualityColor(g_quality);
+    vector startCol = qualityColor(g_quality);
+    vector endCol   = qualityColorEnd(g_quality);
+
+    // Per-itemType thickness tuning. Blunts get beefier smoke than
+    // joints / spliffs so the larger mesh doesn't visually swallow
+    // the plume. These are scalar deltas applied to the base values
+    // so one particle system still serves every type+quality.
+    float  endScaleX    = 0.10;
+    float  endScaleY    = 0.10;
+    integer burstCount  = 2;
+    float  burstRate    = 0.2;
+
+    if (g_itemType == "blunt")
+    {
+        endScaleX  = 0.18;
+        endScaleY  = 0.18;
+        burstCount = 3;
+        burstRate  = 0.15;
+    }
+    else if (g_itemType == "spliff")
+    {
+        endScaleX  = 0.12;
+        endScaleY  = 0.12;
+    }
+
     llParticleSystem([
         PSYS_PART_FLAGS,
             PSYS_PART_INTERP_COLOR_MASK |
@@ -155,15 +196,15 @@ startSmokeParticles()
             PSYS_PART_WIND_MASK |
             PSYS_PART_EMISSIVE_MASK,
         PSYS_SRC_PATTERN,          PSYS_SRC_PATTERN_ANGLE_CONE,
-        PSYS_PART_START_COLOR,     col,
-        PSYS_PART_END_COLOR,       <0.95, 0.95, 0.95>,
+        PSYS_PART_START_COLOR,     startCol,
+        PSYS_PART_END_COLOR,       endCol,
         PSYS_PART_START_ALPHA,     0.55,
         PSYS_PART_END_ALPHA,       0.0,
         PSYS_PART_START_SCALE,     <0.02, 0.02, 0.0>,
-        PSYS_PART_END_SCALE,       <0.10, 0.10, 0.0>,
+        PSYS_PART_END_SCALE,       <endScaleX, endScaleY, 0.0>,
         PSYS_PART_MAX_AGE,         5.0,
-        PSYS_SRC_BURST_RATE,       0.2,
-        PSYS_SRC_BURST_PART_COUNT, 2,
+        PSYS_SRC_BURST_RATE,       burstRate,
+        PSYS_SRC_BURST_PART_COUNT, burstCount,
         // Bumped from 0.02-0.05 to 0.15-0.3 so particles escape larger
         // meshes (blunts/spliffs) instead of being born inside the prim
         PSYS_SRC_BURST_SPEED_MIN,  0.15,
