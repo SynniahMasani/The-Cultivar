@@ -542,7 +542,6 @@ finishCraft()
         g_brandName);
 
     burstParticles(g_selectedQuality);
-    llPlaySound("roll_complete", 0.6);
 
     string plural = "";
     if (g_selectedCount > 1) plural = "s";

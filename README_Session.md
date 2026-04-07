@@ -101,16 +101,6 @@ Max 8 participants (limited by LSL dialog button count).
 
 ---
 
-## SOUNDS REQUIRED (place in session object inventory)
-
-| Sound Name    | When It Plays                        |
-|---------------|--------------------------------------|
-| session_start | When host sparks the session         |
-| session_end   | When the session ends                |
-| pass_whoosh   | When the item is passed              |
-
----
-
 ## WHAT'S NEXT
 
 Next object to build: **The Plug Board**

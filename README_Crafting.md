@@ -37,11 +37,6 @@ Rolling mat (link 2) lights up with quality color during crafting,
 then fades back. Display prim (link 4) shows "Nx Item / Strain"
 for 3 seconds after a successful craft.
 
-### Sounds Required
-| Sound Name   | When                   |
-|--------------|------------------------|
-| rolling_done | After successful craft |
-
 ---
 
 ## EDIBLES & CONCENTRATE BENCH

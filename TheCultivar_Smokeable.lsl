@@ -32,6 +32,9 @@ integer g_hasDetachPerm = FALSE;
 integer g_hudChannel    = 0;
 integer g_lisHUD        = 0;
 integer g_lisDialog     = 0;
+// Unix time when the smoke countdown actually started (after lockout).
+// Used to compute remaining seconds when the user puts it out.
+integer g_smokeStartTime = 0;
 
 // Interaction lockout: block touch dialog for this many seconds after attach
 // so the permission banner can display without collision.
@@ -174,13 +177,37 @@ startSmokeParticles()
 
 // ----------------------------------------------------------------
 // Notify HUD and detach
+//
+// If savePause is TRUE and there is meaningful time remaining, the
+// smokeable reports TC_SMOKE_PAUSED so the HUD can offer Resume
+// next time the player picks the same item. Otherwise it reports
+// TC_SMOKE_FINISHED (natural expiry / not worth resuming).
 // ----------------------------------------------------------------
-smokeFinished()
+smokeFinished(integer savePause)
 {
+    integer remaining = 0;
+    if (savePause && g_smokeStartTime > 0)
+    {
+        integer elapsed = llGetUnixTime() - g_smokeStartTime;
+        remaining = g_smokeDuration - elapsed;
+        if (remaining < 15) remaining = 0; // not worth resuming
+    }
+
     llParticleSystem([]);
     if (g_lisHUD)    { llListenRemove(g_lisHUD);    g_lisHUD    = 0; }
     if (g_lisDialog) { llListenRemove(g_lisDialog); g_lisDialog = 0; }
-    llSay(g_hudChannel, "TC_SMOKE_FINISHED");
+
+    if (remaining > 0)
+    {
+        llSay(g_hudChannel,
+            "TC_SMOKE_PAUSED|" + g_itemType + "|" + g_quality +
+            "|" + (string)remaining);
+    }
+    else
+    {
+        llSay(g_hudChannel, "TC_SMOKE_FINISHED");
+    }
+
     if (g_hasDetachPerm)
         llDetachFromAvatar();
     else
@@ -193,7 +220,7 @@ smokeFinished()
 passSmokeable(key target)
 {
     llGiveInventory(target, llGetObjectName());
-    smokeFinished();
+    smokeFinished(FALSE);
 }
 
 // ----------------------------------------------------------------
@@ -252,6 +279,17 @@ default
 
     on_rez(integer start_param)
     {
+        // Resume support: HUD_Comms rezzes with start_param = remaining
+        // seconds when continuing a previously paused smoke of the same
+        // type+quality. 0 means a fresh smoke (use the default duration
+        // already computed in state_entry from the object name).
+        if (start_param > 0)
+        {
+            g_smokeDuration = start_param;
+            llOwnerSay("DEBUG PROP: resuming paused smoke, remaining=" +
+                       (string)start_param + "s");
+        }
+
         // Try Experience permissions first; falls back to classic via the
         // experience_permissions_denied event if Experience isn't available.
         llOwnerSay("DEBUG PROP: on_rez, requesting hybrid permissions");
@@ -370,20 +408,22 @@ default
         if (!g_canInteract)
         {
             // Lockout period ended — enable touch dialog, start smoke countdown
-            g_canInteract = TRUE;
+            g_canInteract   = TRUE;
+            g_smokeStartTime = llGetUnixTime();
             llSetTimerEvent((float)g_smokeDuration);
             return;
         }
 
-        // Smoke duration expired naturally
-        smokeFinished();
+        // Smoke duration expired naturally — do not save a pause entry
+        smokeFinished(FALSE);
     }
 
     listen(integer channel, string name, key id, string msg)
     {
         if (channel == g_hudChannel && msg == "TC_END_SMOKE")
         {
-            smokeFinished();
+            // HUD-side "Put It Out" — save remaining for resume
+            smokeFinished(TRUE);
             return;
         }
 
@@ -392,7 +432,8 @@ default
             if (g_lisDialog) { llListenRemove(g_lisDialog); g_lisDialog = 0; }
             if (msg == "Put It Out")
             {
-                smokeFinished();
+                // In-world "Put It Out" — save remaining for resume
+                smokeFinished(TRUE);
             }
             else if (msg == "Take a Puff")
             {
