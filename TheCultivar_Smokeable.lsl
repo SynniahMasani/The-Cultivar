@@ -166,32 +166,55 @@ startSmokeParticles()
 {
     vector startCol = qualityColor(g_quality);
     vector endCol   = qualityColorEnd(g_quality);
-    llOwnerSay("DEBUG PROP: startSmokeParticles type=" + g_itemType +
-               " quality=" + g_quality +
-               " start=" + (string)startCol +
-               " end=" + (string)endCol);
 
-    // Per-itemType thickness tuning. Blunts get beefier smoke than
+    // Per-itemType thickness tuning. Blunts get MUCH beefier smoke than
     // joints / spliffs so the larger mesh doesn't visually swallow
-    // the plume. These are scalar deltas applied to the base values
-    // so one particle system still serves every type+quality.
-    float  endScaleX    = 0.10;
-    float  endScaleY    = 0.10;
-    integer burstCount  = 2;
-    float  burstRate    = 0.2;
+    // the plume. One particle system still serves every type+quality.
+    //
+    // IMPORTANT: the particle emitter runs CONTINUOUSLY until
+    // llParticleSystem([]) is called. If you see smoke for just an
+    // initial burst then nothing, either the emitter was reset OR
+    // burstRate is too slow vs particle lifetime. Do not touch
+    // PSYS_SRC_MAX_AGE here; leaving it 0 means "emit forever".
+    float  endScaleX    = 0.12;
+    float  endScaleY    = 0.12;
+    integer burstCount  = 3;
+    float  burstRate    = 0.15;
+    float  startAlpha   = 0.65;
+    float  maxAge       = 6.0;
+    float  speedMin     = 0.15;
+    float  speedMax     = 0.30;
 
     if (g_itemType == "blunt")
     {
-        endScaleX  = 0.18;
-        endScaleY  = 0.18;
-        burstCount = 3;
-        burstRate  = 0.15;
+        // Blunts: bigger prim, bigger cloud. Roughly 3x the particle
+        // density of a joint and almost 2x the final scale so a
+        // "few dots" symptom cannot come from tuning.
+        endScaleX  = 0.45;
+        endScaleY  = 0.45;
+        burstCount = 8;
+        burstRate  = 0.08;
+        startAlpha = 0.80;
+        maxAge     = 7.0;
+        speedMin   = 0.25;
+        speedMax   = 0.50;
     }
     else if (g_itemType == "spliff")
     {
-        endScaleX  = 0.12;
-        endScaleY  = 0.12;
+        endScaleX  = 0.18;
+        endScaleY  = 0.18;
+        burstCount = 4;
+        burstRate  = 0.12;
     }
+
+    llOwnerSay("DEBUG PROP: startSmokeParticles type=" + g_itemType +
+               " quality=" + g_quality +
+               " start=" + (string)startCol +
+               " end=" + (string)endCol +
+               " burstCount=" + (string)burstCount +
+               " burstRate=" + (string)burstRate +
+               " endScale=" + (string)endScaleX +
+               " maxAge=" + (string)maxAge);
 
     llParticleSystem([
         PSYS_PART_FLAGS,
@@ -202,21 +225,21 @@ startSmokeParticles()
         PSYS_SRC_PATTERN,          PSYS_SRC_PATTERN_ANGLE_CONE,
         PSYS_PART_START_COLOR,     startCol,
         PSYS_PART_END_COLOR,       endCol,
-        PSYS_PART_START_ALPHA,     0.55,
+        PSYS_PART_START_ALPHA,     startAlpha,
         PSYS_PART_END_ALPHA,       0.0,
-        PSYS_PART_START_SCALE,     <0.02, 0.02, 0.0>,
+        PSYS_PART_START_SCALE,     <0.03, 0.03, 0.0>,
         PSYS_PART_END_SCALE,       <endScaleX, endScaleY, 0.0>,
-        PSYS_PART_MAX_AGE,         5.0,
+        PSYS_PART_MAX_AGE,         maxAge,
         PSYS_SRC_BURST_RATE,       burstRate,
         PSYS_SRC_BURST_PART_COUNT, burstCount,
-        // Bumped from 0.02-0.05 to 0.15-0.3 so particles escape larger
-        // meshes (blunts/spliffs) instead of being born inside the prim
-        PSYS_SRC_BURST_SPEED_MIN,  0.15,
-        PSYS_SRC_BURST_SPEED_MAX,  0.30,
+        PSYS_SRC_BURST_SPEED_MIN,  speedMin,
+        PSYS_SRC_BURST_SPEED_MAX,  speedMax,
         // Slight upward drift so smoke always rises away from the prim
         PSYS_SRC_ACCEL,            <0.0, 0.0, 0.05>,
         PSYS_SRC_ANGLE_BEGIN,      0.0,
-        PSYS_SRC_ANGLE_END,        0.35
+        PSYS_SRC_ANGLE_END,        0.45
+        // NOTE: PSYS_SRC_MAX_AGE intentionally omitted -> 0 ->
+        // emitter runs forever until llParticleSystem([]).
     ]);
 }
 
@@ -404,45 +427,50 @@ default
 
     attach(key attachedTo)
     {
-        llOwnerSay("DEBUG PROP: attach event, attachedTo=" + (string)attachedTo);
+        llOwnerSay("DEBUG PROP: attach event, attachedTo=" + (string)attachedTo +
+                   " g_attached was=" + (string)g_attached);
 
         if (attachedTo == NULL_KEY)
         {
+            llOwnerSay("DEBUG PROP: detach detected, clearing particles and dying");
             llParticleSystem([]);
             llDie();
+            return;
         }
-        else
+
+        // Snap to right hand — final tuned offsets from in-world adjustment
+        llSetLocalRot(llEuler2Rot(<90.0, 274.0, 270.0> * DEG_TO_RAD));
+        llSetPos(<0.04991, -0.0339, 0.01178>);
+
+        if (!g_attached)
         {
-            // Snap to right hand — final tuned offsets from in-world adjustment
-            llSetLocalRot(llEuler2Rot(<90.0, 274.0, 270.0> * DEG_TO_RAD));
-            llSetPos(<0.04991, -0.0339, 0.01178>);
+            // CRITICAL: mark attached BEFORE re-requesting detach perms
+            // so onPermissionsReady cannot race us back into
+            // llAttachToAvatarTemp if the perm event fires fast.
+            g_attached = TRUE;
+
+            llOwnerSay("DEBUG PROP: sending TC_SMOKE_ATTACH_READY on chan " +
+                       (string)g_hudChannel);
+            llSay(g_hudChannel,
+                "TC_SMOKE_ATTACH_READY|" + g_itemType + "|" + g_quality);
+
+            startSmokeParticles();
+            llPlaySound("smoke_inhale", 0.4);
+
+            // Listen on HUD channel for early-end signal
+            g_lisHUD = llListen(g_hudChannel, "", NULL_KEY, "TC_END_SMOKE");
+
+            // Interaction lockout — block touch dialog for N seconds so
+            // the permission banner doesn't collide with smoke dialog.
+            g_canInteract = FALSE;
+            llSetTimerEvent(INTERACT_LOCKOUT);
 
             // Re-request permissions after attach for later detach.
             // Ownership context changes after temp-attach, so the pre-attach
-            // grant may not carry over for llDetachFromAvatar(). Re-runs the
-            // hybrid flow (XP first, classic fallback).
+            // grant may not carry over for llDetachFromAvatar(). Runs LAST
+            // so particles + TC_SMOKE_ATTACH_READY are already out the
+            // door before the player sees any follow-up permission UI.
             requestHybridPermissions(attachedTo, "Detach smokeable");
-
-            if (!g_attached)
-            {
-                g_attached = TRUE;
-
-                llOwnerSay("DEBUG PROP: sending TC_SMOKE_ATTACH_READY on chan " +
-                           (string)g_hudChannel);
-                llSay(g_hudChannel,
-                    "TC_SMOKE_ATTACH_READY|" + g_itemType + "|" + g_quality);
-
-                startSmokeParticles();
-                llPlaySound("smoke_inhale", 0.4);
-
-                // Listen on HUD channel for early-end signal
-                g_lisHUD = llListen(g_hudChannel, "", NULL_KEY, "TC_END_SMOKE");
-
-                // Interaction lockout — block touch dialog for N seconds so
-                // the permission banner doesn't collide with smoke dialog.
-                g_canInteract = FALSE;
-                llSetTimerEvent(INTERACT_LOCKOUT);
-            }
         }
     }
 

@@ -54,10 +54,16 @@ string  g_smokingStrain   = "";
 
 // Session rez gating: HUD_UI sets this to TRUE via ARM_SESSION_REZ
 // before rezzing TC_SessionObject. We only forward TC_SESSION_REZZED
-// pings to the UI while this is TRUE, so unrelated nearby session
-// objects (or replayed pings) cannot auto-open the Spark menu.
-// Self-clears after SESSION_REZ_WINDOW seconds via timer.
-integer g_awaitingSessionRez   = FALSE;
+// pings to the UI while this is TRUE. Without this, ANY nearby
+// TC_SessionObject (including one left on the parcel by another
+// player or a previous test) would ping us and auto-open the Spark
+// Session menu.
+//
+// Session_Core.lsl broadcasts TC_SESSION_REZZED from state_entry on
+// EVERY script reset. That includes on_rez -> llResetScript, any
+// CHANGED_OWNER, and any manual Edit→Reset in the object. So stale
+// pings are a normal occurrence, not an exception.
+integer g_waitingForSessionRez = FALSE;
 integer g_sessionRezArmedAt    = 0;
 integer SESSION_REZ_WINDOW_SEC = 15;
 
@@ -183,10 +189,19 @@ default
         // arm step, all TC_SESSION_REZZED pings are silently dropped.
         else if (cmd == "ARM_SESSION_REZ")
         {
-            g_awaitingSessionRez = TRUE;
-            g_sessionRezArmedAt  = llGetUnixTime();
+            g_waitingForSessionRez = TRUE;
+            g_sessionRezArmedAt    = llGetUnixTime();
             llOwnerSay("DEBUG COMMS: ARM_SESSION_REZ — gate open " +
                        (string)SESSION_REZ_WINDOW_SEC + "s");
+        }
+
+        // UI bailed out of session flow  -  slam the gate shut even if
+        // it would have expired naturally in a few seconds.
+        else if (cmd == "CANCEL_SESSION_REZ")
+        {
+            g_waitingForSessionRez = FALSE;
+            g_sessionRezArmedAt    = 0;
+            llOwnerSay("DEBUG COMMS: CANCEL_SESSION_REZ — gate closed");
         }
 
         // Player initiated a session as host  -  update state, notify UI
@@ -369,23 +384,27 @@ default
         {
             // GUARD: only forward if HUD_UI armed the gate via
             // ARM_SESSION_REZ in the last SESSION_REZ_WINDOW_SEC seconds.
-            // Without this, ANY nearby session-object rez would auto-open
-            // the player's spark menu.
+            // Without this, ANY TC_SessionObject rez in the region
+            // (from another player or a leftover object that was just
+            // script-reset) would auto-open this player's Spark menu.
+            // Session_Core broadcasts TC_SESSION_REZZED unconditionally
+            // from its state_entry, so stale pings are normal.
             integer ageOK = (llGetUnixTime() - g_sessionRezArmedAt) <
                             SESSION_REZ_WINDOW_SEC;
-            if (!g_awaitingSessionRez || !ageOK)
+            if (!g_waitingForSessionRez || !ageOK)
             {
                 llOwnerSay("DEBUG COMMS: dropping TC_SESSION_REZZED  -  " +
-                           "awaiting=" + (string)g_awaitingSessionRez +
-                           " ageOK=" + (string)ageOK);
-                g_awaitingSessionRez = FALSE;
+                           "waiting=" + (string)g_waitingForSessionRez +
+                           " ageOK=" + (string)ageOK +
+                           " armedAgo=" + (string)(llGetUnixTime() - g_sessionRezArmedAt));
                 return;
             }
             // TC_SESSION_REZZED|sessionObjectKey|sessionChannel
             key sessObjKey = (key)llList2String(parts, 1);
             llOwnerSay("DEBUG COMMS: forwarding SESSION_OBJECT_READY for " +
                        (string)sessObjKey);
-            g_awaitingSessionRez = FALSE; // single-shot
+            g_waitingForSessionRez = FALSE; // single-shot
+            g_sessionRezArmedAt    = 0;
             llMessageLinked(LINK_SET, CHAN_UI,
                 "SESSION_OBJECT_READY|" + (string)sessObjKey, NULL_KEY);
         }
