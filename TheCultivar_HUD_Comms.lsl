@@ -246,12 +246,24 @@ default
         }
 
         // HUD_UI requests a smokeable prop to be rezzed and attached
-        // TC_SMOKE_START|itemType|quality|strain
+        // TC_SMOKE_START|itemType|quality|strain[|resumeSeconds]
+        // If resumeSeconds > 0, the smokeable rezzes with that value as
+        // its start_param and resumes from the saved remaining time.
         else if (cmd == "TC_SMOKE_START")
         {
             g_smokingItemType = llList2String(parts, 1);
             g_smokingQuality  = llList2String(parts, 2);
             g_smokingStrain   = llList2String(parts, 3);
+            integer resumeSeconds = (integer)llList2String(parts, 4); // 0 if absent
+
+            // If resuming, clear the paused entry now so we don't resume
+            // again on the next fresh light-up of the same item.
+            if (resumeSeconds > 0)
+            {
+                llLinksetDataDelete("smoke_paused_" + g_smokingItemType +
+                                    "_" + g_smokingQuality +
+                                    "_" + g_smokingStrain);
+            }
 
             string propName = "TC_Smoke_" + capitalize(g_smokingItemType) +
                               "_" + capitalize(g_smokingQuality);
@@ -260,7 +272,8 @@ default
                 propName = "TC_Smoke_Joint_Reggie";
 
             llOwnerSay("DEBUG HUD: propName=" + propName +
-                       " invType=" + (string)llGetInventoryType(propName));
+                       " invType=" + (string)llGetInventoryType(propName) +
+                       " resume=" + (string)resumeSeconds);
 
             if (llGetInventoryType(propName) == INVENTORY_OBJECT)
             {
@@ -272,10 +285,11 @@ default
                     llOwnerSay("DEBUG HUD: ownerPos was ZERO_VECTOR, using llGetPos fallback");
                     ownerPos = llGetPos();
                 }
-                // Rez just above the owner; smokeable self-attaches to ATTACH_RHAND
+                // Rez just above the owner; smokeable self-attaches to ATTACH_RHAND.
+                // start_param carries the resume remaining seconds (0 = fresh).
                 llOwnerSay("DEBUG HUD: rezzing at " + (string)(ownerPos + <0.0, 0.0, 0.3>));
                 llRezObject(propName, ownerPos + <0.0, 0.0, 0.3>,
-                            ZERO_VECTOR, ZERO_ROTATION, 0);
+                            ZERO_VECTOR, ZERO_ROTATION, resumeSeconds);
             }
             else
             {
@@ -357,9 +371,41 @@ default
                     "|" + (string)duration, NULL_KEY);
             }
 
-            // Smokeable finished (natural end or put out)  -  clear smoke state
+            // Smokeable finished (natural end or no remaining time)  -
+            // clear smoke state and any paused entry for this strain.
             else if (cmd == "TC_SMOKE_FINISHED")
             {
+                if (g_smokingItemType != "")
+                {
+                    llLinksetDataDelete("smoke_paused_" + g_smokingItemType +
+                                        "_" + g_smokingQuality +
+                                        "_" + g_smokingStrain);
+                }
+                g_smokingItemType = "";
+                g_smokingQuality  = "";
+                g_smokingStrain   = "";
+                llMessageLinked(LINK_SET, CHAN_ANIMATION, "STOP_SMOKE_ANIM", NULL_KEY);
+                llMessageLinked(LINK_SET, CHAN_UI, "SMOKE_STOPPED", NULL_KEY);
+            }
+
+            // Smokeable was put out with time remaining  -  record the
+            // pause so the player can Resume later when they pick the
+            // same type+quality+strain from the smoke menu.
+            // TC_SMOKE_PAUSED|itemType|quality|remainingSeconds
+            else if (cmd == "TC_SMOKE_PAUSED")
+            {
+                string pType    = llList2String(parts, 1);
+                string pQuality = llList2String(parts, 2);
+                integer pRem    = (integer)llList2String(parts, 3);
+                // Strain comes from our own tracking since the smokeable
+                // only knows type+quality (parsed from its object name).
+                string pStrain  = g_smokingStrain;
+                if (pType != "" && pQuality != "" && pStrain != "" && pRem > 0)
+                {
+                    llLinksetDataWrite("smoke_paused_" + pType + "_" +
+                                       pQuality + "_" + pStrain,
+                                       (string)pRem);
+                }
                 g_smokingItemType = "";
                 g_smokingQuality  = "";
                 g_smokingStrain   = "";

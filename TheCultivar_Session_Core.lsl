@@ -314,7 +314,6 @@ passToNext()
         "PASS_EFFECT|" + (string)prevKey + "|" + (string)nextKey, NULL_KEY);
 
     updateHoverText();
-    llPlaySound("pass_whoosh", 0.5);
 }
 
 // ----------------------------------------------------------------

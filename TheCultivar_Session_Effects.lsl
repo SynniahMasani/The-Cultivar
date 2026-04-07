@@ -160,9 +160,6 @@ playPassEffect(key fromKey, key toKey)
         PSYS_SRC_ANGLE_END,         0.1
     ]);
 
-    // Play pass sound
-    llPlaySound("pass_whoosh", 0.6);
-
     // Schedule cleanup  -  pulseTick() checks this every 0.15s.
     // PSYS_SRC_MAX_AGE stops the burst source at 1.5s; we clear the
     // particle system definition at 2s so it doesn't persist.
@@ -214,7 +211,6 @@ onSessionStart(string quality)
     startAmbientSmoke();
     updateGlowRing();
     llSetTimerEvent(0.15); // fast pulse tick
-    llPlaySound("session_start", 0.6);
 }
 
 // ----------------------------------------------------------------
@@ -230,7 +226,6 @@ onSessionEnd()
     // Fade out glow ring
     llSetLinkPrimitiveParamsFast(3, [PRIM_GLOW, ALL_SIDES, 0.0]);
     llSetLinkPrimitiveParamsFast(5, [PRIM_GLOW, ALL_SIDES, 0.0]);
-    llPlaySound("session_end", 0.4);
 }
 
 // ================================================================

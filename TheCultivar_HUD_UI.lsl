@@ -53,6 +53,7 @@ integer DCHAN_INVENTORY      = -11009;
 integer DCHAN_STATS_MENU     = -11010;
 integer DCHAN_BRAND_NAME     = -11011;
 integer DCHAN_SMOKE_ACTIVE   = -11020;
+integer DCHAN_SMOKE_RESUME   = -11021;
 
 // ---- Listener handles ----
 integer g_lisMain;
@@ -67,6 +68,10 @@ integer g_lisInv;
 integer g_lisStatsMenu;
 integer g_lisBrandName;
 integer g_lisSmokeActive;
+integer g_lisSmokeResume;
+
+// ---- Resume dialog state (set when offering Resume/Start Fresh) ----
+integer g_pendingResumeSecs = 0;
 
 // ---- Owner info ----
 key     g_ownerKey  = NULL_KEY;
@@ -137,6 +142,7 @@ closeAllListens()
     if (g_lisStatsMenu)     { llListenRemove(g_lisStatsMenu);     g_lisStatsMenu     = 0; }
     if (g_lisBrandName)     { llListenRemove(g_lisBrandName);     g_lisBrandName     = 0; }
     if (g_lisSmokeActive)   { llListenRemove(g_lisSmokeActive);   g_lisSmokeActive   = 0; }
+    if (g_lisSmokeResume)   { llListenRemove(g_lisSmokeResume);   g_lisSmokeResume   = 0; }
 }
 
 setButtonGlow(integer link, float glow)
@@ -260,6 +266,32 @@ showEdibleTypeMenu()
         "=== EDIBLE ===\nChoose type:",
         ["Brownie", "Gummies", "Drink", "Back"],
         DCHAN_EDIBLE_TYPE);
+    llSetTimerEvent(30.0);
+}
+
+// ----------------------------------------------------------------
+// Shown when the player picks a smokeable for which they already
+// have a paused (put-out) session saved with time remaining.
+// Lets them resume the old one (no new item consumed) or start
+// a fresh one (consumes another from inventory and discards the
+// saved pause). Uses g_pendingItemType/Strain/Quality as context.
+// ----------------------------------------------------------------
+showSmokeResumeMenu(integer remainingSecs)
+{
+    closeAllListens();
+    g_pendingResumeSecs = remainingSecs;
+    integer mins = remainingSecs / 60;
+    string timeStr;
+    if (mins > 0) timeStr = "~" + (string)mins + " min left";
+    else          timeStr = (string)remainingSecs + "s left";
+    g_lisSmokeResume = llListen(DCHAN_SMOKE_RESUME, "", g_ownerKey, "");
+    llDialog(g_ownerKey,
+        "=== RESUME ===\nYou already put out a " +
+        g_pendingQuality + " " + g_pendingStrain + " " +
+        g_pendingItemType + ".\n" + timeStr +
+        "\n\nResume that one or light a fresh one?",
+        ["Resume", "Start Fresh", "Cancel"],
+        DCHAN_SMOKE_RESUME);
     llSetTimerEvent(30.0);
 }
 
@@ -708,12 +740,81 @@ default
                     g_pendingStrain   = strain;
                     g_pendingQuality  = quality;
                     g_pendingPackager = packager;
+
+                    // If this is a smoke flow for a joint/blunt/spliff and
+                    // the player has a paused session of the same
+                    // type+quality+strain, offer Resume / Start Fresh
+                    // before consuming another inventory item.
+                    if (g_flowContext == "smoke" &&
+                        (g_pendingItemType == "joint"  ||
+                         g_pendingItemType == "blunt"  ||
+                         g_pendingItemType == "spliff"))
+                    {
+                        string pausedKey = "smoke_paused_" + g_pendingItemType +
+                                           "_" + g_pendingQuality +
+                                           "_" + g_pendingStrain;
+                        integer pausedRem = (integer)llLinksetDataRead(pausedKey);
+                        if (pausedRem > 0)
+                        {
+                            showSmokeResumeMenu(pausedRem);
+                            return;
+                        }
+                    }
+
                     executeRemove();
                     return;
                 }
             }
             // No match (label collision)  -  redisplay
             showItemPickMenu();
+        }
+
+        // ---- RESUME / START FRESH for a paused smoke ----
+        else if (channel == DCHAN_SMOKE_RESUME)
+        {
+            if (msg == "Cancel")
+            {
+                g_pendingResumeSecs = 0;
+                showItemPickMenu();
+                return;
+            }
+            if (msg == "Resume")
+            {
+                // Resume the saved smoke  -  do NOT consume another
+                // inventory item. Fire SMOKE_STARTED flow directly with
+                // the remaining time baked into TC_SMOKE_START so the
+                // prop rezzes with start_param = pendingResumeSecs.
+                llMessageLinked(LINK_SET, CHAN_ANIMATION,
+                    "START_SMOKE_ANIM|" + g_pendingStrain + "|" +
+                    g_pendingQuality + "|" + g_pendingItemType, NULL_KEY);
+
+                llOwnerSay("You spark that " + qualLabel(g_pendingQuality) +
+                           " " + g_pendingStrain + " right back up.");
+
+                g_isSmoking    = TRUE;
+                g_smokeStrain  = g_pendingStrain;
+                g_smokeQuality = g_pendingQuality;
+                setButtonGlow(LINK_BTN_SMOKE, 0.1);
+
+                llMessageLinked(LINK_SET, CHAN_COMMS,
+                    "TC_SMOKE_START|" + g_pendingItemType + "|" +
+                    g_pendingQuality + "|" + g_pendingStrain + "|" +
+                    (string)g_pendingResumeSecs, NULL_KEY);
+
+                g_pendingResumeSecs = 0;
+                g_flowContext = "none";
+                return;
+            }
+            if (msg == "Start Fresh")
+            {
+                // Discard saved pause and consume a fresh item normally.
+                llLinksetDataDelete("smoke_paused_" + g_pendingItemType +
+                                    "_" + g_pendingQuality +
+                                    "_" + g_pendingStrain);
+                g_pendingResumeSecs = 0;
+                executeRemove();
+                return;
+            }
         }
 
         // ---- PASS PLAYER SELECTION ----
