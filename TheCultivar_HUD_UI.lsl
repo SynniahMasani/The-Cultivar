@@ -619,6 +619,9 @@ default
         llMessageLinked(LINK_SET, CHAN_IDENTITY, "REQUEST_IDENTITY", NULL_KEY);
         llMessageLinked(LINK_SET, CHAN_INVENTORY, "REQUEST_INVENTORY", NULL_KEY);
         refreshAllGlows();
+        // Print initial memory headroom so we can spot regressions early.
+        llOwnerSay("[HUD_UI] mem used=" + (string)llGetUsedMemory() +
+                   " free=" + (string)llGetFreeMemory());
     }
 
     on_rez(integer start_param) { llResetScript(); }
@@ -1030,6 +1033,28 @@ default
         // allocation for every other channel keeps heap churn down.
         if (num != CHAN_UI && num != CHAN_COMMS) return;
 
+        // Fast-path the two big-payload commands BEFORE allocating a
+        // parts list. UPDATE_INVENTORY_DISPLAY and SHOW_STATS can each
+        // carry several hundred chars; parsing them into a parts list
+        // doubles the heap footprint of the message during dispatch
+        // and was the main contributor to the smoke-flow stack-heap
+        // collision (those messages fire on every inventory mutation,
+        // which is exactly when the smoke flow runs).
+        if (num == CHAN_UI)
+        {
+            if (llSubStringIndex(msg, "UPDATE_INVENTORY_DISPLAY|") == 0)
+            {
+                // Strip the command prefix; store the rest as-is.
+                g_inventoryDisplay = llDeleteSubString(msg, 0, 24);
+                return;
+            }
+            if (llSubStringIndex(msg, "SHOW_STATS|") == 0)
+            {
+                llOwnerSay(llDeleteSubString(msg, 0, 10));
+                return;
+            }
+        }
+
         list   parts = llParseString2List(msg, ["|"], []);
         string cmd   = llList2String(parts, 0);
 
@@ -1052,13 +1077,8 @@ default
                     g_playerTitle = llList2String(parts, 14);
             }
 
-            // Inventory summary string for display
-            else if (cmd == "UPDATE_INVENTORY_DISPLAY")
-                g_inventoryDisplay = llList2String(parts, 1);
-
-            // Stats card  -  output to owner chat
-            else if (cmd == "SHOW_STATS")
-                llOwnerSay(llList2String(parts, 1));
+            // (UPDATE_INVENTORY_DISPLAY and SHOW_STATS are fast-pathed
+            // above the parts allocation to keep heap usage down.)
 
             // Item consumed successfully  -  trigger animation (HUD-menu smoke flow)
             else if (cmd == "ITEM_USED")
