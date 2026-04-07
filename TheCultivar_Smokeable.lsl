@@ -27,10 +27,15 @@ string  g_itemType      = "joint";
 string  g_quality       = "reggie";
 integer g_smokeDuration = 300;
 integer g_attached      = FALSE;
+integer g_canInteract   = FALSE;
 integer g_hasDetachPerm = FALSE;
 integer g_hudChannel    = 0;
 integer g_lisHUD        = 0;
 integer g_lisDialog     = 0;
+
+// Interaction lockout: block touch dialog for this many seconds after attach
+// so the permission banner can display without collision.
+float   INTERACT_LOCKOUT = 5.0;
 
 integer DCHAN_PUFF = -130001;
 
@@ -232,9 +237,9 @@ default
         }
         else
         {
-            // Snap to right hand — orient mesh along hand's forward axis
-            llSetLocalRot(llEuler2Rot(<0.0, 90.0, 0.0> * DEG_TO_RAD));
-            llSetPos(<0.02, 0.0, 0.0>);
+            // Snap to right hand — final tuned offsets from in-world adjustment
+            llSetLocalRot(llEuler2Rot(<90.0, 274.0, 270.0> * DEG_TO_RAD));
+            llSetPos(<0.04991, -0.0339, 0.01178>);
 
             // Re-request PERMISSION_ATTACH after attach for later detach.
             // Ownership context changes after temp-attach, so the pre-attach
@@ -244,7 +249,6 @@ default
             if (!g_attached)
             {
                 g_attached = TRUE;
-                llSetTimerEvent(0.0);
 
                 llOwnerSay("DEBUG PROP: sending TC_SMOKE_ATTACH_READY on chan " +
                            (string)g_hudChannel);
@@ -257,8 +261,10 @@ default
                 // Listen on HUD channel for early-end signal
                 g_lisHUD = llListen(g_hudChannel, "", NULL_KEY, "TC_END_SMOKE");
 
-                // Start smoke duration countdown
-                llSetTimerEvent((float)g_smokeDuration);
+                // Interaction lockout — block touch dialog for N seconds so
+                // the permission banner doesn't collide with smoke dialog.
+                g_canInteract = FALSE;
+                llSetTimerEvent(INTERACT_LOCKOUT);
             }
         }
     }
@@ -267,6 +273,7 @@ default
     {
         key toucher = llDetectedKey(0);
         if (toucher != llGetOwner()) return;
+        if (!g_canInteract) return; // lockout while permission banner is up
         if (g_lisDialog) { llListenRemove(g_lisDialog); g_lisDialog = 0; }
         g_lisDialog = llListen(DCHAN_PUFF, "", toucher, "");
         integer minsLeft = g_smokeDuration / 60;
@@ -284,11 +291,19 @@ default
         {
             llOwnerSay("DEBUG PROP: timed out waiting for attach, dying");
             llDie();
+            return;
         }
-        else
+
+        if (!g_canInteract)
         {
-            smokeFinished();
+            // Lockout period ended — enable touch dialog, start smoke countdown
+            g_canInteract = TRUE;
+            llSetTimerEvent((float)g_smokeDuration);
+            return;
         }
+
+        // Smoke duration expired naturally
+        smokeFinished();
     }
 
     listen(integer channel, string name, key id, string msg)

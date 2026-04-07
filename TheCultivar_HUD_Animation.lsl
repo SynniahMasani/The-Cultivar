@@ -39,11 +39,11 @@ string  g_currentStrain   = "";
 string  g_currentQuality  = "";
 string  g_currentItemType = "";
 
-// Puff timer  -  how often the puff animation fires over the idle
-float   PUFF_INTERVAL = 12.0; // seconds between puffs
+// Puff timer  -  how often the puff animation fires over the idle.
+// This also re-triggers the idle animation each cycle, acting as a
+// loop refresh for non-looping animations. Runs until STOP_SMOKE_ANIM.
+float   PUFF_INTERVAL = 12.0; // seconds between puffs / idle refreshes
 integer g_puffTimerActive = FALSE;
-integer g_puffCount       = 0;
-integer MAX_PUFFS         = 5; // smoke stops naturally after this many puffs (~60s)
 
 // Pending animation flags  -  used instead of llSleep() to return
 // control to the event queue while short anims play out.
@@ -96,7 +96,6 @@ stopCurrentAnim()
         llSetTimerEvent(0.0);
         g_puffTimerActive = FALSE;
     }
-    g_puffCount = 0;
     // Notify UI so it can turn off the smoke button glow and clear state
     llMessageLinked(LINK_SET, CHAN_UI, "SMOKE_STOPPED", NULL_KEY);
 }
@@ -129,7 +128,6 @@ startSmokeAnim(string strain, string quality, string itemType)
     g_currentQuality  = quality;
     g_currentItemType = itemType;
     g_currentAnim     = resolveAnim(buildAnimName(itemType, quality));
-    g_puffCount       = 0;
 
     // Check permission and animation exists in inventory before playing
     if (!g_hasAnimPerm)
@@ -271,16 +269,14 @@ default
             return;
         }
 
-        // ── Periodic puff trigger ────────────────────────────────
+        // ── Periodic puff + idle refresh ─────────────────────────
+        // Runs indefinitely until STOP_SMOKE_ANIM. The smokeable object
+        // controls smoke duration and will send TC_SMOKE_FINISHED →
+        // STOP_SMOKE_ANIM when it's done. Each tick also re-triggers the
+        // idle via the puff overlay cycle, so non-looping idle anims
+        // stay active for the full smoke.
         if (g_puffTimerActive && g_currentAnim != "")
         {
-            g_puffCount++;
-            if (g_puffCount >= MAX_PUFFS)
-            {
-                // Item is spent  -  stop everything and notify UI
-                stopCurrentAnim();
-                return;
-            }
             playPuffAnim();
         }
     }
