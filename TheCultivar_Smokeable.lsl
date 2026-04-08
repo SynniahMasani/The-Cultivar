@@ -176,6 +176,8 @@ startSmokeParticles()
     // initial burst then nothing, either the emitter was reset OR
     // burstRate is too slow vs particle lifetime. Do not touch
     // PSYS_SRC_MAX_AGE here; leaving it 0 means "emit forever".
+    float  startScaleX  = 0.03;
+    float  startScaleY  = 0.03;
     float  endScaleX    = 0.12;
     float  endScaleY    = 0.12;
     integer burstCount  = 3;
@@ -184,20 +186,25 @@ startSmokeParticles()
     float  maxAge       = 6.0;
     float  speedMin     = 0.15;
     float  speedMax     = 0.30;
+    float  accelZ       = 0.05;
 
     if (g_itemType == "blunt")
     {
-        // Blunts: bigger prim, bigger cloud. Roughly 3x the particle
-        // density of a joint and almost 2x the final scale so a
-        // "few dots" symptom cannot come from tuning.
-        endScaleX  = 0.45;
-        endScaleY  = 0.45;
-        burstCount = 8;
-        burstRate  = 0.08;
-        startAlpha = 0.80;
-        maxAge     = 7.0;
-        speedMin   = 0.25;
-        speedMax   = 0.50;
+        // Blunts: bigger prim, much bigger cloud. Visibility pass —
+        // bump start/end scale, alpha, burst density, and give the
+        // plume a stronger upward drift so it reads as a proper
+        // fat-blunt cloud instead of the thin joint plume.
+        startScaleX = 0.10;
+        startScaleY = 0.10;
+        endScaleX   = 0.60;
+        endScaleY   = 0.60;
+        burstCount  = 12;
+        burstRate   = 0.08;
+        startAlpha  = 0.92;
+        maxAge      = 7.5;
+        speedMin    = 0.25;
+        speedMax    = 0.50;
+        accelZ      = 0.12;
     }
     else if (g_itemType == "spliff")
     {
@@ -213,7 +220,10 @@ startSmokeParticles()
                " end=" + (string)endCol +
                " burstCount=" + (string)burstCount +
                " burstRate=" + (string)burstRate +
+               " startScale=" + (string)startScaleX +
                " endScale=" + (string)endScaleX +
+               " startAlpha=" + (string)startAlpha +
+               " accelZ=" + (string)accelZ +
                " maxAge=" + (string)maxAge);
 
     llParticleSystem([
@@ -227,15 +237,17 @@ startSmokeParticles()
         PSYS_PART_END_COLOR,       endCol,
         PSYS_PART_START_ALPHA,     startAlpha,
         PSYS_PART_END_ALPHA,       0.0,
-        PSYS_PART_START_SCALE,     <0.03, 0.03, 0.0>,
+        PSYS_PART_START_SCALE,     <startScaleX, startScaleY, 0.0>,
         PSYS_PART_END_SCALE,       <endScaleX, endScaleY, 0.0>,
         PSYS_PART_MAX_AGE,         maxAge,
         PSYS_SRC_BURST_RATE,       burstRate,
         PSYS_SRC_BURST_PART_COUNT, burstCount,
         PSYS_SRC_BURST_SPEED_MIN,  speedMin,
         PSYS_SRC_BURST_SPEED_MAX,  speedMax,
-        // Slight upward drift so smoke always rises away from the prim
-        PSYS_SRC_ACCEL,            <0.0, 0.0, 0.05>,
+        // Upward drift so smoke always rises away from the prim.
+        // Blunts get a stronger lift so the thicker cloud reads as
+        // a proper plume instead of hanging at the mouth.
+        PSYS_SRC_ACCEL,            <0.0, 0.0, accelZ>,
         PSYS_SRC_ANGLE_BEGIN,      0.0,
         PSYS_SRC_ANGLE_END,        0.45
         // NOTE: PSYS_SRC_MAX_AGE intentionally omitted -> 0 ->
