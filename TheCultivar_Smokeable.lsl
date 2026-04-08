@@ -190,21 +190,22 @@ startSmokeParticles()
 
     if (g_itemType == "blunt")
     {
-        // Blunts: bigger prim, much bigger cloud. Visibility pass —
-        // bump start/end scale, alpha, burst density, and give the
-        // plume a stronger upward drift so it reads as a proper
-        // fat-blunt cloud instead of the thin joint plume.
-        startScaleX = 0.10;
-        startScaleY = 0.10;
-        endScaleX   = 0.60;
-        endScaleY   = 0.60;
-        burstCount  = 12;
-        burstRate   = 0.08;
-        startAlpha  = 0.92;
-        maxAge      = 7.5;
-        speedMin    = 0.25;
-        speedMax    = 0.50;
-        accelZ      = 0.12;
+        // Blunts: bigger prim, MUCH bigger cloud. Second-pass
+        // visibility tuning — the previous values still read thin
+        // in-world, so scale up again across every knob and lean
+        // harder on upward accel + persistence so the plume climbs
+        // and hangs instead of puffing out.
+        startScaleX = 0.14;
+        startScaleY = 0.14;
+        endScaleX   = 0.80;
+        endScaleY   = 0.80;
+        burstCount  = 16;
+        burstRate   = 0.07;
+        startAlpha  = 0.96;
+        maxAge      = 9.0;
+        speedMin    = 0.28;
+        speedMax    = 0.55;
+        accelZ      = 0.15;
     }
     else if (g_itemType == "spliff")
     {
@@ -212,6 +213,29 @@ startSmokeParticles()
         endScaleY  = 0.18;
         burstCount = 4;
         burstRate  = 0.12;
+    }
+
+    // Quality bump — applied AFTER the itemType baseline so e.g.
+    // "blunt exotic" combines the blunt-chunky baseline with an
+    // extra exotic boost. Exotic is the user's flagship smoke and
+    // the one flagged as hardest to see, so it gets the biggest
+    // end-scale, the most particles per burst, and the longest
+    // lifetime. Loud gets a lighter version of the same bump.
+    if (g_quality == "exotic")
+    {
+        endScaleX  = endScaleX  * 1.20;
+        endScaleY  = endScaleY  * 1.20;
+        burstCount = burstCount + 4;
+        maxAge     = maxAge     + 2.0;
+        startAlpha = startAlpha + 0.02;
+        if (startAlpha > 1.0) startAlpha = 1.0;
+    }
+    else if (g_quality == "loud")
+    {
+        endScaleX  = endScaleX  * 1.10;
+        endScaleY  = endScaleY  * 1.10;
+        burstCount = burstCount + 2;
+        maxAge     = maxAge     + 1.0;
     }
 
     llOwnerSay("DEBUG PROP: startSmokeParticles type=" + g_itemType +
