@@ -1,0 +1,23 @@
+Patch needed for host-started session smoke prop:
+
+Problem observed in testing:
+- Session start works
+- TC_SESSION_SYNC animation/effects run
+- physical blunt/joint prop does not appear for host during session start
+- normal Smoke button still rezzes prop correctly
+
+Cause:
+- HUD_Session sends TC_SESSION_START to the session object and START_SESSION to HUD_Comms
+- but it does not also trigger the host smoke prop attach path (TC_SMOKE_START)
+
+Required fix in TheCultivar_HUD_Session.lsl:
+- when the host picks the session item, after sending START_SESSION, also send:
+  llMessageLinked(LINK_SET, CHAN_COMMS,
+      "TC_SMOKE_START|" + iType + "|" + quality + "|" + strain,
+      NULL_KEY);
+
+Constraints:
+- do not fire START_SMOKE_ANIM here
+- do not modify duplicate-attach safeguards in HUD_Comms
+- let TC_SMOKE_ATTACH_READY remain hydration-only for duration update
+- this should only restore the physical prop attach for the host
