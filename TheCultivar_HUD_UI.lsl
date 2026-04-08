@@ -1004,9 +1004,10 @@ default
         {
             if (msg == "Put It Out")
             {
-                llOwnerSay("DEBUG UI: Put It Out pressed (HUD-side). " +
-                           "Sending END_SMOKE_EARLY, unlocking smoke btn locally. " +
-                           "mem free=" + (string)llGetFreeMemory());
+                llOwnerSay("DEBUG LOCK: PutItOut BEFORE " +
+                           "isSmoking=" + (string)g_isSmoking +
+                           " flow=" + g_flowContext +
+                           " free=" + (string)llGetFreeMemory());
                 llMessageLinked(LINK_SET, CHAN_COMMS, "END_SMOKE_EARLY", NULL_KEY);
                 g_isSmoking          = FALSE;
                 g_smokeStrain        = "";
@@ -1014,10 +1015,20 @@ default
                 g_smokeTimeRemaining = 0;
                 g_availableItems     = [];
                 g_flowContext        = "none";
+                g_pendingItemType    = "";
+                g_pendingStrain      = "";
+                g_pendingQuality     = "";
+                g_pendingPackager    = "";
+                g_pendingResumeSecs  = 0;
+                // closeAllListens already ran at listen() entry so
+                // g_lisSmokeActive is already 0 here — no extra
+                // surgical cleanup needed on this path.
                 setButtonGlow(LINK_BTN_SMOKE, 0.0);
-                llOwnerSay("DEBUG UI: Put It Out handler complete, " +
+                llOwnerSay("DEBUG LOCK: PutItOut AFTER  " +
                            "isSmoking=" + (string)g_isSmoking +
-                           " mem free=" + (string)llGetFreeMemory());
+                           " flow=" + g_flowContext +
+                           " glow=OFF free=" + (string)llGetFreeMemory() +
+                           " -> smoke btn UNLOCKED");
             }
             else if (msg == "Take a Puff")
             {
@@ -1145,20 +1156,52 @@ default
             // for the Put It Out flow that was blowing the heap.
             if (msg == "SMOKE_STOPPED")
             {
-                llOwnerSay("DEBUG MEM: SMOKE_STOPPED BEFORE free=" +
-                           (string)llGetFreeMemory() +
-                           " used=" + (string)llGetUsedMemory() +
-                           " was g_isSmoking=" + (string)g_isSmoking);
+                llOwnerSay("DEBUG LOCK: SMOKE_STOPPED BEFORE " +
+                           "isSmoking=" + (string)g_isSmoking +
+                           " flow=" + g_flowContext +
+                           " lisSmokeActive=" + (string)g_lisSmokeActive +
+                           " lisSmokeResume=" + (string)g_lisSmokeResume +
+                           " free=" + (string)llGetFreeMemory());
+                // Clear active smoke state
                 g_isSmoking          = FALSE;
                 g_smokeStrain        = "";
                 g_smokeQuality       = "";
                 g_smokeTimeRemaining = 0;
                 g_availableItems     = [];
                 g_flowContext        = "none";
+                // Clear pending fields too — otherwise a stale strain
+                // from the last flow can leak into the next smoke.
+                g_pendingItemType    = "";
+                g_pendingStrain      = "";
+                g_pendingQuality     = "";
+                g_pendingPackager    = "";
+                g_pendingResumeSecs  = 0;
+                // Surgical listen cleanup: the smoke active / resume
+                // dialogs might still be on screen when SMOKE_STOPPED
+                // arrives via link_message (e.g. prop expired naturally
+                // or remote put-out). Close ONLY those two listens so
+                // unrelated menus (inventory, session, etc.) are not
+                // disturbed. Without this, a stale button press on the
+                // old smoke dialog routes through cleared state and
+                // the HUD feels locked until the dialog auto-closes.
+                if (g_lisSmokeActive)
+                {
+                    llListenRemove(g_lisSmokeActive);
+                    g_lisSmokeActive = 0;
+                }
+                if (g_lisSmokeResume)
+                {
+                    llListenRemove(g_lisSmokeResume);
+                    g_lisSmokeResume = 0;
+                }
                 setButtonGlow(LINK_BTN_SMOKE, 0.0);
-                llOwnerSay("DEBUG MEM: SMOKE_STOPPED AFTER  free=" +
-                           (string)llGetFreeMemory() +
-                           " -> UNLOCKED smoke btn");
+                llOwnerSay("DEBUG LOCK: SMOKE_STOPPED AFTER  " +
+                           "isSmoking=" + (string)g_isSmoking +
+                           " flow=" + g_flowContext +
+                           " lisSmokeActive=" + (string)g_lisSmokeActive +
+                           " lisSmokeResume=" + (string)g_lisSmokeResume +
+                           " glow=OFF free=" + (string)llGetFreeMemory() +
+                           " -> smoke btn UNLOCKED");
                 return;
             }
             // ITEM_USED / ITEM_FAILED carry an item-name suffix but the
@@ -1208,10 +1251,10 @@ default
             // Minimal work: only touch what onRemoveSuccess didn't already set.
             else if (cmd == "SMOKE_STARTED")
             {
-                llOwnerSay("DEBUG MEM: SMOKE_STARTED BEFORE free=" +
-                           (string)llGetFreeMemory() +
-                           " used=" + (string)llGetUsedMemory() +
-                           " was g_isSmoking=" + (string)g_isSmoking);
+                llOwnerSay("DEBUG LOCK: SMOKE_STARTED BEFORE " +
+                           "isSmoking=" + (string)g_isSmoking +
+                           " flow=" + g_flowContext +
+                           " free=" + (string)llGetFreeMemory());
                 if (!g_isSmoking)
                 {
                     g_isSmoking    = TRUE;
@@ -1220,9 +1263,13 @@ default
                     setButtonGlow(LINK_BTN_SMOKE, 0.1);
                 }
                 g_smokeTimeRemaining = (integer)llList2String(parts, 3);
-                llOwnerSay("DEBUG MEM: SMOKE_STARTED AFTER  free=" +
-                           (string)llGetFreeMemory() +
-                           " -> LOCKED smoke btn");
+                llOwnerSay("DEBUG LOCK: SMOKE_STARTED AFTER  " +
+                           "isSmoking=" + (string)g_isSmoking +
+                           " strain=" + g_smokeStrain +
+                           " qual=" + g_smokeQuality +
+                           " remain=" + (string)g_smokeTimeRemaining +
+                           " glow=ON free=" + (string)llGetFreeMemory() +
+                           " -> smoke btn LOCKED");
             }
 
             // ---- SESSION EVENTS ----
