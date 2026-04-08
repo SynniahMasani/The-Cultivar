@@ -54,10 +54,16 @@ string  g_smokingStrain   = "";
 
 // Session rez gating: HUD_UI sets this to TRUE via ARM_SESSION_REZ
 // before rezzing TC_SessionObject. We only forward TC_SESSION_REZZED
-// pings to the UI while this is TRUE, so unrelated nearby session
-// objects (or replayed pings) cannot auto-open the Spark menu.
-// Self-clears after SESSION_REZ_WINDOW seconds via timer.
-integer g_awaitingSessionRez   = FALSE;
+// pings to the UI while this is TRUE. Without this, ANY nearby
+// TC_SessionObject (including one left on the parcel by another
+// player or a previous test) would ping us and auto-open the Spark
+// Session menu.
+//
+// Session_Core.lsl broadcasts TC_SESSION_REZZED from state_entry on
+// EVERY script reset. That includes on_rez -> llResetScript, any
+// CHANGED_OWNER, and any manual Edit→Reset in the object. So stale
+// pings are a normal occurrence, not an exception.
+integer g_waitingForSessionRez = FALSE;
 integer g_sessionRezArmedAt    = 0;
 integer SESSION_REZ_WINDOW_SEC = 15;
 
@@ -169,6 +175,52 @@ default
     {
         if (num != CHAN_COMMS) return;
 
+        // Fast-path the no-arg commands BEFORE allocating a parts list.
+        // These fire often from the UI (ARM_SESSION_REZ every Spark,
+        // END_SMOKE_EARLY every Put It Out, LEAVE_SESSION every leave)
+        // and do not need any arguments parsed out. Skipping the parts
+        // allocation removes ~1 list alloc per call and cuts heap churn
+        // on the exact flows where the script was hitting stack-heap.
+        if (msg == "ARM_SESSION_REZ")
+        {
+            g_waitingForSessionRez = TRUE;
+            g_sessionRezArmedAt    = llGetUnixTime();
+            llOwnerSay("DEBUG COMMS: ARM_SESSION_REZ — gate open " +
+                       (string)SESSION_REZ_WINDOW_SEC + "s");
+            return;
+        }
+        if (msg == "CANCEL_SESSION_REZ")
+        {
+            g_waitingForSessionRez = FALSE;
+            g_sessionRezArmedAt    = 0;
+            llOwnerSay("DEBUG COMMS: CANCEL_SESSION_REZ — gate closed");
+            return;
+        }
+        if (msg == "END_SMOKE_EARLY")
+        {
+            llSay(g_privateChannel, "TC_END_SMOKE");
+            llMessageLinked(LINK_SET, CHAN_ANIMATION, "STOP_SMOKE_ANIM", NULL_KEY);
+            return;
+        }
+        if (msg == "LEAVE_SESSION")
+        {
+            if (g_inSession && g_sessionObjectKey != NULL_KEY)
+            {
+                llRegionSayTo(g_sessionObjectKey, 0,
+                    "TC_SESSION_LEAVE|" + (string)g_ownerKey);
+            }
+            g_inSession        = FALSE;
+            g_sessionObjectKey = NULL_KEY;
+            g_sessionHost      = "";
+            llMessageLinked(LINK_SET, CHAN_ANIMATION, "STOP_SMOKE_ANIM", NULL_KEY);
+            return;
+        }
+        if (msg == "MYSTORY_TRIGGER")
+        {
+            llSay(g_myStoryChannel, "Start Effects");
+            return;
+        }
+
         list   parts = llParseString2List(msg, ["|"], []);
         string cmd   = llList2String(parts, 0);
 
@@ -176,17 +228,6 @@ default
         if (cmd == "REGISTER_OBJECT")
         {
             registerWithObject((key)llList2String(parts, 1));
-        }
-
-        // UI is about to rez TC_SessionObject  -  open the gate so the
-        // next TC_SESSION_REZZED ping forwards to the UI. Without this
-        // arm step, all TC_SESSION_REZZED pings are silently dropped.
-        else if (cmd == "ARM_SESSION_REZ")
-        {
-            g_awaitingSessionRez = TRUE;
-            g_sessionRezArmedAt  = llGetUnixTime();
-            llOwnerSay("DEBUG COMMS: ARM_SESSION_REZ — gate open " +
-                       (string)SESSION_REZ_WINDOW_SEC + "s");
         }
 
         // Player initiated a session as host  -  update state, notify UI
@@ -236,19 +277,9 @@ default
             llMessageLinked(LINK_SET, CHAN_IDENTITY, "UPDATE_PASSED", NULL_KEY);
         }
 
-        // Leave current session
-        else if (cmd == "LEAVE_SESSION")
-        {
-            if (g_inSession && g_sessionObjectKey != NULL_KEY)
-            {
-                llRegionSayTo(g_sessionObjectKey, 0,
-                    "TC_SESSION_LEAVE|" + (string)g_ownerKey);
-            }
-            g_inSession        = FALSE;
-            g_sessionObjectKey = NULL_KEY;
-            g_sessionHost      = "";
-            llMessageLinked(LINK_SET, CHAN_ANIMATION, "STOP_SMOKE_ANIM", NULL_KEY);
-        }
+        // (LEAVE_SESSION, END_SMOKE_EARLY, MYSTORY_TRIGGER,
+        //  ARM_SESSION_REZ, CANCEL_SESSION_REZ are fast-pathed at the
+        //  top of this handler so they skip the parts allocation.)
 
         // Relay any remove success/fail back to UI for feedback
         // If id is set, a world object is waiting  -  notify it on our private channel
@@ -317,19 +348,6 @@ default
             }
         }
 
-        // HUD_UI requests early end of current smoke
-        else if (cmd == "END_SMOKE_EARLY")
-        {
-            llSay(g_privateChannel, "TC_END_SMOKE");
-            llMessageLinked(LINK_SET, CHAN_ANIMATION, "STOP_SMOKE_ANIM", NULL_KEY);
-        }
-
-        // HUD_UI fires MyStory trigger directly
-        else if (cmd == "MYSTORY_TRIGGER")
-        {
-            llSay(g_myStoryChannel, "Start Effects");
-        }
-
         // Inventory manager responds with raw data  -  forward to requesting world object
         else if (cmd == "RAW_INVENTORY")
         {
@@ -369,23 +387,27 @@ default
         {
             // GUARD: only forward if HUD_UI armed the gate via
             // ARM_SESSION_REZ in the last SESSION_REZ_WINDOW_SEC seconds.
-            // Without this, ANY nearby session-object rez would auto-open
-            // the player's spark menu.
+            // Without this, ANY TC_SessionObject rez in the region
+            // (from another player or a leftover object that was just
+            // script-reset) would auto-open this player's Spark menu.
+            // Session_Core broadcasts TC_SESSION_REZZED unconditionally
+            // from its state_entry, so stale pings are normal.
             integer ageOK = (llGetUnixTime() - g_sessionRezArmedAt) <
                             SESSION_REZ_WINDOW_SEC;
-            if (!g_awaitingSessionRez || !ageOK)
+            if (!g_waitingForSessionRez || !ageOK)
             {
                 llOwnerSay("DEBUG COMMS: dropping TC_SESSION_REZZED  -  " +
-                           "awaiting=" + (string)g_awaitingSessionRez +
-                           " ageOK=" + (string)ageOK);
-                g_awaitingSessionRez = FALSE;
+                           "waiting=" + (string)g_waitingForSessionRez +
+                           " ageOK=" + (string)ageOK +
+                           " armedAgo=" + (string)(llGetUnixTime() - g_sessionRezArmedAt));
                 return;
             }
             // TC_SESSION_REZZED|sessionObjectKey|sessionChannel
             key sessObjKey = (key)llList2String(parts, 1);
             llOwnerSay("DEBUG COMMS: forwarding SESSION_OBJECT_READY for " +
                        (string)sessObjKey);
-            g_awaitingSessionRez = FALSE; // single-shot
+            g_waitingForSessionRez = FALSE; // single-shot
+            g_sessionRezArmedAt    = 0;
             llMessageLinked(LINK_SET, CHAN_UI,
                 "SESSION_OBJECT_READY|" + (string)sessObjKey, NULL_KEY);
         }

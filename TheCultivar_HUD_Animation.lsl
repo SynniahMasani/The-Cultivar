@@ -100,8 +100,24 @@ requestHybridPermissions(key agent, string reason)
 // ----------------------------------------------------------------
 fxStartHigh(string quality)
 {
-    if (llLinksetDataRead("hud_fx_enabled") != "1") return;
-    if (g_fxActive) return;
+    // DEBUG: unconditional trace of the gate before we decide to send.
+    string fxFlag = llLinksetDataRead("hud_fx_enabled");
+    llOwnerSay("DEBUG FX: fxStartHigh quality=" + quality +
+               " hud_fx_enabled='" + fxFlag + "'" +
+               " g_fxActive=" + (string)g_fxActive);
+
+    if (fxFlag != "1")
+    {
+        llOwnerSay("DEBUG FX: gate closed, hud_fx_enabled != '1'. " +
+                   "Player must enable via Stats -> FX, OR state_entry " +
+                   "should default it to '1'.");
+        return;
+    }
+    if (g_fxActive)
+    {
+        llOwnerSay("DEBUG FX: already active, skipping re-send.");
+        return;
+    }
 
     float blur     = 0.10;
     float distMin  = 5.0;
@@ -126,7 +142,12 @@ fxStartHigh(string quality)
         distMax = 40.0;
     }
 
-    // Configure and activate sphere effect
+    // Configure and activate sphere effect.
+    // NOTE: RLVa's @setsphere commands are intercepted by the viewer.
+    // A non-RLV viewer will just echo these as chat. If you see
+    // "@setsphere=force" in local chat, your viewer is NOT RLV-enabled.
+    llOwnerSay("DEBUG FX: sending @setsphere commands (quality=" +
+               quality + " blur=" + (string)blur + " tint=" + tintCol + ")");
     llOwnerSay("@setsphere_mode:2=force");
     llOwnerSay("@setsphere_origin:0=force");
     llOwnerSay("@setsphere_distmin:" + (string)distMin + "=force");
@@ -358,6 +379,15 @@ default
         g_genderSuffix = getGenderSuffix();
         g_hasAnimPerm  = FALSE;
         g_classicMask  = PERMISSION_TRIGGER_ANIMATION;
+        // Default the RLV FX gate ON if the player has never touched it.
+        // Previously it was "" (unset) -> fxStartHigh early-returned
+        // every single time, which is why no player ever saw RLV
+        // effects. They can still toggle it off via Stats -> FX.
+        if (llLinksetDataRead("hud_fx_enabled") == "")
+        {
+            llLinksetDataWrite("hud_fx_enabled", "1");
+            llOwnerSay("DEBUG FX: defaulted hud_fx_enabled=1 on first run");
+        }
         requestHybridPermissions(llGetOwner(), "Play Cultivar smoking animations");
     }
 
