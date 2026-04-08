@@ -253,6 +253,9 @@ startSmokeParticles()
         // NOTE: PSYS_SRC_MAX_AGE intentionally omitted -> 0 ->
         // emitter runs forever until llParticleSystem([]).
     ]);
+    llOwnerSay("DEBUG PROP: startSmokeParticles DONE — emitter live at t=" +
+               (string)llGetUnixTime() +
+               " (should run until smokeFinished or detach)");
 }
 
 // ----------------------------------------------------------------
@@ -272,13 +275,21 @@ smokeFinished(integer savePause)
         remaining = g_smokeDuration - elapsed;
         if (remaining < 15) remaining = 0; // not worth resuming
     }
-    llOwnerSay("DEBUG PROP: smokeFinished savePause=" + (string)savePause +
-               " elapsed=" + (string)(llGetUnixTime() - g_smokeStartTime) +
+    integer particleAge = 0;
+    if (g_smokeStartTime > 0)
+        particleAge = llGetUnixTime() - g_smokeStartTime;
+    llOwnerSay("DEBUG PROP: smokeFinished ENTER savePause=" + (string)savePause +
+               " particleAgeSec=" + (string)particleAge +
                " duration=" + (string)g_smokeDuration +
                " remaining=" + (string)remaining +
                " hasDetachPerm=" + (string)g_hasDetachPerm);
+    if (particleAge >= 0 && particleAge < 3)
+        llOwnerSay("DEBUG PROP: WARNING smokeFinished firing at age " +
+                   (string)particleAge + "s — particles cleared EARLY, " +
+                   "not a visibility problem");
 
     llParticleSystem([]);
+    llOwnerSay("DEBUG PROP: smokeFinished llParticleSystem([]) called");
     if (g_lisHUD)    { llListenRemove(g_lisHUD);    g_lisHUD    = 0; }
     if (g_lisDialog) { llListenRemove(g_lisDialog); g_lisDialog = 0; }
 
@@ -440,15 +451,31 @@ default
     attach(key attachedTo)
     {
         llOwnerSay("DEBUG PROP: attach event, attachedTo=" + (string)attachedTo +
-                   " g_attached was=" + (string)g_attached);
+                   " g_attached was=" + (string)g_attached +
+                   " smokeStartTime=" + (string)g_smokeStartTime);
 
         if (attachedTo == NULL_KEY)
         {
-            llOwnerSay("DEBUG PROP: detach detected, clearing particles and dying");
+            // Avatar detached us (by hand, outfit change, teleport, etc.)
+            // Stamp particle age so we can distinguish early kill from
+            // natural end-of-smoke detach.
+            integer particleAge = 0;
+            if (g_smokeStartTime > 0)
+                particleAge = llGetUnixTime() - g_smokeStartTime;
+            llOwnerSay("DEBUG PROP: DETACH event (attachedTo==NULL) " +
+                       "particleAgeSec=" + (string)particleAge +
+                       " duration=" + (string)g_smokeDuration +
+                       " -> clearing particles and llDie()");
+            if (particleAge >= 0 && particleAge < 3 && g_smokeStartTime > 0)
+                llOwnerSay("DEBUG PROP: WARNING detach firing at age " +
+                           (string)particleAge + "s — particles killed " +
+                           "EARLY by detach path, not a visibility problem");
             llParticleSystem([]);
             llDie();
             return;
         }
+        llOwnerSay("DEBUG PROP: ATTACH to avatar " + (string)attachedTo +
+                   " — about to snap pose + call startSmokeParticles");
 
         // Snap to right hand — final tuned offsets from in-world adjustment
         llSetLocalRot(llEuler2Rot(<90.0, 274.0, 270.0> * DEG_TO_RAD));
@@ -504,12 +531,17 @@ default
 
     timer()
     {
+        integer nowT       = llGetUnixTime();
+        integer ageSinceStart = 0;
+        if (g_smokeStartTime > 0) ageSinceStart = nowT - g_smokeStartTime;
         llOwnerSay("DEBUG PROP: timer fired attached=" + (string)g_attached +
                    " canInteract=" + (string)g_canInteract +
-                   " smokeStartTime=" + (string)g_smokeStartTime);
+                   " smokeStartTime=" + (string)g_smokeStartTime +
+                   " ageSinceStart=" + (string)ageSinceStart +
+                   " duration=" + (string)g_smokeDuration);
         if (!g_attached)
         {
-            llOwnerSay("DEBUG PROP: timed out waiting for attach, dying");
+            llOwnerSay("DEBUG PROP: timer — TIMED OUT waiting for attach, llDie()");
             llDie();
             return;
         }
@@ -519,14 +551,17 @@ default
             // Lockout period ended — enable touch dialog, start smoke countdown
             g_canInteract    = TRUE;
             g_smokeStartTime = llGetUnixTime();
-            llOwnerSay("DEBUG PROP: lockout ended, starting smoke duration timer " +
-                       (string)g_smokeDuration + "s");
+            llOwnerSay("DEBUG PROP: timer — lockout ended, arming duration timer " +
+                       (string)g_smokeDuration + "s, smokeStartTime=" +
+                       (string)g_smokeStartTime);
             llSetTimerEvent((float)g_smokeDuration);
             return;
         }
 
         // Smoke duration expired naturally — do not save a pause entry
-        llOwnerSay("DEBUG PROP: smoke duration expired naturally");
+        llOwnerSay("DEBUG PROP: timer — DURATION EXPIRED at age " +
+                   (string)ageSinceStart + "s (expected " +
+                   (string)g_smokeDuration + "s) -> smokeFinished(FALSE)");
         smokeFinished(FALSE);
     }
 
