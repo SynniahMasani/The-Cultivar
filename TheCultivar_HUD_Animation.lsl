@@ -102,20 +102,22 @@ fxStartHigh(string quality)
 {
     // DEBUG: unconditional trace of the gate before we decide to send.
     string fxFlag = llLinksetDataRead("hud_fx_enabled");
-    llOwnerSay("DEBUG FX: fxStartHigh quality=" + quality +
+    llOwnerSay("DEBUG FX: fxStartHigh ENTER quality=" + quality +
                " hud_fx_enabled='" + fxFlag + "'" +
                " g_fxActive=" + (string)g_fxActive);
 
     if (fxFlag != "1")
     {
-        llOwnerSay("DEBUG FX: gate closed, hud_fx_enabled != '1'. " +
+        llOwnerSay("DEBUG FX: fxStartHigh EXIT gate closed " +
+                   "(hud_fx_enabled='" + fxFlag + "' != '1'). " +
                    "Player must enable via Stats -> FX, OR state_entry " +
                    "should default it to '1'.");
         return;
     }
     if (g_fxActive)
     {
-        llOwnerSay("DEBUG FX: already active, skipping re-send.");
+        llOwnerSay("DEBUG FX: fxStartHigh EXIT already active, " +
+                   "skipping re-send.");
         return;
     }
 
@@ -146,26 +148,66 @@ fxStartHigh(string quality)
     // NOTE: RLVa's @setsphere commands are intercepted by the viewer.
     // A non-RLV viewer will just echo these as chat. If you see
     // "@setsphere=force" in local chat, your viewer is NOT RLV-enabled.
-    llOwnerSay("DEBUG FX: sending @setsphere commands (quality=" +
-               quality + " blur=" + (string)blur + " tint=" + tintCol + ")");
-    llOwnerSay("@setsphere_mode:2=force");
-    llOwnerSay("@setsphere_origin:0=force");
-    llOwnerSay("@setsphere_distmin:" + (string)distMin + "=force");
-    llOwnerSay("@setsphere_distmax:" + (string)distMax + "=force");
-    llOwnerSay("@setsphere_distextend:1=force");
-    llOwnerSay("@setsphere_param:" + (string)blur + "=force");
-    llOwnerSay("@setsphere_tint:" + tintCol + "=force");
-    llOwnerSay("@setsphere=force");
+    //
+    // Build the 8 command strings as locals first so the debug trace
+    // can print the EXACT payload that goes out, and so the order
+    // lines up with what's actually emitted below.
+    string rlvMode      = "@setsphere_mode:2=force";
+    string rlvOrigin    = "@setsphere_origin:0=force";
+    string rlvDistMin   = "@setsphere_distmin:"  + (string)distMin + "=force";
+    string rlvDistMax   = "@setsphere_distmax:"  + (string)distMax + "=force";
+    string rlvExtend    = "@setsphere_distextend:1=force";
+    string rlvParam     = "@setsphere_param:"    + (string)blur    + "=force";
+    string rlvTint      = "@setsphere_tint:"     + tintCol         + "=force";
+    string rlvActivate  = "@setsphere=force";
+
+    llOwnerSay("DEBUG FX: PROCEEDING quality=" + quality +
+               " blur=" + (string)blur +
+               " tint=" + tintCol +
+               " distMin=" + (string)distMin +
+               " distMax=" + (string)distMax);
+    llOwnerSay("DEBUG FX: RLV payload [1/8]=" + rlvMode);
+    llOwnerSay("DEBUG FX: RLV payload [2/8]=" + rlvOrigin);
+    llOwnerSay("DEBUG FX: RLV payload [3/8]=" + rlvDistMin);
+    llOwnerSay("DEBUG FX: RLV payload [4/8]=" + rlvDistMax);
+    llOwnerSay("DEBUG FX: RLV payload [5/8]=" + rlvExtend);
+    llOwnerSay("DEBUG FX: RLV payload [6/8]=" + rlvParam);
+    llOwnerSay("DEBUG FX: RLV payload [7/8]=" + rlvTint);
+    llOwnerSay("DEBUG FX: RLV payload [8/8]=" + rlvActivate);
+
+    llOwnerSay(rlvMode);
+    llOwnerSay(rlvOrigin);
+    llOwnerSay(rlvDistMin);
+    llOwnerSay(rlvDistMax);
+    llOwnerSay(rlvExtend);
+    llOwnerSay(rlvParam);
+    llOwnerSay(rlvTint);
+    llOwnerSay(rlvActivate);
 
     g_fxActive = TRUE;
+    llOwnerSay("DEBUG FX: fxStartHigh EXIT emitted 8 @setsphere commands, " +
+               "g_fxActive=TRUE (if you see the 8 payload lines above echoed " +
+               "in LOCAL chat, your viewer is NOT RLV-enabled)");
 }
 
 fxClearHigh()
 {
-    if (!g_fxActive) return;
-    llOwnerSay("@setsphere_mode:0=force");
-    llOwnerSay("@setsphere=clear");
+    llOwnerSay("DEBUG FX: fxClearHigh ENTER g_fxActive=" +
+               (string)g_fxActive);
+    if (!g_fxActive)
+    {
+        llOwnerSay("DEBUG FX: fxClearHigh EXIT — nothing to clear");
+        return;
+    }
+    string rlvModeOff = "@setsphere_mode:0=force";
+    string rlvClear   = "@setsphere=clear";
+    llOwnerSay("DEBUG FX: RLV clear payload [1/2]=" + rlvModeOff);
+    llOwnerSay("DEBUG FX: RLV clear payload [2/2]=" + rlvClear);
+    llOwnerSay(rlvModeOff);
+    llOwnerSay(rlvClear);
     g_fxActive = FALSE;
+    llOwnerSay("DEBUG FX: fxClearHigh EXIT emitted 2 @setsphere commands, " +
+               "g_fxActive=FALSE");
 }
 
 // ----------------------------------------------------------------
@@ -301,6 +343,8 @@ startSmokeAnim(string strain, string quality, string itemType)
     g_puffTimerActive = TRUE;
 
     // RLV high effects (no-op if disabled or non-RLV viewer)
+    llOwnerSay("DEBUG FX: startSmokeAnim dispatching fxStartHigh quality=" +
+               quality);
     fxStartHigh(quality);
 }
 
@@ -383,11 +427,16 @@ default
         // Previously it was "" (unset) -> fxStartHigh early-returned
         // every single time, which is why no player ever saw RLV
         // effects. They can still toggle it off via Stats -> FX.
-        if (llLinksetDataRead("hud_fx_enabled") == "")
+        string fxBoot = llLinksetDataRead("hud_fx_enabled");
+        if (fxBoot == "")
         {
             llLinksetDataWrite("hud_fx_enabled", "1");
-            llOwnerSay("DEBUG FX: defaulted hud_fx_enabled=1 on first run");
+            fxBoot = "1";
+            llOwnerSay("DEBUG FX: state_entry defaulted hud_fx_enabled=1 " +
+                       "on first run");
         }
+        llOwnerSay("DEBUG FX: state_entry hud_fx_enabled='" + fxBoot +
+                   "' (1=on, 0=off, gated by Stats -> FX)");
         requestHybridPermissions(llGetOwner(), "Play Cultivar smoking animations");
     }
 
@@ -550,10 +599,13 @@ default
         {
             string quality = llList2String(parts, 1);
             if (quality == "") quality = g_currentQuality;
+            llOwnerSay("DEBUG FX: FX_START link_message -> fxStartHigh " +
+                       "quality=" + quality);
             fxStartHigh(quality);
         }
         else if (cmd == "FX_CLEAR")
         {
+            llOwnerSay("DEBUG FX: FX_CLEAR link_message -> fxClearHigh");
             fxClearHigh();
         }
     }
