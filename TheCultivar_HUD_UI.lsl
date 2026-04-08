@@ -281,8 +281,6 @@ parseItems(string rawData, string filterPrefix)
 
 showMainMenu()
 {
-    llOwnerSay("DEBUG MEM: showMainMenu ENTER free=" +
-               (string)llGetFreeMemory());
     closeAllListens();
     string line1 = "Not smoking";
     if (g_isSmoking) line1 = "Smoking: " + g_smokeQuality + " " + g_smokeStrain;
@@ -299,8 +297,6 @@ showMainMenu()
          "Store", "Close"],
         DCHAN_MAIN);
     llSetTimerEvent(30.0);
-    llOwnerSay("DEBUG MEM: showMainMenu EXIT free=" +
-               (string)llGetFreeMemory());
 }
 
 // SMOKE  -  Step 1: what type?
@@ -362,10 +358,6 @@ showSmokeResumeMenu(integer remainingSecs)
 // Active smoke HUD menu  -  shown when already smoking and btn_smoke is touched
 showActiveSmokeMenu()
 {
-    llOwnerSay("DEBUG UI: showActiveSmokeMenu() opening, strain=" +
-               g_smokeStrain + " qual=" + g_smokeQuality +
-               " remaining=" + (string)g_smokeTimeRemaining +
-               " mem free=" + (string)llGetFreeMemory());
     closeAllListens();
     integer minsLeft = g_smokeTimeRemaining / 60;
     string timeStr;
@@ -451,9 +443,6 @@ showPassPlayerMenu()
 // SESSION menu  -  different layout depending on whether in session
 showSessionMenu()
 {
-    llOwnerSay("DEBUG MEM: showSessionMenu ENTER free=" +
-               (string)llGetFreeMemory() +
-               " inSession=" + (string)g_inSession);
     closeAllListens();
     g_lisSessionMenu = llListen(DCHAN_SESSION_MENU, "", g_ownerKey, "");
     if (g_inSession)
@@ -473,17 +462,11 @@ showSessionMenu()
             DCHAN_SESSION_MENU);
     }
     llSetTimerEvent(30.0);
-    llOwnerSay("DEBUG MEM: showSessionMenu EXIT free=" +
-               (string)llGetFreeMemory());
 }
 
 // SESSION  -  Step 2: pick what to spark (shown after session object rezzes)
 showSessionItemMenu()
 {
-    llOwnerSay("DEBUG MEM: showSessionItemMenu ENTER free=" +
-               (string)llGetFreeMemory() +
-               " availItemStride=" +
-               (string)(llGetListLength(g_availableItems) / ITEM_STRIDE));
     closeAllListens();
     integer count = llGetListLength(g_availableItems) / ITEM_STRIDE;
     if (count == 0)
@@ -533,28 +516,19 @@ showSessionItemMenu()
     buttons  = [];
     menuText = "";
     llSetTimerEvent(30.0);
-    llOwnerSay("DEBUG MEM: showSessionItemMenu EXIT free=" +
-               (string)llGetFreeMemory());
 }
 
 showInventoryMenu()
 {
-    llOwnerSay("DEBUG MEM: showInventoryMenu ENTER free=" +
-               (string)llGetFreeMemory() +
-               " invDisplayLen=" + (string)llStringLength(g_inventoryDisplay));
     closeAllListens();
     llMessageLinked(LINK_SET, CHAN_INVENTORY, "REQUEST_INVENTORY", NULL_KEY);
     g_lisInv = llListen(DCHAN_INVENTORY, "", g_ownerKey, "");
-    string invMsg = "=== INVENTORY ===\n" + g_inventoryDisplay + "\n\n" +
-        "Load Jar   -  touch a weed jar to fill it\n" +
-        "Fill Bag   -  touch a bagging table";
+    string invMsg = "=== INVENTORY ===\n" + g_inventoryDisplay;
     if (llStringLength(invMsg) > 480)
         invMsg = llGetSubString(invMsg, 0, 477) + "...";
     llDialog(g_ownerKey, invMsg, ["Load Jar", "Fill Bag", "Back"], DCHAN_INVENTORY);
     invMsg = ""; // release temp
     llSetTimerEvent(30.0);
-    llOwnerSay("DEBUG MEM: showInventoryMenu EXIT free=" +
-               (string)llGetFreeMemory());
 }
 
 showStats()
@@ -631,8 +605,6 @@ executeRemove()
 
 onRemoveSuccess()
 {
-    llOwnerSay("DEBUG MEM: onRemoveSuccess ENTER flow=" + g_flowContext +
-               " free=" + (string)llGetFreeMemory());
     if (g_flowContext == "smoke")
     {
         // Start animation
@@ -687,8 +659,6 @@ onRemoveSuccess()
     g_passTarget      = NULL_KEY;
     g_passTargetName  = "";
     g_availableItems  = [];
-    llOwnerSay("DEBUG MEM: onRemoveSuccess EXIT free=" +
-               (string)llGetFreeMemory());
 }
 
 onRemoveFail()
@@ -742,8 +712,6 @@ default
             runHydrationFallback();
             return;
         }
-        llOwnerSay("DEBUG UI: dialog timer expired, flowContext=" +
-                   g_flowContext + " closing all listens");
         closeAllListens();
         llSetTimerEvent(0.0);
         // Cancel any orphaned session object
@@ -770,13 +738,6 @@ default
         // inline now if the sibling broadcasts haven't landed yet.
         if (g_hydrationFallbackPending) runHydrationFallback();
         string primName = llGetLinkName(llDetectedLinkNumber(0));
-
-        // Heartbeat: proves the HUD is still receiving touch events,
-        // distinguishing a dead script from an unresponsive dialog.
-        llOwnerSay("DEBUG UI: touch_start primName=" + primName +
-                   " isSmoking=" + (string)g_isSmoking +
-                   " flowContext=" + g_flowContext +
-                   " mem free=" + (string)llGetFreeMemory());
 
         if      (primName == "btn_smoke")
         {
@@ -1054,10 +1015,6 @@ default
         {
             if (msg == "Put It Out")
             {
-                llOwnerSay("DEBUG LOCK: PutItOut BEFORE " +
-                           "isSmoking=" + (string)g_isSmoking +
-                           " flow=" + g_flowContext +
-                           " free=" + (string)llGetFreeMemory());
                 llMessageLinked(LINK_SET, CHAN_COMMS, "END_SMOKE_EARLY", NULL_KEY);
                 g_isSmoking          = FALSE;
                 g_smokeStrain        = "";
@@ -1074,11 +1031,6 @@ default
                 // g_lisSmokeActive is already 0 here — no extra
                 // surgical cleanup needed on this path.
                 setButtonGlow(LINK_BTN_SMOKE, 0.0);
-                llOwnerSay("DEBUG LOCK: PutItOut AFTER  " +
-                           "isSmoking=" + (string)g_isSmoking +
-                           " flow=" + g_flowContext +
-                           " glow=OFF free=" + (string)llGetFreeMemory() +
-                           " -> smoke btn UNLOCKED");
             }
             else if (msg == "Take a Puff")
             {
@@ -1207,12 +1159,6 @@ default
             // for the Put It Out flow that was blowing the heap.
             if (msg == "SMOKE_STOPPED")
             {
-                llOwnerSay("DEBUG LOCK: SMOKE_STOPPED BEFORE " +
-                           "isSmoking=" + (string)g_isSmoking +
-                           " flow=" + g_flowContext +
-                           " lisSmokeActive=" + (string)g_lisSmokeActive +
-                           " lisSmokeResume=" + (string)g_lisSmokeResume +
-                           " free=" + (string)llGetFreeMemory());
                 // Clear active smoke state
                 g_isSmoking          = FALSE;
                 g_smokeStrain        = "";
@@ -1246,13 +1192,6 @@ default
                     g_lisSmokeResume = 0;
                 }
                 setButtonGlow(LINK_BTN_SMOKE, 0.0);
-                llOwnerSay("DEBUG LOCK: SMOKE_STOPPED AFTER  " +
-                           "isSmoking=" + (string)g_isSmoking +
-                           " flow=" + g_flowContext +
-                           " lisSmokeActive=" + (string)g_lisSmokeActive +
-                           " lisSmokeResume=" + (string)g_lisSmokeResume +
-                           " glow=OFF free=" + (string)llGetFreeMemory() +
-                           " -> smoke btn UNLOCKED");
                 return;
             }
             // ITEM_USED / ITEM_FAILED carry an item-name suffix but the
@@ -1303,10 +1242,6 @@ default
             // Minimal work: only touch what onRemoveSuccess didn't already set.
             else if (cmd == "SMOKE_STARTED")
             {
-                llOwnerSay("DEBUG LOCK: SMOKE_STARTED BEFORE " +
-                           "isSmoking=" + (string)g_isSmoking +
-                           " flow=" + g_flowContext +
-                           " free=" + (string)llGetFreeMemory());
                 if (!g_isSmoking)
                 {
                     g_isSmoking    = TRUE;
@@ -1315,13 +1250,6 @@ default
                     setButtonGlow(LINK_BTN_SMOKE, 0.1);
                 }
                 g_smokeTimeRemaining = (integer)llList2String(parts, 3);
-                llOwnerSay("DEBUG LOCK: SMOKE_STARTED AFTER  " +
-                           "isSmoking=" + (string)g_isSmoking +
-                           " strain=" + g_smokeStrain +
-                           " qual=" + g_smokeQuality +
-                           " remain=" + (string)g_smokeTimeRemaining +
-                           " glow=ON free=" + (string)llGetFreeMemory() +
-                           " -> smoke btn LOCKED");
             }
 
             // ---- SESSION EVENTS ----
@@ -1333,14 +1261,7 @@ default
             // ping) would auto-open the spark menu.
             else if (cmd == "SESSION_OBJECT_READY")
             {
-                llOwnerSay("DEBUG UI: SESSION_OBJECT_READY received, " +
-                           "flowContext=" + g_flowContext);
-                if (g_flowContext != "session_spark")
-                {
-                    llOwnerSay("DEBUG UI: ignoring SESSION_OBJECT_READY  -  " +
-                               "no pending session_spark flow");
-                    return;
-                }
+                if (g_flowContext != "session_spark") return;
                 g_pendingSessionObjKey = (key)llList2String(parts, 1);
                 // Request spark-able inventory (joints, blunts, spliffs, flower)
                 llMessageLinked(LINK_SET, CHAN_INVENTORY,
