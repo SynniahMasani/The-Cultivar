@@ -35,8 +35,10 @@ integer g_listenSession;
 key     g_ownerKey;
 string  g_ownerName;
 
-// Wrapper inventory: stride-1 list, each entry "flavor|count"
-// Populated by TC_WRAPPER_GIVE; queried by Rolling Table via TC_WRAPPER_QUERY
+// Wrapper inventory. Populated by TC_WRAPPER_GIVE;
+// queried by Rolling Table via TC_WRAPPER_QUERY.
+// Stored as a stride-2 list: [flavor, count, flavor, count, ...]
+// Avoids per-write llParseString2List + string concat heap churn.
 list g_wrapperInventory = [];
 
 // Track active session if any
@@ -855,26 +857,19 @@ default
                 if (flavor == "") return;
                 if (count <= 0) return;
 
-                // Find existing entry for this flavor and update count, or add new entry
-                integer found = -1;
-                integer wi;
-                for (wi = 0; wi < llGetListLength(g_wrapperInventory); wi++)
-                {
-                    list entry = llParseString2List(llList2String(g_wrapperInventory, wi), ["|"], []);
-                    if (llList2String(entry, 0) == flavor)
-                        found = wi;
-                }
-
+                // Stride-2 layout: flavors sit at even indices, counts at odd.
+                // llListFindList does type-strict match, so [flavor] (string)
+                // only hits the flavor slots, never the integer count slots.
+                integer found = llListFindList(g_wrapperInventory, [flavor]);
                 if (found >= 0)
                 {
-                    list   entry    = llParseString2List(llList2String(g_wrapperInventory, found), ["|"], []);
-                    integer existing = (integer)llList2String(entry, 1);
+                    integer existing = llList2Integer(g_wrapperInventory, found + 1);
                     g_wrapperInventory = llListReplaceList(g_wrapperInventory,
-                        [flavor + "|" + (string)(existing + count)], found, found);
+                        [existing + count], found + 1, found + 1);
                 }
                 else
                 {
-                    g_wrapperInventory += [flavor + "|" + (string)count];
+                    g_wrapperInventory += [flavor, count];
                 }
 
                 // ACK back to the wrapper box on private channel
