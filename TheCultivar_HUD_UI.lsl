@@ -1432,22 +1432,45 @@ default
             }
             else if (reqKey == "ui_session")
             {
-                // Filter to spark-able items
+                // Filter to spark-able items. Same allocation pattern
+                // as parseItems(): keep the outer slots parse, walk
+                // each slot with llSubStringIndex/llGetSubString so
+                // the inner per-slot llParseString2List is eliminated.
+                // Filter on iType BEFORE extracting the remaining
+                // fields so non-matching slots skip four getSubString
+                // calls each.
                 list sparkTypes = ["joint","blunt","spliff","flower_raw"];
                 list parsed;
                 list slots = llParseString2List(rawData, ["^"], []);
+                integer n = llGetListLength(slots);
                 integer i;
-                for (i = 0; i < llGetListLength(slots); i++)
+                for (i = 0; i < n; i++)
                 {
-                    list f = llParseString2List(llList2String(slots, i), ["~"], []);
-                    if (llGetListLength(f) < 5) jump skip_s;
-                    string iType = llList2String(f, 0);
-                    if (llListFindList(sparkTypes, [iType]) != -1)
-                        parsed += [iType,
-                            llList2String(f, 1),
-                            llList2String(f, 2),
-                            (integer)llList2String(f, 3),
-                            llList2String(f, 4)];
+                    string slot = llList2String(slots, i);
+
+                    integer t1 = llSubStringIndex(slot, "~");
+                    if (t1 < 0) jump skip_s;
+                    string iType = llGetSubString(slot, 0, t1 - 1);
+                    if (llListFindList(sparkTypes, [iType]) == -1) jump skip_s;
+
+                    slot = llDeleteSubString(slot, 0, t1);
+
+                    integer t2 = llSubStringIndex(slot, "~");
+                    if (t2 < 0) jump skip_s;
+                    string strain = llGetSubString(slot, 0, t2 - 1);
+                    slot = llDeleteSubString(slot, 0, t2);
+
+                    integer t3 = llSubStringIndex(slot, "~");
+                    if (t3 < 0) jump skip_s;
+                    string quality = llGetSubString(slot, 0, t3 - 1);
+                    slot = llDeleteSubString(slot, 0, t3);
+
+                    integer t4 = llSubStringIndex(slot, "~");
+                    if (t4 < 0) jump skip_s;
+                    string qty      = llGetSubString(slot, 0, t4 - 1);
+                    string packager = llDeleteSubString(slot, 0, t4);
+
+                    parsed += [iType, strain, quality, (integer)qty, packager];
                     @skip_s;
                 }
                 g_availableItems = parsed;
