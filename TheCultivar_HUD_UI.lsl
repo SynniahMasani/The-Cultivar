@@ -123,6 +123,20 @@ integer ITEM_STRIDE = 5;
 // ---- Session object waiting for spark selection ----
 key     g_pendingSessionObjKey = NULL_KEY;
 
+// ---- Attach-time hydration tracking ----
+// HUD_Identity and HUD_Inventory broadcast IDENTITY_DATA and
+// UPDATE_INVENTORY_DISPLAY automatically from their own state_entry
+// and on_rez handlers. We rely on those sibling startup broadcasts as
+// the PRIMARY attach hydration path so we don't have to fire duplicate
+// REQUEST_IDENTITY / REQUEST_INVENTORY messages on every HUD attach
+// (which used to race the sibling broadcasts and cause double
+// hydration). The fallback timer below only re-requests data that
+// hasn't arrived within HYDRATION_FALLBACK_SEC.
+integer g_hydratedIdentity         = FALSE;
+integer g_hydratedInventory        = FALSE;
+integer g_hydrationFallbackPending = FALSE;
+float   HYDRATION_FALLBACK_SEC     = 3.0;
+
 
 // ================================================================
 //  UTILITY
@@ -160,6 +174,20 @@ refreshAllGlows()
     setButtonGlow(LINK_BTN_PASS,      0.0);
     setButtonGlow(LINK_BTN_STATS,     0.0);
     setButtonGlow(LINK_BTN_STORE,     0.0);
+}
+
+// Re-request only the hydration payloads that didn't arrive via the
+// sibling startup broadcasts. Called from the timer fallback and
+// inline from touch_start so a dialog timer overwriting the fallback
+// timer can't strand us with empty identity/inventory caches.
+runHydrationFallback()
+{
+    g_hydrationFallbackPending = FALSE;
+    llSetTimerEvent(0.0);
+    if (!g_hydratedIdentity)
+        llMessageLinked(LINK_SET, CHAN_IDENTITY,  "REQUEST_IDENTITY",  NULL_KEY);
+    if (!g_hydratedInventory)
+        llMessageLinked(LINK_SET, CHAN_INVENTORY, "REQUEST_INVENTORY", NULL_KEY);
 }
 
 string qualLabel(string q)
@@ -683,8 +711,18 @@ default
     {
         g_ownerKey  = llGetOwner();
         g_ownerName = llGetDisplayName(g_ownerKey);
-        llMessageLinked(LINK_SET, CHAN_IDENTITY, "REQUEST_IDENTITY", NULL_KEY);
-        llMessageLinked(LINK_SET, CHAN_INVENTORY, "REQUEST_INVENTORY", NULL_KEY);
+        // Sibling startup broadcasts (HUD_Identity.broadcastIdentity and
+        // HUD_Inventory.broadcastInventorySummary, both fired from their
+        // own state_entry / on_rez) are the primary attach hydration
+        // path. We no longer fire REQUEST_IDENTITY / REQUEST_INVENTORY
+        // here -- that was racing the sibling broadcasts and producing
+        // duplicate hydration on every HUD attach. Instead we arm a
+        // one-shot fallback timer that re-requests only the payloads
+        // that haven't arrived within HYDRATION_FALLBACK_SEC.
+        g_hydratedIdentity         = FALSE;
+        g_hydratedInventory        = FALSE;
+        g_hydrationFallbackPending = TRUE;
+        llSetTimerEvent(HYDRATION_FALLBACK_SEC);
         refreshAllGlows();
         // Print initial memory headroom so we can spot regressions early.
         llOwnerSay("[HUD_UI] mem used=" + (string)llGetUsedMemory() +
@@ -696,6 +734,14 @@ default
 
     timer()
     {
+        // Hydration fallback wins over the dialog cleanup branch: if
+        // either sibling broadcast didn't land within the window, ask
+        // for it now and exit without disturbing dialog state.
+        if (g_hydrationFallbackPending)
+        {
+            runHydrationFallback();
+            return;
+        }
         llOwnerSay("DEBUG UI: dialog timer expired, flowContext=" +
                    g_flowContext + " closing all listens");
         closeAllListens();
@@ -719,6 +765,10 @@ default
     touch_start(integer nd)
     {
         if (llDetectedKey(0) != g_ownerKey) return;
+        // The first menu open will overwrite the hydration fallback
+        // timer with its own 30s dialog timer, so run the fallback
+        // inline now if the sibling broadcasts haven't landed yet.
+        if (g_hydrationFallbackPending) runHydrationFallback();
         string primName = llGetLinkName(llDetectedLinkNumber(0));
 
         // Heartbeat: proves the HUD is still receiving touch events,
@@ -1143,7 +1193,8 @@ default
             if (llSubStringIndex(msg, "UPDATE_INVENTORY_DISPLAY|") == 0)
             {
                 // Strip the command prefix; store the rest as-is.
-                g_inventoryDisplay = llDeleteSubString(msg, 0, 24);
+                g_inventoryDisplay  = llDeleteSubString(msg, 0, 24);
+                g_hydratedInventory = TRUE;
                 return;
             }
             if (llSubStringIndex(msg, "SHOW_STATS|") == 0)
@@ -1239,6 +1290,7 @@ default
                 g_brandName      = llList2String(parts, 10);
                 if (llGetListLength(parts) > 14)
                     g_playerTitle = llList2String(parts, 14);
+                g_hydratedIdentity = TRUE;
             }
 
             // (UPDATE_INVENTORY_DISPLAY, SHOW_STATS, SMOKE_STOPPED,
