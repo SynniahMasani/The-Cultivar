@@ -184,32 +184,64 @@ string menuToItemType(string sel)
 }
 
 // Parse raw serialized inventory (from REQUEST_RAW_INVENTORY response)
-// and populate g_availableItems, optionally filtered by item type prefix
+// and populate g_availableItems, optionally filtered by item type prefix.
+//
+// Hot path: called on every smoke/pass flow right before showing the
+// item-pick dialog, so it has to be cheap. The previous implementation
+// called llParseString2List once per slot to break the ~-delimited
+// fields, which meant N+1 list allocations per refresh and was the
+// dominant heap-churn source feeding the Stack-Heap Collision on the
+// smoke flow. This version allocates ONE list (the slots split) and
+// then walks each slot via llSubStringIndex / llGetSubString, which
+// are allocation-free string ops. It also checks the filter BEFORE
+// extracting the remaining fields, so non-matching slots skip four
+// llGetSubString calls instead of still running a full inner parse.
 parseItems(string rawData, string filterPrefix)
 {
     g_availableItems = [];
     if (rawData == "" || rawData == "EMPTY") return;
     list slots = llParseString2List(rawData, ["^"], []);
+    integer n   = llGetListLength(slots);
+    integer all = (filterPrefix == "" || filterPrefix == "all");
     integer i;
-    for (i = 0; i < llGetListLength(slots); i++)
+    for (i = 0; i < n; i++)
     {
-        list f = llParseString2List(llList2String(slots, i), ["~"], []);
-        if (llGetListLength(f) < 5) jump skip;
-        string iType = llList2String(f, 0);
-        integer match = (filterPrefix == "" || filterPrefix == "all");
+        string slot = llList2String(slots, i);
+
+        // Extract iType (everything up to first ~).
+        integer t1 = llSubStringIndex(slot, "~");
+        if (t1 < 0) jump skip;
+        string iType = llGetSubString(slot, 0, t1 - 1);
+
+        // Filter BEFORE parsing the rest. This is the big win for
+        // type-filtered flows (e.g. "joint") where most inventory
+        // slots don't match and we can skip all remaining work.
+        integer match = all;
         if (!match)
             match = (iType == filterPrefix ||
                      llSubStringIndex(iType, filterPrefix) == 0);
-        if (match)
-        {
-            g_availableItems += [
-                iType,
-                llList2String(f, 1),
-                llList2String(f, 2),
-                (integer)llList2String(f, 3),
-                llList2String(f, 4)
-            ];
-        }
+        if (!match) jump skip;
+
+        // Walk the remaining four fields. Reuse `slot` as a shrinking
+        // cursor so we don't hold multiple intermediate substrings.
+        slot = llDeleteSubString(slot, 0, t1);
+
+        integer t2 = llSubStringIndex(slot, "~");
+        if (t2 < 0) jump skip;
+        string strain = llGetSubString(slot, 0, t2 - 1);
+        slot = llDeleteSubString(slot, 0, t2);
+
+        integer t3 = llSubStringIndex(slot, "~");
+        if (t3 < 0) jump skip;
+        string quality = llGetSubString(slot, 0, t3 - 1);
+        slot = llDeleteSubString(slot, 0, t3);
+
+        integer t4 = llSubStringIndex(slot, "~");
+        if (t4 < 0) jump skip;
+        string qty      = llGetSubString(slot, 0, t4 - 1);
+        string packager = llDeleteSubString(slot, 0, t4);
+
+        g_availableItems += [iType, strain, quality, (integer)qty, packager];
         @skip;
     }
 }
@@ -221,7 +253,7 @@ parseItems(string rawData, string filterPrefix)
 
 showMainMenu()
 {
-    llOwnerSay("DEBUG UI: showMainMenu() opening, mem free=" +
+    llOwnerSay("DEBUG MEM: showMainMenu ENTER free=" +
                (string)llGetFreeMemory());
     closeAllListens();
     string line1 = "Not smoking";
@@ -239,6 +271,8 @@ showMainMenu()
          "Store", "Close"],
         DCHAN_MAIN);
     llSetTimerEvent(30.0);
+    llOwnerSay("DEBUG MEM: showMainMenu EXIT free=" +
+               (string)llGetFreeMemory());
 }
 
 // SMOKE  -  Step 1: what type?
@@ -389,6 +423,9 @@ showPassPlayerMenu()
 // SESSION menu  -  different layout depending on whether in session
 showSessionMenu()
 {
+    llOwnerSay("DEBUG MEM: showSessionMenu ENTER free=" +
+               (string)llGetFreeMemory() +
+               " inSession=" + (string)g_inSession);
     closeAllListens();
     g_lisSessionMenu = llListen(DCHAN_SESSION_MENU, "", g_ownerKey, "");
     if (g_inSession)
@@ -408,6 +445,8 @@ showSessionMenu()
             DCHAN_SESSION_MENU);
     }
     llSetTimerEvent(30.0);
+    llOwnerSay("DEBUG MEM: showSessionMenu EXIT free=" +
+               (string)llGetFreeMemory());
 }
 
 // SESSION  -  Step 2: pick what to spark (shown after session object rezzes)
@@ -965,9 +1004,10 @@ default
         {
             if (msg == "Put It Out")
             {
-                llOwnerSay("DEBUG UI: Put It Out pressed (HUD-side). " +
-                           "Sending END_SMOKE_EARLY, unlocking smoke btn locally. " +
-                           "mem free=" + (string)llGetFreeMemory());
+                llOwnerSay("DEBUG LOCK: PutItOut BEFORE " +
+                           "isSmoking=" + (string)g_isSmoking +
+                           " flow=" + g_flowContext +
+                           " free=" + (string)llGetFreeMemory());
                 llMessageLinked(LINK_SET, CHAN_COMMS, "END_SMOKE_EARLY", NULL_KEY);
                 g_isSmoking          = FALSE;
                 g_smokeStrain        = "";
@@ -975,10 +1015,20 @@ default
                 g_smokeTimeRemaining = 0;
                 g_availableItems     = [];
                 g_flowContext        = "none";
+                g_pendingItemType    = "";
+                g_pendingStrain      = "";
+                g_pendingQuality     = "";
+                g_pendingPackager    = "";
+                g_pendingResumeSecs  = 0;
+                // closeAllListens already ran at listen() entry so
+                // g_lisSmokeActive is already 0 here — no extra
+                // surgical cleanup needed on this path.
                 setButtonGlow(LINK_BTN_SMOKE, 0.0);
-                llOwnerSay("DEBUG UI: Put It Out handler complete, " +
+                llOwnerSay("DEBUG LOCK: PutItOut AFTER  " +
                            "isSmoking=" + (string)g_isSmoking +
-                           " mem free=" + (string)llGetFreeMemory());
+                           " flow=" + g_flowContext +
+                           " glow=OFF free=" + (string)llGetFreeMemory() +
+                           " -> smoke btn UNLOCKED");
             }
             else if (msg == "Take a Puff")
             {
@@ -1106,18 +1156,52 @@ default
             // for the Put It Out flow that was blowing the heap.
             if (msg == "SMOKE_STOPPED")
             {
-                llOwnerSay("DEBUG UI: SMOKE_STOPPED (fast) was g_isSmoking=" +
-                           (string)g_isSmoking +
-                           " mem used=" + (string)llGetUsedMemory() +
-                           " free=" + (string)llGetFreeMemory() +
-                           " -> UNLOCKED smoke btn");
+                llOwnerSay("DEBUG LOCK: SMOKE_STOPPED BEFORE " +
+                           "isSmoking=" + (string)g_isSmoking +
+                           " flow=" + g_flowContext +
+                           " lisSmokeActive=" + (string)g_lisSmokeActive +
+                           " lisSmokeResume=" + (string)g_lisSmokeResume +
+                           " free=" + (string)llGetFreeMemory());
+                // Clear active smoke state
                 g_isSmoking          = FALSE;
                 g_smokeStrain        = "";
                 g_smokeQuality       = "";
                 g_smokeTimeRemaining = 0;
                 g_availableItems     = [];
                 g_flowContext        = "none";
+                // Clear pending fields too — otherwise a stale strain
+                // from the last flow can leak into the next smoke.
+                g_pendingItemType    = "";
+                g_pendingStrain      = "";
+                g_pendingQuality     = "";
+                g_pendingPackager    = "";
+                g_pendingResumeSecs  = 0;
+                // Surgical listen cleanup: the smoke active / resume
+                // dialogs might still be on screen when SMOKE_STOPPED
+                // arrives via link_message (e.g. prop expired naturally
+                // or remote put-out). Close ONLY those two listens so
+                // unrelated menus (inventory, session, etc.) are not
+                // disturbed. Without this, a stale button press on the
+                // old smoke dialog routes through cleared state and
+                // the HUD feels locked until the dialog auto-closes.
+                if (g_lisSmokeActive)
+                {
+                    llListenRemove(g_lisSmokeActive);
+                    g_lisSmokeActive = 0;
+                }
+                if (g_lisSmokeResume)
+                {
+                    llListenRemove(g_lisSmokeResume);
+                    g_lisSmokeResume = 0;
+                }
                 setButtonGlow(LINK_BTN_SMOKE, 0.0);
+                llOwnerSay("DEBUG LOCK: SMOKE_STOPPED AFTER  " +
+                           "isSmoking=" + (string)g_isSmoking +
+                           " flow=" + g_flowContext +
+                           " lisSmokeActive=" + (string)g_lisSmokeActive +
+                           " lisSmokeResume=" + (string)g_lisSmokeResume +
+                           " glow=OFF free=" + (string)llGetFreeMemory() +
+                           " -> smoke btn UNLOCKED");
                 return;
             }
             // ITEM_USED / ITEM_FAILED carry an item-name suffix but the
@@ -1167,8 +1251,10 @@ default
             // Minimal work: only touch what onRemoveSuccess didn't already set.
             else if (cmd == "SMOKE_STARTED")
             {
-                llOwnerSay("DEBUG UI: SMOKE_STARTED received, was g_isSmoking=" +
-                           (string)g_isSmoking + " -> TRUE; LOCKED smoke btn");
+                llOwnerSay("DEBUG LOCK: SMOKE_STARTED BEFORE " +
+                           "isSmoking=" + (string)g_isSmoking +
+                           " flow=" + g_flowContext +
+                           " free=" + (string)llGetFreeMemory());
                 if (!g_isSmoking)
                 {
                     g_isSmoking    = TRUE;
@@ -1177,6 +1263,13 @@ default
                     setButtonGlow(LINK_BTN_SMOKE, 0.1);
                 }
                 g_smokeTimeRemaining = (integer)llList2String(parts, 3);
+                llOwnerSay("DEBUG LOCK: SMOKE_STARTED AFTER  " +
+                           "isSmoking=" + (string)g_isSmoking +
+                           " strain=" + g_smokeStrain +
+                           " qual=" + g_smokeQuality +
+                           " remain=" + (string)g_smokeTimeRemaining +
+                           " glow=ON free=" + (string)llGetFreeMemory() +
+                           " -> smoke btn LOCKED");
             }
 
             // ---- SESSION EVENTS ----
@@ -1339,22 +1432,45 @@ default
             }
             else if (reqKey == "ui_session")
             {
-                // Filter to spark-able items
+                // Filter to spark-able items. Same allocation pattern
+                // as parseItems(): keep the outer slots parse, walk
+                // each slot with llSubStringIndex/llGetSubString so
+                // the inner per-slot llParseString2List is eliminated.
+                // Filter on iType BEFORE extracting the remaining
+                // fields so non-matching slots skip four getSubString
+                // calls each.
                 list sparkTypes = ["joint","blunt","spliff","flower_raw"];
                 list parsed;
                 list slots = llParseString2List(rawData, ["^"], []);
+                integer n = llGetListLength(slots);
                 integer i;
-                for (i = 0; i < llGetListLength(slots); i++)
+                for (i = 0; i < n; i++)
                 {
-                    list f = llParseString2List(llList2String(slots, i), ["~"], []);
-                    if (llGetListLength(f) < 5) jump skip_s;
-                    string iType = llList2String(f, 0);
-                    if (llListFindList(sparkTypes, [iType]) != -1)
-                        parsed += [iType,
-                            llList2String(f, 1),
-                            llList2String(f, 2),
-                            (integer)llList2String(f, 3),
-                            llList2String(f, 4)];
+                    string slot = llList2String(slots, i);
+
+                    integer t1 = llSubStringIndex(slot, "~");
+                    if (t1 < 0) jump skip_s;
+                    string iType = llGetSubString(slot, 0, t1 - 1);
+                    if (llListFindList(sparkTypes, [iType]) == -1) jump skip_s;
+
+                    slot = llDeleteSubString(slot, 0, t1);
+
+                    integer t2 = llSubStringIndex(slot, "~");
+                    if (t2 < 0) jump skip_s;
+                    string strain = llGetSubString(slot, 0, t2 - 1);
+                    slot = llDeleteSubString(slot, 0, t2);
+
+                    integer t3 = llSubStringIndex(slot, "~");
+                    if (t3 < 0) jump skip_s;
+                    string quality = llGetSubString(slot, 0, t3 - 1);
+                    slot = llDeleteSubString(slot, 0, t3);
+
+                    integer t4 = llSubStringIndex(slot, "~");
+                    if (t4 < 0) jump skip_s;
+                    string qty      = llGetSubString(slot, 0, t4 - 1);
+                    string packager = llDeleteSubString(slot, 0, t4);
+
+                    parsed += [iType, strain, quality, (integer)qty, packager];
                     @skip_s;
                 }
                 g_availableItems = parsed;

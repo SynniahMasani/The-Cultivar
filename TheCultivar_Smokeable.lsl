@@ -176,6 +176,8 @@ startSmokeParticles()
     // initial burst then nothing, either the emitter was reset OR
     // burstRate is too slow vs particle lifetime. Do not touch
     // PSYS_SRC_MAX_AGE here; leaving it 0 means "emit forever".
+    float  startScaleX  = 0.03;
+    float  startScaleY  = 0.03;
     float  endScaleX    = 0.12;
     float  endScaleY    = 0.12;
     integer burstCount  = 3;
@@ -184,20 +186,26 @@ startSmokeParticles()
     float  maxAge       = 6.0;
     float  speedMin     = 0.15;
     float  speedMax     = 0.30;
+    float  accelZ       = 0.05;
 
     if (g_itemType == "blunt")
     {
-        // Blunts: bigger prim, bigger cloud. Roughly 3x the particle
-        // density of a joint and almost 2x the final scale so a
-        // "few dots" symptom cannot come from tuning.
-        endScaleX  = 0.45;
-        endScaleY  = 0.45;
-        burstCount = 8;
-        burstRate  = 0.08;
-        startAlpha = 0.80;
-        maxAge     = 7.0;
-        speedMin   = 0.25;
-        speedMax   = 0.50;
+        // Blunts: bigger prim, MUCH bigger cloud. Second-pass
+        // visibility tuning — the previous values still read thin
+        // in-world, so scale up again across every knob and lean
+        // harder on upward accel + persistence so the plume climbs
+        // and hangs instead of puffing out.
+        startScaleX = 0.14;
+        startScaleY = 0.14;
+        endScaleX   = 0.80;
+        endScaleY   = 0.80;
+        burstCount  = 16;
+        burstRate   = 0.07;
+        startAlpha  = 0.96;
+        maxAge      = 9.0;
+        speedMin    = 0.28;
+        speedMax    = 0.55;
+        accelZ      = 0.15;
     }
     else if (g_itemType == "spliff")
     {
@@ -207,13 +215,39 @@ startSmokeParticles()
         burstRate  = 0.12;
     }
 
+    // Quality bump — applied AFTER the itemType baseline so e.g.
+    // "blunt exotic" combines the blunt-chunky baseline with an
+    // extra exotic boost. Exotic is the user's flagship smoke and
+    // the one flagged as hardest to see, so it gets the biggest
+    // end-scale, the most particles per burst, and the longest
+    // lifetime. Loud gets a lighter version of the same bump.
+    if (g_quality == "exotic")
+    {
+        endScaleX  = endScaleX  * 1.20;
+        endScaleY  = endScaleY  * 1.20;
+        burstCount = burstCount + 4;
+        maxAge     = maxAge     + 2.0;
+        startAlpha = startAlpha + 0.02;
+        if (startAlpha > 1.0) startAlpha = 1.0;
+    }
+    else if (g_quality == "loud")
+    {
+        endScaleX  = endScaleX  * 1.10;
+        endScaleY  = endScaleY  * 1.10;
+        burstCount = burstCount + 2;
+        maxAge     = maxAge     + 1.0;
+    }
+
     llOwnerSay("DEBUG PROP: startSmokeParticles type=" + g_itemType +
                " quality=" + g_quality +
                " start=" + (string)startCol +
                " end=" + (string)endCol +
                " burstCount=" + (string)burstCount +
                " burstRate=" + (string)burstRate +
+               " startScale=" + (string)startScaleX +
                " endScale=" + (string)endScaleX +
+               " startAlpha=" + (string)startAlpha +
+               " accelZ=" + (string)accelZ +
                " maxAge=" + (string)maxAge);
 
     llParticleSystem([
@@ -227,20 +261,25 @@ startSmokeParticles()
         PSYS_PART_END_COLOR,       endCol,
         PSYS_PART_START_ALPHA,     startAlpha,
         PSYS_PART_END_ALPHA,       0.0,
-        PSYS_PART_START_SCALE,     <0.03, 0.03, 0.0>,
+        PSYS_PART_START_SCALE,     <startScaleX, startScaleY, 0.0>,
         PSYS_PART_END_SCALE,       <endScaleX, endScaleY, 0.0>,
         PSYS_PART_MAX_AGE,         maxAge,
         PSYS_SRC_BURST_RATE,       burstRate,
         PSYS_SRC_BURST_PART_COUNT, burstCount,
         PSYS_SRC_BURST_SPEED_MIN,  speedMin,
         PSYS_SRC_BURST_SPEED_MAX,  speedMax,
-        // Slight upward drift so smoke always rises away from the prim
-        PSYS_SRC_ACCEL,            <0.0, 0.0, 0.05>,
+        // Upward drift so smoke always rises away from the prim.
+        // Blunts get a stronger lift so the thicker cloud reads as
+        // a proper plume instead of hanging at the mouth.
+        PSYS_SRC_ACCEL,            <0.0, 0.0, accelZ>,
         PSYS_SRC_ANGLE_BEGIN,      0.0,
         PSYS_SRC_ANGLE_END,        0.45
         // NOTE: PSYS_SRC_MAX_AGE intentionally omitted -> 0 ->
         // emitter runs forever until llParticleSystem([]).
     ]);
+    llOwnerSay("DEBUG PROP: startSmokeParticles DONE — emitter live at t=" +
+               (string)llGetUnixTime() +
+               " (should run until smokeFinished or detach)");
 }
 
 // ----------------------------------------------------------------
@@ -260,13 +299,21 @@ smokeFinished(integer savePause)
         remaining = g_smokeDuration - elapsed;
         if (remaining < 15) remaining = 0; // not worth resuming
     }
-    llOwnerSay("DEBUG PROP: smokeFinished savePause=" + (string)savePause +
-               " elapsed=" + (string)(llGetUnixTime() - g_smokeStartTime) +
+    integer particleAge = 0;
+    if (g_smokeStartTime > 0)
+        particleAge = llGetUnixTime() - g_smokeStartTime;
+    llOwnerSay("DEBUG PROP: smokeFinished ENTER savePause=" + (string)savePause +
+               " particleAgeSec=" + (string)particleAge +
                " duration=" + (string)g_smokeDuration +
                " remaining=" + (string)remaining +
                " hasDetachPerm=" + (string)g_hasDetachPerm);
+    if (particleAge >= 0 && particleAge < 3)
+        llOwnerSay("DEBUG PROP: WARNING smokeFinished firing at age " +
+                   (string)particleAge + "s — particles cleared EARLY, " +
+                   "not a visibility problem");
 
     llParticleSystem([]);
+    llOwnerSay("DEBUG PROP: smokeFinished llParticleSystem([]) called");
     if (g_lisHUD)    { llListenRemove(g_lisHUD);    g_lisHUD    = 0; }
     if (g_lisDialog) { llListenRemove(g_lisDialog); g_lisDialog = 0; }
 
@@ -428,15 +475,31 @@ default
     attach(key attachedTo)
     {
         llOwnerSay("DEBUG PROP: attach event, attachedTo=" + (string)attachedTo +
-                   " g_attached was=" + (string)g_attached);
+                   " g_attached was=" + (string)g_attached +
+                   " smokeStartTime=" + (string)g_smokeStartTime);
 
         if (attachedTo == NULL_KEY)
         {
-            llOwnerSay("DEBUG PROP: detach detected, clearing particles and dying");
+            // Avatar detached us (by hand, outfit change, teleport, etc.)
+            // Stamp particle age so we can distinguish early kill from
+            // natural end-of-smoke detach.
+            integer particleAge = 0;
+            if (g_smokeStartTime > 0)
+                particleAge = llGetUnixTime() - g_smokeStartTime;
+            llOwnerSay("DEBUG PROP: DETACH event (attachedTo==NULL) " +
+                       "particleAgeSec=" + (string)particleAge +
+                       " duration=" + (string)g_smokeDuration +
+                       " -> clearing particles and llDie()");
+            if (particleAge >= 0 && particleAge < 3 && g_smokeStartTime > 0)
+                llOwnerSay("DEBUG PROP: WARNING detach firing at age " +
+                           (string)particleAge + "s — particles killed " +
+                           "EARLY by detach path, not a visibility problem");
             llParticleSystem([]);
             llDie();
             return;
         }
+        llOwnerSay("DEBUG PROP: ATTACH to avatar " + (string)attachedTo +
+                   " — about to snap pose + call startSmokeParticles");
 
         // Snap to right hand — final tuned offsets from in-world adjustment
         llSetLocalRot(llEuler2Rot(<90.0, 274.0, 270.0> * DEG_TO_RAD));
@@ -492,12 +555,17 @@ default
 
     timer()
     {
+        integer nowT       = llGetUnixTime();
+        integer ageSinceStart = 0;
+        if (g_smokeStartTime > 0) ageSinceStart = nowT - g_smokeStartTime;
         llOwnerSay("DEBUG PROP: timer fired attached=" + (string)g_attached +
                    " canInteract=" + (string)g_canInteract +
-                   " smokeStartTime=" + (string)g_smokeStartTime);
+                   " smokeStartTime=" + (string)g_smokeStartTime +
+                   " ageSinceStart=" + (string)ageSinceStart +
+                   " duration=" + (string)g_smokeDuration);
         if (!g_attached)
         {
-            llOwnerSay("DEBUG PROP: timed out waiting for attach, dying");
+            llOwnerSay("DEBUG PROP: timer — TIMED OUT waiting for attach, llDie()");
             llDie();
             return;
         }
@@ -507,14 +575,17 @@ default
             // Lockout period ended — enable touch dialog, start smoke countdown
             g_canInteract    = TRUE;
             g_smokeStartTime = llGetUnixTime();
-            llOwnerSay("DEBUG PROP: lockout ended, starting smoke duration timer " +
-                       (string)g_smokeDuration + "s");
+            llOwnerSay("DEBUG PROP: timer — lockout ended, arming duration timer " +
+                       (string)g_smokeDuration + "s, smokeStartTime=" +
+                       (string)g_smokeStartTime);
             llSetTimerEvent((float)g_smokeDuration);
             return;
         }
 
         // Smoke duration expired naturally — do not save a pause entry
-        llOwnerSay("DEBUG PROP: smoke duration expired naturally");
+        llOwnerSay("DEBUG PROP: timer — DURATION EXPIRED at age " +
+                   (string)ageSinceStart + "s (expected " +
+                   (string)g_smokeDuration + "s) -> smokeFinished(FALSE)");
         smokeFinished(FALSE);
     }
 
