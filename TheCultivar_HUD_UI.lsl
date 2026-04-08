@@ -184,32 +184,64 @@ string menuToItemType(string sel)
 }
 
 // Parse raw serialized inventory (from REQUEST_RAW_INVENTORY response)
-// and populate g_availableItems, optionally filtered by item type prefix
+// and populate g_availableItems, optionally filtered by item type prefix.
+//
+// Hot path: called on every smoke/pass flow right before showing the
+// item-pick dialog, so it has to be cheap. The previous implementation
+// called llParseString2List once per slot to break the ~-delimited
+// fields, which meant N+1 list allocations per refresh and was the
+// dominant heap-churn source feeding the Stack-Heap Collision on the
+// smoke flow. This version allocates ONE list (the slots split) and
+// then walks each slot via llSubStringIndex / llGetSubString, which
+// are allocation-free string ops. It also checks the filter BEFORE
+// extracting the remaining fields, so non-matching slots skip four
+// llGetSubString calls instead of still running a full inner parse.
 parseItems(string rawData, string filterPrefix)
 {
     g_availableItems = [];
     if (rawData == "" || rawData == "EMPTY") return;
     list slots = llParseString2List(rawData, ["^"], []);
+    integer n   = llGetListLength(slots);
+    integer all = (filterPrefix == "" || filterPrefix == "all");
     integer i;
-    for (i = 0; i < llGetListLength(slots); i++)
+    for (i = 0; i < n; i++)
     {
-        list f = llParseString2List(llList2String(slots, i), ["~"], []);
-        if (llGetListLength(f) < 5) jump skip;
-        string iType = llList2String(f, 0);
-        integer match = (filterPrefix == "" || filterPrefix == "all");
+        string slot = llList2String(slots, i);
+
+        // Extract iType (everything up to first ~).
+        integer t1 = llSubStringIndex(slot, "~");
+        if (t1 < 0) jump skip;
+        string iType = llGetSubString(slot, 0, t1 - 1);
+
+        // Filter BEFORE parsing the rest. This is the big win for
+        // type-filtered flows (e.g. "joint") where most inventory
+        // slots don't match and we can skip all remaining work.
+        integer match = all;
         if (!match)
             match = (iType == filterPrefix ||
                      llSubStringIndex(iType, filterPrefix) == 0);
-        if (match)
-        {
-            g_availableItems += [
-                iType,
-                llList2String(f, 1),
-                llList2String(f, 2),
-                (integer)llList2String(f, 3),
-                llList2String(f, 4)
-            ];
-        }
+        if (!match) jump skip;
+
+        // Walk the remaining four fields. Reuse `slot` as a shrinking
+        // cursor so we don't hold multiple intermediate substrings.
+        slot = llDeleteSubString(slot, 0, t1);
+
+        integer t2 = llSubStringIndex(slot, "~");
+        if (t2 < 0) jump skip;
+        string strain = llGetSubString(slot, 0, t2 - 1);
+        slot = llDeleteSubString(slot, 0, t2);
+
+        integer t3 = llSubStringIndex(slot, "~");
+        if (t3 < 0) jump skip;
+        string quality = llGetSubString(slot, 0, t3 - 1);
+        slot = llDeleteSubString(slot, 0, t3);
+
+        integer t4 = llSubStringIndex(slot, "~");
+        if (t4 < 0) jump skip;
+        string qty      = llGetSubString(slot, 0, t4 - 1);
+        string packager = llDeleteSubString(slot, 0, t4);
+
+        g_availableItems += [iType, strain, quality, (integer)qty, packager];
         @skip;
     }
 }
