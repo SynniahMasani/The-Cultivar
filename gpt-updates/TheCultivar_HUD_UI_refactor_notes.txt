@@ -1,0 +1,41 @@
+GPT refactor plan for HUD_UI based on live pasted source:
+
+Keep in HUD_UI:
+- all smoke menus and smoke resume flow
+- all pass-to-player flow outside shared session circle
+- all non-session stats/inventory dialogs
+- all attach hydration logic and memory reporting
+- all existing smoke/item removal handling
+- session state vars that drive button glow: g_inSession, g_sessionObjKey, g_sessionHost
+
+Move out of HUD_UI into HUD_Session:
+- g_lisSessionMenu
+- g_lisSessionInvite
+- g_lisSessionItem
+- g_inviteSessKey
+- g_inviteHostName
+- g_inviteStrain
+- g_inviteQuality
+- g_pendingSessionObjKey
+- showSessionMenu()
+- showSessionItemMenu()
+- DCHAN_SESSION_MENU listen block
+- DCHAN_SESSION_ITEM listen block
+- DCHAN_SESSION_INVITE listen block
+- SHOW_SESSION_INVITE link_message block
+- SESSION_OBJECT_READY handling block
+- ui_session RAW_INVENTORY parsing block
+
+HUD_UI companion message routing to add:
+- btn_session -> llMessageLinked(LINK_SET, 600, "OPEN_SESSION_MENU", NULL_KEY)
+- on session state changes, mirror to HUD_Session with:
+  SYNC_SESSION_STATE|<g_inSession>|<g_sessionObjKey>|<g_sessionHost>
+- on session invite from Comms, forward to HUD_Session as SESSION_INVITE|...
+- on session object ready, forward to HUD_Session as SESSION_OBJECT_READY|...
+- on RAW_INVENTORY ui_session, forward raw payload to HUD_Session as SESSION_RAW_INVENTORY|...
+
+Important safety notes:
+- do not change smoke animation paths
+- do not change integer constants already used by live scripts
+- do not change item serialization delimiters
+- do not modernize style; preserve current LSL formatting
