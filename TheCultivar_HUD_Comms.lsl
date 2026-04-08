@@ -53,6 +53,10 @@ integer g_myStoryChannel = -140200; // TODO: Replace with actual MyStory channel
 string  g_smokingItemType = "";
 string  g_smokingQuality  = "";
 string  g_smokingStrain   = "";
+// Resume seconds carried from TC_SMOKE_START so the post-attach
+// SMOKE_STARTED hydration reports the correct remaining time
+// instead of the full type+quality duration.
+integer g_smokingResumeSecs = 0;
 
 // Session rez gating: HUD_UI sets this to TRUE via ARM_SESSION_REZ
 // before rezzing TC_SessionObject. We only forward TC_SESSION_REZZED
@@ -308,6 +312,7 @@ default
             g_smokingQuality  = llList2String(parts, 2);
             g_smokingStrain   = llList2String(parts, 3);
             integer resumeSeconds = (integer)llList2String(parts, 4); // 0 if absent
+            g_smokingResumeSecs = resumeSeconds;
 
             // If resuming, clear the paused entry now so we don't resume
             // again on the next fresh light-up of the same item.
@@ -419,13 +424,32 @@ default
         {
             // Smokeable has attached to the avatar and is ready
             // TC_SMOKE_ATTACH_READY|itemType|quality
+            //
+            // HYDRATION-ONLY: HUD_UI's onRemoveSuccess (and the Resume
+            // handler) already fired START_SMOKE_ANIM and set the local
+            // smoking flags optimistically the moment the inventory was
+            // consumed. Re-firing START_SMOKE_ANIM here would tear down
+            // and restart the active animation (stopCurrentAnim ->
+            // restart) — that was the visible "duplicate attach
+            // hydration" glitch. The duplicate also dropped itemType,
+            // so the restart wrongly defaulted to a joint animation
+            // even when smoking a blunt or spliff.
+            //
+            // We only forward SMOKE_STARTED so the UI can hydrate
+            // g_smokeTimeRemaining with the real duration the prop is
+            // running for (full duration on a fresh light, or the
+            // resume remaining time when continuing a paused smoke).
+            // HUD_UI's SMOKE_STARTED handler is idempotent for state:
+            // it skips strain/quality/glow when g_isSmoking is already
+            // TRUE and only updates the time remaining.
             if (cmd == "TC_SMOKE_ATTACH_READY")
             {
-                // Derive duration and forward SMOKE_STARTED to UI with duration
-                integer duration = getSmokeDuration(g_smokingItemType, g_smokingQuality);
-                llMessageLinked(LINK_SET, CHAN_ANIMATION,
-                    "START_SMOKE_ANIM|" + g_smokingStrain + "|" + g_smokingQuality,
-                    NULL_KEY);
+                integer duration;
+                if (g_smokingResumeSecs > 0)
+                    duration = g_smokingResumeSecs;
+                else
+                    duration = getSmokeDuration(g_smokingItemType, g_smokingQuality);
+                g_smokingResumeSecs = 0; // single-shot
                 llMessageLinked(LINK_SET, CHAN_UI,
                     "SMOKE_STARTED|" + g_smokingStrain + "|" + g_smokingQuality +
                     "|" + (string)duration, NULL_KEY);
