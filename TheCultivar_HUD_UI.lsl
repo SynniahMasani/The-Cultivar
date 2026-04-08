@@ -221,7 +221,7 @@ parseItems(string rawData, string filterPrefix)
 
 showMainMenu()
 {
-    llOwnerSay("DEBUG UI: showMainMenu() opening, mem free=" +
+    llOwnerSay("DEBUG MEM: showMainMenu ENTER free=" +
                (string)llGetFreeMemory());
     closeAllListens();
     string line1 = "Not smoking";
@@ -239,6 +239,8 @@ showMainMenu()
          "Store", "Close"],
         DCHAN_MAIN);
     llSetTimerEvent(30.0);
+    llOwnerSay("DEBUG MEM: showMainMenu EXIT free=" +
+               (string)llGetFreeMemory());
 }
 
 // SMOKE  -  Step 1: what type?
@@ -389,6 +391,9 @@ showPassPlayerMenu()
 // SESSION menu  -  different layout depending on whether in session
 showSessionMenu()
 {
+    llOwnerSay("DEBUG MEM: showSessionMenu ENTER free=" +
+               (string)llGetFreeMemory() +
+               " inSession=" + (string)g_inSession);
     closeAllListens();
     g_lisSessionMenu = llListen(DCHAN_SESSION_MENU, "", g_ownerKey, "");
     if (g_inSession)
@@ -408,6 +413,8 @@ showSessionMenu()
             DCHAN_SESSION_MENU);
     }
     llSetTimerEvent(30.0);
+    llOwnerSay("DEBUG MEM: showSessionMenu EXIT free=" +
+               (string)llGetFreeMemory());
 }
 
 // SESSION  -  Step 2: pick what to spark (shown after session object rezzes)
@@ -1106,11 +1113,10 @@ default
             // for the Put It Out flow that was blowing the heap.
             if (msg == "SMOKE_STOPPED")
             {
-                llOwnerSay("DEBUG UI: SMOKE_STOPPED (fast) was g_isSmoking=" +
-                           (string)g_isSmoking +
-                           " mem used=" + (string)llGetUsedMemory() +
-                           " free=" + (string)llGetFreeMemory() +
-                           " -> UNLOCKED smoke btn");
+                llOwnerSay("DEBUG MEM: SMOKE_STOPPED BEFORE free=" +
+                           (string)llGetFreeMemory() +
+                           " used=" + (string)llGetUsedMemory() +
+                           " was g_isSmoking=" + (string)g_isSmoking);
                 g_isSmoking          = FALSE;
                 g_smokeStrain        = "";
                 g_smokeQuality       = "";
@@ -1118,6 +1124,9 @@ default
                 g_availableItems     = [];
                 g_flowContext        = "none";
                 setButtonGlow(LINK_BTN_SMOKE, 0.0);
+                llOwnerSay("DEBUG MEM: SMOKE_STOPPED AFTER  free=" +
+                           (string)llGetFreeMemory() +
+                           " -> UNLOCKED smoke btn");
                 return;
             }
             // ITEM_USED / ITEM_FAILED carry an item-name suffix but the
@@ -1167,8 +1176,10 @@ default
             // Minimal work: only touch what onRemoveSuccess didn't already set.
             else if (cmd == "SMOKE_STARTED")
             {
-                llOwnerSay("DEBUG UI: SMOKE_STARTED received, was g_isSmoking=" +
-                           (string)g_isSmoking + " -> TRUE; LOCKED smoke btn");
+                llOwnerSay("DEBUG MEM: SMOKE_STARTED BEFORE free=" +
+                           (string)llGetFreeMemory() +
+                           " used=" + (string)llGetUsedMemory() +
+                           " was g_isSmoking=" + (string)g_isSmoking);
                 if (!g_isSmoking)
                 {
                     g_isSmoking    = TRUE;
@@ -1177,6 +1188,9 @@ default
                     setButtonGlow(LINK_BTN_SMOKE, 0.1);
                 }
                 g_smokeTimeRemaining = (integer)llList2String(parts, 3);
+                llOwnerSay("DEBUG MEM: SMOKE_STARTED AFTER  free=" +
+                           (string)llGetFreeMemory() +
+                           " -> LOCKED smoke btn");
             }
 
             // ---- SESSION EVENTS ----
