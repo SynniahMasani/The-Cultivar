@@ -174,7 +174,11 @@ default
             g_sessionHost      = "";
             llMessageLinked(LINK_SET, CHAN_SESSION,
                 "SYNC_SESSION_STATE|0||", NULL_KEY);
-            forceSmokeCleanup();
+            // End active smoke but wait for TC_SMOKE_PAUSED/FINISHED so
+            // resume state can be captured for early-ended sessions.
+            llSay(g_privateChannel, "TC_END_SMOKE");
+            llMessageLinked(LINK_SET, CHAN_ANIMATION, "STOP_SMOKE_ANIM", NULL_KEY);
+            llMessageLinked(LINK_SET, CHAN_UI, "SESSION_OVERHEAD|", NULL_KEY);
             return;
         }
         if (msg == "MYSTORY_TRIGGER")
@@ -243,6 +247,16 @@ default
         }
         else if (cmd == "TC_SMOKE_START")
         {
+            if (g_smokingItemType != "")
+            {
+                integer activeDur = getSmokeDuration(g_smokingItemType, g_smokingQuality);
+                llMessageLinked(LINK_SET, CHAN_UI,
+                    "SMOKE_STARTED|" + g_smokingStrain + "|" +
+                    g_smokingQuality + "|" + (string)activeDur, NULL_KEY);
+                llOwnerSay("You're already smoking. Put it out first.");
+                return;
+            }
+
             g_smokingItemType = llList2String(parts, 1);
             g_smokingQuality  = llList2String(parts, 2);
             g_smokingStrain   = llList2String(parts, 3);

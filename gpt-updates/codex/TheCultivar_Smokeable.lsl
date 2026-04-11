@@ -143,15 +143,16 @@ startSmokeParticles()
     }
     else if (g_itemType == "blunt")
     {
-        startScale = 0.07;
-        endScale   = 0.24;
-        burstCount = 6;
-        burstRate  = 0.15;
-        startAlpha = 0.62;
-        maxAge     = 8.5;
-        accelZ     = 0.024;
-        angleEnd   = 0.28;
-        omega      = <0.0, 0.0, 0.40>;
+        // Blunts need an intentionally heavier plume to read clearly.
+        startScale = 0.09;
+        endScale   = 0.34;
+        burstCount = 12;
+        burstRate  = 0.08;
+        startAlpha = 0.88;
+        maxAge     = 11.0;
+        accelZ     = 0.030;
+        angleEnd   = 0.34;
+        omega      = <0.0, 0.0, 0.55>;
     }
 
     if (g_quality == "loud")
