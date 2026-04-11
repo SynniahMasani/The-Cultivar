@@ -20,10 +20,12 @@ integer CHAN_IDENTITY  = 400;
 integer DCHAN_SESSION_MENU   = -11006;
 integer DCHAN_SESSION_INVITE = -11007;
 integer DCHAN_SESSION_ITEM   = -11008;
+integer DCHAN_SESSION_RESUME = -11022;
 
 integer g_lisSessionMenu;
 integer g_lisSessionInvite;
 integer g_lisSessionItem;
+integer g_lisSessionResume;
 
 key     g_ownerKey = NULL_KEY;
 
@@ -41,6 +43,11 @@ integer ITEM_STRIDE = 5;
 
 key     g_pendingSessionObjKey = NULL_KEY;
 list    g_sessionButtonMap;
+integer g_pendingResumeSecs = 0;
+string  g_pendingItemType   = "";
+string  g_pendingStrain     = "";
+string  g_pendingQuality    = "";
+string  g_pendingPackager   = "";
 
 string typePrefix(string iType)
 {
@@ -63,6 +70,74 @@ closeSessionListens()
     if (g_lisSessionMenu)   { llListenRemove(g_lisSessionMenu);   g_lisSessionMenu   = 0; }
     if (g_lisSessionInvite) { llListenRemove(g_lisSessionInvite); g_lisSessionInvite = 0; }
     if (g_lisSessionItem)   { llListenRemove(g_lisSessionItem);   g_lisSessionItem   = 0; }
+    if (g_lisSessionResume) { llListenRemove(g_lisSessionResume); g_lisSessionResume = 0; }
+}
+
+showSessionResumeMenu(integer remainingSecs)
+{
+    closeSessionListens();
+    g_pendingResumeSecs = remainingSecs;
+    integer mins = remainingSecs / 60;
+    string timeStr;
+    if (mins > 0) timeStr = "~" + (string)mins + " min left";
+    else          timeStr = (string)remainingSecs + "s left";
+
+    g_lisSessionResume = llListen(DCHAN_SESSION_RESUME, "", g_ownerKey, "");
+    llDialog(g_ownerKey,
+        "=== SESSION RESUME ===\nYou already put out a " +
+        g_pendingQuality + " " + g_pendingStrain + " " +
+        g_pendingItemType + ".\n" + timeStr +
+        "\n\nResume that one or spark fresh?",
+        ["Resume", "Start Fresh", "Cancel"],
+        DCHAN_SESSION_RESUME);
+    llSetTimerEvent(30.0);
+}
+
+startSessionSpark(integer resumeSecs)
+{
+    string hudChanStr = llLinksetDataRead("hud_private_chan");
+    integer hudChan   = (integer)hudChanStr;
+    string ownerName  = llGetDisplayName(g_ownerKey);
+    string brandName  = llLinksetDataRead("id_brand");
+
+    llRegionSayTo(g_pendingSessionObjKey, 0,
+        "TC_SESSION_START|" + (string)g_ownerKey + "|" +
+        (string)hudChan + "|" + ownerName + "|" +
+        g_pendingItemType + "|" + g_pendingStrain + "|" +
+        g_pendingQuality + "|" + brandName);
+
+    // Consume inventory only for fresh sparks, not resume.
+    if (resumeSecs <= 0)
+    {
+        llMessageLinked(LINK_SET, CHAN_INVENTORY,
+            "REMOVE_ITEM|" + g_pendingItemType + "|" + g_pendingStrain + "|" +
+            g_pendingQuality + "|1|" + g_pendingPackager,
+            NULL_KEY);
+    }
+
+    llMessageLinked(LINK_SET, CHAN_ANIMATION,
+        "START_SMOKE_ANIM|" + g_pendingStrain + "|" +
+        g_pendingQuality + "|" + g_pendingItemType,
+        NULL_KEY);
+    llMessageLinked(LINK_SET, CHAN_IDENTITY,
+        "UPDATE_SMOKED|" + g_pendingStrain, NULL_KEY);
+
+    llMessageLinked(LINK_SET, CHAN_COMMS,
+        "START_SESSION|" + (string)g_pendingSessionObjKey,
+        NULL_KEY);
+    llMessageLinked(LINK_SET, CHAN_COMMS,
+        "TC_SMOKE_START|" + g_pendingItemType + "|" +
+        g_pendingQuality + "|" + g_pendingStrain + "|" +
+        (string)resumeSecs, NULL_KEY);
+
+    g_pendingSessionObjKey = NULL_KEY;
+    g_pendingResumeSecs    = 0;
+    g_pendingItemType      = "";
+    g_pendingStrain        = "";
+    g_pendingQuality       = "";
+    g_pendingPackager      = "";
+    g_availableItems       = [];
+    g_sessionButtonMap     = [];
 }
 
 showSessionMenu()
@@ -146,6 +221,11 @@ default
     {
         closeSessionListens();
         llSetTimerEvent(0.0);
+        g_pendingResumeSecs = 0;
+        g_pendingItemType   = "";
+        g_pendingStrain     = "";
+        g_pendingQuality    = "";
+        g_pendingPackager   = "";
         if (g_pendingSessionObjKey != NULL_KEY)
         {
             llRegionSayTo(g_pendingSessionObjKey, 0, "TC_SESSION_CANCEL");
@@ -183,6 +263,11 @@ default
                 if (g_pendingSessionObjKey != NULL_KEY)
                     llRegionSayTo(g_pendingSessionObjKey, 0, "TC_SESSION_CANCEL");
                 g_pendingSessionObjKey = NULL_KEY;
+                g_pendingResumeSecs = 0;
+                g_pendingItemType   = "";
+                g_pendingStrain     = "";
+                g_pendingQuality    = "";
+                g_pendingPackager   = "";
                 g_availableItems = [];
                 g_sessionButtonMap = [];
                 return;
@@ -192,41 +277,53 @@ default
             if (mapIdx != -1)
             {
                 integer i = llList2Integer(g_sessionButtonMap, mapIdx + 1);
-                string iType   = llList2String(g_availableItems, i * ITEM_STRIDE);
-                string quality = llList2String(g_availableItems, i * ITEM_STRIDE + 2);
-                string strain  = llList2String(g_availableItems, i * ITEM_STRIDE + 1);
+                g_pendingItemType = llList2String(g_availableItems, i * ITEM_STRIDE);
+                g_pendingStrain   = llList2String(g_availableItems, i * ITEM_STRIDE + 1);
+                g_pendingQuality  = llList2String(g_availableItems, i * ITEM_STRIDE + 2);
+                g_pendingPackager = llList2String(g_availableItems, i * ITEM_STRIDE + 4);
 
-                string hudChanStr = llLinksetDataRead("hud_private_chan");
-                integer hudChan   = (integer)hudChanStr;
-                string ownerName  = llGetDisplayName(g_ownerKey);
-                string brandName  = llLinksetDataRead("id_brand");
+                string pausedKey = "smoke_paused_" + g_pendingItemType + "_" +
+                                   g_pendingQuality + "_" + g_pendingStrain;
+                integer pausedRem = (integer)llLinksetDataRead(pausedKey);
+                if (pausedRem <= 0)
+                {
+                    string pausedFallback = "smoke_paused_" + g_pendingItemType + "_" +
+                                            g_pendingQuality + "_*";
+                    pausedRem = (integer)llLinksetDataRead(pausedFallback);
+                }
+                if (pausedRem > 0)
+                {
+                    showSessionResumeMenu(pausedRem);
+                    return;
+                }
 
-                llRegionSayTo(g_pendingSessionObjKey, 0,
-                    "TC_SESSION_START|" + (string)g_ownerKey + "|" +
-                    (string)hudChan + "|" + ownerName + "|" +
-                    iType + "|" + strain + "|" + quality + "|" + brandName);
-
-                // Consume one spark item from HUD inventory for session start.
-                llMessageLinked(LINK_SET, CHAN_INVENTORY,
-                    "REMOVE_ITEM|" + iType + "|" + strain + "|" +
-                    quality + "|1|" + llList2String(g_availableItems, i * ITEM_STRIDE + 4),
-                    NULL_KEY);
-
-                llMessageLinked(LINK_SET, CHAN_ANIMATION,
-                    "START_SMOKE_ANIM|" + strain + "|" + quality + "|" + iType,
-                    NULL_KEY);
-                llMessageLinked(LINK_SET, CHAN_IDENTITY,
-                    "UPDATE_SMOKED|" + strain, NULL_KEY);
-
-                llMessageLinked(LINK_SET, CHAN_COMMS,
-                    "START_SESSION|" + (string)g_pendingSessionObjKey,
-                    NULL_KEY);
-                llMessageLinked(LINK_SET, CHAN_COMMS,
-                    "TC_SMOKE_START|" + iType + "|" + quality + "|" + strain,
-                    NULL_KEY);
-                g_pendingSessionObjKey = NULL_KEY;
-                g_availableItems       = [];
-                g_sessionButtonMap     = [];
+                startSessionSpark(0);
+                return;
+            }
+        }
+        else if (channel == DCHAN_SESSION_RESUME)
+        {
+            if (msg == "Cancel")
+            {
+                g_pendingResumeSecs = 0;
+                g_pendingItemType   = "";
+                g_pendingStrain     = "";
+                g_pendingQuality    = "";
+                g_pendingPackager   = "";
+                return;
+            }
+            if (msg == "Resume")
+            {
+                startSessionSpark(g_pendingResumeSecs);
+                return;
+            }
+            if (msg == "Start Fresh")
+            {
+                llLinksetDataDelete("smoke_paused_" + g_pendingItemType + "_" +
+                                    g_pendingQuality + "_" + g_pendingStrain);
+                llLinksetDataDelete("smoke_paused_" + g_pendingItemType + "_" +
+                                    g_pendingQuality + "_*");
+                startSessionSpark(0);
                 return;
             }
         }
