@@ -323,6 +323,9 @@ default
                 else
                     duration = getSmokeDuration(g_smokingItemType, g_smokingQuality);
                 g_smokingResumeSecs = 0;
+                llMessageLinked(LINK_SET, CHAN_ANIMATION,
+                    "START_SMOKE_ANIM|" + g_smokingStrain + "|" +
+                    g_smokingQuality + "|" + g_smokingItemType, NULL_KEY);
                 llMessageLinked(LINK_SET, CHAN_UI,
                     "SMOKE_STARTED|" + g_smokingStrain + "|" + g_smokingQuality +
                     "|" + (string)duration, NULL_KEY);
@@ -347,6 +350,11 @@ default
                 {
                     llLinksetDataWrite("smoke_paused_" + pType + "_" +
                                        pQuality + "_" + pStrain,
+                                       (string)pRem);
+                    // Fallback key (strain-agnostic) so resume still works
+                    // if strain context was lost between scripts.
+                    llLinksetDataWrite("smoke_paused_" + pType + "_" +
+                                       pQuality + "_*",
                                        (string)pRem);
                 }
                 forceSmokeCleanup();

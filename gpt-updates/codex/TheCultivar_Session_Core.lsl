@@ -412,6 +412,15 @@ default
 
             llSetTimerEvent(30.0);
         }
+        else if (channel == 0 && cmd == "TC_SESSION_CANCEL")
+        {
+            // Spark flow was cancelled before activation.
+            if (!g_sessionActive)
+            {
+                llDie();
+                return;
+            }
+        }
         else if (channel == 0 && cmd == "TC_SESSION_JOIN")
         {
             key joinerKey = (key)llList2String(parts, 1);

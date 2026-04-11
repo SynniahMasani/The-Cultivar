@@ -567,6 +567,12 @@ default
                                            "_" + g_pendingQuality +
                                            "_" + g_pendingStrain;
                         integer pausedRem = (integer)llLinksetDataRead(pausedKey);
+                        if (pausedRem <= 0)
+                        {
+                            string pausedFallback = "smoke_paused_" + g_pendingItemType +
+                                                    "_" + g_pendingQuality + "_*";
+                            pausedRem = (integer)llLinksetDataRead(pausedFallback);
+                        }
                         if (pausedRem > 0)
                         {
                             showSmokeResumeMenu(pausedRem);
