@@ -154,7 +154,12 @@ default
         }
         if (msg == "END_SMOKE_EARLY")
         {
-            forceSmokeCleanup();
+            // IMPORTANT: do not clear smoke state yet.
+            // We need g_smokingItemType/g_smokingQuality/g_smokingStrain
+            // intact until the prop replies TC_SMOKE_PAUSED so resume
+            // data can be written correctly.
+            llSay(g_privateChannel, "TC_END_SMOKE");
+            llMessageLinked(LINK_SET, CHAN_ANIMATION, "STOP_SMOKE_ANIM", NULL_KEY);
             return;
         }
         if (msg == "LEAVE_SESSION")
