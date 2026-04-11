@@ -149,7 +149,6 @@ stopCurrentAnim()
     }
 
     fxClearHigh();
-    llMessageLinked(LINK_SET, CHAN_UI, "SMOKE_STOPPED", NULL_KEY);
 }
 
 string buildAnimName(string itemType, string quality)

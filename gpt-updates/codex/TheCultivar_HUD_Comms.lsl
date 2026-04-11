@@ -159,6 +159,7 @@ default
             // intact until the prop replies TC_SMOKE_PAUSED so resume
             // data can be written correctly.
             llSay(g_privateChannel, "TC_END_SMOKE");
+            llRegionSay(g_privateChannel, "TC_END_SMOKE");
             llMessageLinked(LINK_SET, CHAN_ANIMATION, "STOP_SMOKE_ANIM", NULL_KEY);
             return;
         }
@@ -177,6 +178,7 @@ default
             // End active smoke but wait for TC_SMOKE_PAUSED/FINISHED so
             // resume state can be captured for early-ended sessions.
             llSay(g_privateChannel, "TC_END_SMOKE");
+            llRegionSay(g_privateChannel, "TC_END_SMOKE");
             llMessageLinked(LINK_SET, CHAN_ANIMATION, "STOP_SMOKE_ANIM", NULL_KEY);
             llMessageLinked(LINK_SET, CHAN_UI, "SESSION_OVERHEAD|", NULL_KEY);
             return;

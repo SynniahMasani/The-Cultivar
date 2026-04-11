@@ -206,6 +206,12 @@ default
                     (string)hudChan + "|" + ownerName + "|" +
                     iType + "|" + strain + "|" + quality + "|" + brandName);
 
+                // Consume one spark item from HUD inventory for session start.
+                llMessageLinked(LINK_SET, CHAN_INVENTORY,
+                    "REMOVE_ITEM|" + iType + "|" + strain + "|" +
+                    quality + "|1|" + llList2String(g_availableItems, i * ITEM_STRIDE + 4),
+                    NULL_KEY);
+
                 llMessageLinked(LINK_SET, CHAN_ANIMATION,
                     "START_SMOKE_ANIM|" + strain + "|" + quality + "|" + iType,
                     NULL_KEY);

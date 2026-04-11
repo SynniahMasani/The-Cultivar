@@ -50,6 +50,9 @@ integer g_turnTimeRemaining   = 0;
 integer g_lastInviteBroadcast = 0;
 
 integer g_sessionChannel;
+integer g_birthTime          = 0;
+integer g_activationDeadline = 0;
+integer PENDING_TIMEOUT_SEC  = 20;
 
 integer deriveSessionChannel()
 {
@@ -312,6 +315,8 @@ default
 {
     state_entry()
     {
+        g_birthTime = llGetUnixTime();
+        g_activationDeadline = g_birthTime + PENDING_TIMEOUT_SEC;
         g_sessionChannel = deriveSessionChannel();
 
         llListen(0, "", NULL_KEY, "");
@@ -322,7 +327,7 @@ default
             "TC_SESSION_REZZED|" + (string)llGetKey() + "|" +
             (string)g_sessionChannel);
 
-        llSetTimerEvent(30.0);
+        llSetTimerEvent(5.0);
         llSetText("", ZERO_VECTOR, 0.0);
     }
 
@@ -335,7 +340,16 @@ default
     {
         if (!g_sessionActive)
         {
-            llDie();
+            if (llGetUnixTime() >= g_activationDeadline)
+                llDie();
+            else
+                llSetTimerEvent(5.0);
+            return;
+        }
+
+        if (g_hostKey == NULL_KEY)
+        {
+            endSession("Host session data invalid.");
             return;
         }
 
@@ -391,9 +405,11 @@ default
             g_brandName   = llList2String(parts, 7);
             if (g_itemType == "") g_itemType = "joint";
             if (g_brandName == "") g_brandName = g_hostName;
+            if (g_hostKey == NULL_KEY) { llDie(); return; }
 
             g_sessionActive = TRUE;
             g_startTime     = llGetUnixTime();
+            g_activationDeadline = 0;
 
             addParticipant(g_hostKey, g_hostName);
             g_currentHolder = 0;
@@ -496,6 +512,11 @@ default
         }
         else if (channel == g_sessionChannel)
         {
+            if (cmd == "TC_SESSION_CANCEL")
+            {
+                llDie();
+                return;
+            }
             if (cmd == "TC_PASS_REQUEST")
             {
                 key requester = (key)llList2String(parts, 1);
