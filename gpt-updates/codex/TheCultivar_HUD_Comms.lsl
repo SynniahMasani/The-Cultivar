@@ -1,10 +1,10 @@
 // ================================================================
 // THE CULTIVAR  -  HUD Comms Script
-// Version: 1.5
+// Version: 1.7
 // Preserves the full working HUD Comms logic while:
-//   - keeping corrected session payload parsing
 //   - removing debug spam
-//   - relaying session overhead text to HUD
+//   - forcing smoke cleanup on session end / leave / early stop
+//   - relaying overhead text cleanup to UI
 // ================================================================
 
 integer CHAN_UI        = 100;
@@ -98,6 +98,23 @@ registerWithObject(key objectKey)
         llLinksetDataRead("id_brand"));
 }
 
+clearSmokeState()
+{
+    g_smokingItemType = "";
+    g_smokingQuality  = "";
+    g_smokingStrain   = "";
+    g_smokingResumeSecs = 0;
+}
+
+forceSmokeCleanup()
+{
+    llSay(g_privateChannel, "TC_END_SMOKE");
+    llMessageLinked(LINK_SET, CHAN_ANIMATION, "STOP_SMOKE_ANIM", NULL_KEY);
+    llMessageLinked(LINK_SET, CHAN_UI, "SMOKE_STOPPED", NULL_KEY);
+    llMessageLinked(LINK_SET, CHAN_UI, "SESSION_OVERHEAD|", NULL_KEY);
+    clearSmokeState();
+}
+
 default
 {
     state_entry()
@@ -137,8 +154,7 @@ default
         }
         if (msg == "END_SMOKE_EARLY")
         {
-            llSay(g_privateChannel, "TC_END_SMOKE");
-            llMessageLinked(LINK_SET, CHAN_ANIMATION, "STOP_SMOKE_ANIM", NULL_KEY);
+            forceSmokeCleanup();
             return;
         }
         if (msg == "LEAVE_SESSION")
@@ -153,8 +169,7 @@ default
             g_sessionHost      = "";
             llMessageLinked(LINK_SET, CHAN_SESSION,
                 "SYNC_SESSION_STATE|0||", NULL_KEY);
-            llMessageLinked(LINK_SET, CHAN_ANIMATION, "STOP_SMOKE_ANIM", NULL_KEY);
-            llMessageLinked(LINK_SET, CHAN_UI, "SESSION_OVERHEAD|", NULL_KEY);
+            forceSmokeCleanup();
             return;
         }
         if (msg == "MYSTORY_TRIGGER")
@@ -315,12 +330,7 @@ default
                                         "_" + g_smokingQuality +
                                         "_" + g_smokingStrain);
                 }
-                g_smokingItemType = "";
-                g_smokingQuality  = "";
-                g_smokingStrain   = "";
-                llMessageLinked(LINK_SET, CHAN_ANIMATION, "STOP_SMOKE_ANIM", NULL_KEY);
-                llMessageLinked(LINK_SET, CHAN_UI, "SMOKE_STOPPED", NULL_KEY);
-                llMessageLinked(LINK_SET, CHAN_UI, "SESSION_OVERHEAD|", NULL_KEY);
+                forceSmokeCleanup();
             }
             else if (cmd == "TC_SMOKE_PAUSED")
             {
@@ -334,12 +344,7 @@ default
                                        pQuality + "_" + pStrain,
                                        (string)pRem);
                 }
-                g_smokingItemType = "";
-                g_smokingQuality  = "";
-                g_smokingStrain   = "";
-                llMessageLinked(LINK_SET, CHAN_ANIMATION, "STOP_SMOKE_ANIM", NULL_KEY);
-                llMessageLinked(LINK_SET, CHAN_UI, "SMOKE_STOPPED", NULL_KEY);
-                llMessageLinked(LINK_SET, CHAN_UI, "SESSION_OVERHEAD|", NULL_KEY);
+                forceSmokeCleanup();
             }
             else if (cmd == "TC_HARVEST_RESULT")
             {
@@ -397,9 +402,8 @@ default
                 g_sessionHost      = "";
                 llMessageLinked(LINK_SET, CHAN_SESSION,
                     "SYNC_SESSION_STATE|0||", NULL_KEY);
-                llMessageLinked(LINK_SET, CHAN_ANIMATION, "STOP_SMOKE_ANIM", NULL_KEY);
+                forceSmokeCleanup();
                 llMessageLinked(LINK_SET, CHAN_UI, "SESSION_ENDED", NULL_KEY);
-                llMessageLinked(LINK_SET, CHAN_UI, "SESSION_OVERHEAD|", NULL_KEY);
             }
             else if (cmd == "TC_JOIN_REJECTED")
             {
@@ -436,7 +440,6 @@ default
             else if (cmd == "TC_PASS_RECEIVED")
             {
                 string strain  = llList2String(parts, 1);
-                string quality = llList2String(parts, 2);
                 llMessageLinked(LINK_SET, CHAN_ANIMATION, "PLAY_PASS_RECEIVE", NULL_KEY);
                 llMessageLinked(LINK_SET, CHAN_IDENTITY,
                     "UPDATE_SMOKED|" + strain, NULL_KEY);

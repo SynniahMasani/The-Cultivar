@@ -208,7 +208,7 @@ onSessionStart(string quality)
     g_active  = TRUE;
     g_pulseVal = PULSE_MIN;
 
-    stopAmbientSmoke();
+    startAmbientSmoke();
     updateGlowRing();
     llSetTimerEvent(0.15); // fast pulse tick
 }
@@ -275,7 +275,7 @@ default
             g_quality = llList2String(parts, 1);
             if (g_active)
             {
-                stopAmbientSmoke();
+                startAmbientSmoke();
                 updateGlowRing();
             }
         }

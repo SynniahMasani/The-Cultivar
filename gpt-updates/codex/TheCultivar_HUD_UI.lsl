@@ -1,11 +1,11 @@
 // ================================================================
 // THE CULTIVAR  -  HUD UI Script
-// Version: 2.3
-// Full preserved HUD UI with:
-//   - no button glow
-//   - no HUD-rendered session overhead text
-//   - resume prompt preserved
-//   - full original menu / inventory / session logic retained
+// Version: 2.4
+// Full preserved HUD UI with smoke lifecycle cleanup:
+//   - removes optimistic START_SMOKE_ANIM on item remove success
+//   - leaves actual smoke start authority to HUD_Comms on attach-ready
+//   - preserves resume prompt
+//   - preserves full menu / inventory / session logic
 // ================================================================
 
 integer CHAN_UI        = 100;
@@ -50,21 +50,21 @@ integer g_pendingResumeSecs = 0;
 key     g_ownerKey  = NULL_KEY;
 string  g_ownerName = "";
 
-string  g_playerName     = "";
-integer g_repScore       = 0;
-integer g_totalSmoked    = 0;
-string  g_favoriteStrain = "";
-string  g_brandName      = "";
-string  g_playerTitle    = "Seedling";
+string  g_playerName       = "";
+integer g_repScore         = 0;
+integer g_totalSmoked      = 0;
+string  g_favoriteStrain   = "";
+string  g_brandName        = "";
+string  g_playerTitle      = "Seedling";
 string  g_inventoryDisplay = "Loading...";
 
 integer g_isSmoking          = FALSE;
 string  g_smokeStrain        = "";
 string  g_smokeQuality       = "";
 integer g_smokeTimeRemaining = 0;
-integer g_inSession     = FALSE;
-key     g_sessionObjKey = NULL_KEY;
-string  g_sessionHost   = "";
+integer g_inSession          = FALSE;
+key     g_sessionObjKey      = NULL_KEY;
+string  g_sessionHost        = "";
 
 string  g_flowContext = "none";
 
@@ -196,10 +196,10 @@ showSmokeTypeMenu()
     g_lisSmokeType = llListen(DCHAN_SMOKE_TYPE, "", g_ownerKey, "");
     llDialog(g_ownerKey,
         "=== SMOKE ===\nWhat are you smoking?\n\n" +
-        "Joint / Blunt / Spliff  -  rolled items\n" +
-        "Bowl / Bong  -  flower raw through a piece\n" +
-        "Edible  -  brownies, gummies, drinks\n" +
-        "Dab  -  concentrate",
+        "Joint / Blunt / Spliff - rolled items\n" +
+        "Bowl / Bong - flower raw through a piece\n" +
+        "Edible - brownies, gummies, drinks\n" +
+        "Dab - concentrate",
         ["Joint", "Blunt", "Spliff",
          "Bowl", "Bong", "Edible",
          "Dab", "Back"],
@@ -372,14 +372,22 @@ executeRemove()
         g_pendingPackager, NULL_KEY);
 }
 
+resetPendingFlow()
+{
+    g_flowContext     = "none";
+    g_pendingItemType = "";
+    g_pendingStrain   = "";
+    g_pendingQuality  = "";
+    g_pendingPackager = "";
+    g_passTarget      = NULL_KEY;
+    g_passTargetName  = "";
+    g_availableItems  = [];
+}
+
 onRemoveSuccess()
 {
     if (g_flowContext == "smoke")
     {
-        llMessageLinked(LINK_SET, CHAN_ANIMATION,
-            "START_SMOKE_ANIM|" + g_pendingStrain + "|" +
-            g_pendingQuality + "|" + g_pendingItemType, NULL_KEY);
-
         llMessageLinked(LINK_SET, CHAN_IDENTITY,
             "UPDATE_SMOKED|" + g_pendingStrain, NULL_KEY);
 
@@ -397,6 +405,13 @@ onRemoveSuccess()
                 "TC_SMOKE_START|" + g_pendingItemType + "|" +
                 g_pendingQuality + "|" + g_pendingStrain, NULL_KEY);
         }
+        else
+        {
+            // Non-attach item types can still use animation immediately if needed.
+            llMessageLinked(LINK_SET, CHAN_ANIMATION,
+                "START_SMOKE_ANIM|" + g_pendingStrain + "|" +
+                g_pendingQuality + "|" + g_pendingItemType, NULL_KEY);
+        }
     }
     else if (g_flowContext == "pass")
     {
@@ -411,14 +426,7 @@ onRemoveSuccess()
                    g_pendingStrain + " to " + g_passTargetName + ". Pass it real.");
     }
 
-    g_flowContext     = "none";
-    g_pendingItemType = "";
-    g_pendingStrain   = "";
-    g_pendingQuality  = "";
-    g_pendingPackager = "";
-    g_passTarget      = NULL_KEY;
-    g_passTargetName  = "";
-    g_availableItems  = [];
+    resetPendingFlow();
 }
 
 onRemoveFail()
@@ -582,10 +590,6 @@ default
             }
             if (msg == "Resume")
             {
-                llMessageLinked(LINK_SET, CHAN_ANIMATION,
-                    "START_SMOKE_ANIM|" + g_pendingStrain + "|" +
-                    g_pendingQuality + "|" + g_pendingItemType, NULL_KEY);
-
                 llOwnerSay("You spark that " + qualLabel(g_pendingQuality) +
                            " " + g_pendingStrain + " right back up.");
 
@@ -805,7 +809,7 @@ default
                 llMessageLinked(LINK_SET, CHAN_SESSION,
                     "SYNC_SESSION_STATE|" + (string)g_inSession + "|" +
                     (string)g_sessionObjKey + "|" + g_sessionHost, NULL_KEY);
-                llOwnerSay("Joined " + g_sessionHost + "'s circle. ?");
+                llOwnerSay("Joined " + g_sessionHost + "'s circle.");
             }
             else if (cmd == "SESSION_STARTED")
             {
@@ -849,21 +853,21 @@ default
                 string strain   = llList2String(parts, 2);
                 string quality  = llList2String(parts, 3);
                 llOwnerSay(fromName + " passed you " + quality +
-                           " " + strain + ". ?");
+                           " " + strain + ".");
             }
             else if (cmd == "YOUR_TURN_COUNTDOWN")
             {
                 integer remaining = (integer)llList2String(parts, 1);
                 string  strain    = llList2String(parts, 2);
-                llOwnerSay("? " + strain + "  -  " + (string)remaining + "s remaining!");
+                llOwnerSay(strain + " - " + (string)remaining + "s remaining!");
             }
             else if (cmd == "CYPHER_MODE_CHANGE")
             {
                 if (llList2String(parts, 1) == "1")
-                    llOwnerSay("? Cypher mode ON  -  " +
+                    llOwnerSay("Cypher mode ON - " +
                         llList2String(parts, 2) + "s per turn. Pass it quick!");
                 else
-                    llOwnerSay("Cypher mode OFF  -  back to free flow.");
+                    llOwnerSay("Cypher mode OFF - back to free flow.");
             }
             else if (cmd == "SESSION_OVERHEAD")
             {
