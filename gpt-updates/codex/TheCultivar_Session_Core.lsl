@@ -26,6 +26,7 @@ integer g_listenPublic;
 integer g_listenPrivate;
 integer g_listenHost;
 integer g_listenPass;
+integer g_listenLocal;
 
 key     g_hostKey       = NULL_KEY;
 string  g_hostName      = "";
@@ -66,6 +67,34 @@ integer deriveHUDChannel(key avatarID)
     string hexSub = llGetSubString((string)avatarID, 0, 6);
     hexSub = llDumpList2String(llParseString2List(hexSub, ["-"], []), "");
     return (integer)("0x" + hexSub) * -1;
+}
+
+cleanupListens()
+{
+    if (g_listenPublic)  { llListenRemove(g_listenPublic);  g_listenPublic  = 0; }
+    if (g_listenPrivate) { llListenRemove(g_listenPrivate); g_listenPrivate = 0; }
+    if (g_listenHost)    { llListenRemove(g_listenHost);    g_listenHost    = 0; }
+    if (g_listenPass)    { llListenRemove(g_listenPass);    g_listenPass    = 0; }
+    if (g_listenLocal)   { llListenRemove(g_listenLocal);   g_listenLocal   = 0; }
+}
+
+resetSessionState()
+{
+    g_hostKey       = NULL_KEY;
+    g_hostName      = "";
+    g_brandName     = "";
+    g_hostHUDChan   = 0;
+    g_itemType      = "joint";
+    g_strain        = "";
+    g_quality       = "";
+    g_sessionActive = FALSE;
+    g_startTime     = 0;
+    g_participants  = [];
+    g_currentHolder = 0;
+    g_passCount     = 0;
+    g_cypherMode    = FALSE;
+    g_turnTimeRemaining   = 0;
+    g_lastInviteBroadcast = 0;
 }
 
 integer addParticipant(key avatarKey, string avatarName)
@@ -143,6 +172,7 @@ syncAnimations()
 
 broadcastInvite()
 {
+    if (!g_sessionActive) return;
     llRegionSay(PUBLIC_SESSION_CHAN,
         "TC_SESSION_INVITE|" + g_hostName + "|" +
         (string)g_hostKey + "|" +
@@ -291,35 +321,45 @@ passToNamed(string targetName, key requester)
     llRegionSayTo(requester, 0, "Couldn't find " + targetName + " in the session.");
 }
 
-endSession(string reason)
+hardEndSession(string reason, integer notifyParticipants)
 {
     g_sessionActive = FALSE;
     updateHoverText();
     broadcastToAll("TC_SESSION_END");
 
-    integer count = participantCount();
-    integer i;
-    for (i = 0; i < count; i++)
+    if (notifyParticipants)
     {
-        llRegionSayTo(participantKey(i), 0,
-            "The session has ended. " + reason);
+        integer count = participantCount();
+        integer i;
+        for (i = 0; i < count; i++)
+        {
+            llRegionSayTo(participantKey(i), 0,
+                "The session has ended. " + reason);
+        }
     }
 
     llMessageLinked(LINK_SET, SCHAN_EFFECTS, "SESSION_END", NULL_KEY);
-
-    llSleep(1.0);
+    llSetTimerEvent(0.0);
+    cleanupListens();
+    llSleep(0.5);
     llDie();
+}
+
+endSession(string reason)
+{
+    hardEndSession(reason, TRUE);
 }
 
 default
 {
     state_entry()
     {
+        resetSessionState();
         g_birthTime = llGetUnixTime();
         g_activationDeadline = g_birthTime + PENDING_TIMEOUT_SEC;
         g_sessionChannel = deriveSessionChannel();
 
-        llListen(0, "", NULL_KEY, "");
+        g_listenLocal = llListen(0, "", NULL_KEY, "");
         g_listenPublic = llListen(PUBLIC_SESSION_CHAN, "", NULL_KEY, "");
         g_listenPrivate = llListen(g_sessionChannel, "", NULL_KEY, "");
 
@@ -341,7 +381,11 @@ default
         if (!g_sessionActive)
         {
             if (llGetUnixTime() >= g_activationDeadline)
+            {
+                llMessageLinked(LINK_SET, SCHAN_EFFECTS, "SESSION_END", NULL_KEY);
+                cleanupListens();
                 llDie();
+            }
             else
                 llSetTimerEvent(5.0);
             return;
@@ -349,7 +393,7 @@ default
 
         if (g_hostKey == NULL_KEY)
         {
-            endSession("Host session data invalid.");
+            hardEndSession("Host session data became invalid.", FALSE);
             return;
         }
 
@@ -510,10 +554,47 @@ default
             }
             showPassMenu(requester);
         }
+        else if (channel == 0 && cmd == "TC_SESSION_LEAVE")
+        {
+            key leaver = (key)llList2String(parts, 1);
+            string leaverName = llGetDisplayName(leaver);
+
+            removeParticipant(leaver);
+            broadcastToAll("TC_SESSION_MEMBER_LEAVE|" + leaverName);
+            llRegionSayTo(leaver, 0, "You left the session.");
+
+            if (leaver == g_hostKey)
+            {
+                endSession(g_hostName + " ended the session.");
+                return;
+            }
+
+            if (participantCount() <= 1)
+            {
+                endSession("Everyone left the circle.");
+                return;
+            }
+
+            if (g_cypherMode && participantCount() < 3)
+            {
+                g_cypherMode = FALSE;
+                llSetTimerEvent(30.0);
+                broadcastToAll("TC_CYPHER_MODE|0|0");
+                llRegionSayTo(g_hostKey, 0,
+                    "Cypher mode deactivated (fewer than 3 players).");
+            }
+
+            updateHoverText();
+            llRegionSayTo(g_hostKey, 0,
+                leaverName + " left the session. " +
+                (string)participantCount() + " remaining.");
+        }
         else if (channel == g_sessionChannel)
         {
             if (cmd == "TC_SESSION_CANCEL")
             {
+                llMessageLinked(LINK_SET, SCHAN_EFFECTS, "SESSION_END", NULL_KEY);
+                cleanupListens();
                 llDie();
                 return;
             }
