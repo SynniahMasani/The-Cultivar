@@ -40,6 +40,8 @@ string  g_inviteQuality  = "";
 key     g_lastInviteSessKey = NULL_KEY;
 integer g_lastInviteAt = 0;
 integer INVITE_COOLDOWN_SEC = 20;
+integer g_bootTime = 0;
+integer INVITE_BOOT_GRACE_SEC = 25;
 
 list    g_availableItems;
 integer ITEM_STRIDE = 5;
@@ -219,6 +221,7 @@ default
     state_entry()
     {
         g_ownerKey = llGetOwner();
+        g_bootTime = llGetUnixTime();
     }
 
     on_rez(integer start_param) { llResetScript(); }
@@ -375,11 +378,13 @@ default
         else if (cmd == "SESSION_INVITE")
         {
             if (g_inSession) return;
+            integer now = llGetUnixTime();
+            if ((now - g_bootTime) < INVITE_BOOT_GRACE_SEC)
+                return;
             g_inviteHostName = llList2String(parts, 1);
             g_inviteSessKey  = (key)llList2String(parts, 2);
             g_inviteStrain   = llList2String(parts, 3);
             g_inviteQuality  = llList2String(parts, 4);
-            integer now = llGetUnixTime();
             if (g_inviteSessKey == g_lastInviteSessKey &&
                 (now - g_lastInviteAt) < INVITE_COOLDOWN_SEC)
             {
