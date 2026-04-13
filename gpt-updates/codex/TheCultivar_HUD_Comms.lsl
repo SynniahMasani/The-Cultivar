@@ -275,11 +275,15 @@ default
             string propName = "TC_Smoke_" + capitalize(g_smokingItemType) +
                               "_" + capitalize(g_smokingQuality);
             if (llGetInventoryType(propName) != INVENTORY_OBJECT)
+<<<<<<< codex/audit-and-refine-hud-script-5tgfyu
             {
                 llOwnerSay("[TC] Missing smoke prop '" + propName +
                            "'. Using fallback TC_Smoke_Joint_Reggie.");
                 propName = "TC_Smoke_Joint_Reggie";
             }
+=======
+                propName = "TC_Smoke_Joint_Reggie";
+>>>>>>> Hud
 
             if (llGetInventoryType(propName) == INVENTORY_OBJECT)
             {
@@ -366,6 +370,7 @@ default
                 string pQuality = llList2String(parts, 2);
                 integer pRem    = (integer)llList2String(parts, 3);
                 string pStrain  = g_smokingStrain;
+<<<<<<< codex/audit-and-refine-hud-script-5tgfyu
                 // Use HUD-side canonical smoke state for pause keys so
                 // resume remains consistent even if the rezzed prop had to
                 // fall back to a different internal type asset.
@@ -383,6 +388,17 @@ default
                     // if strain context was lost between scripts.
                     llLinksetDataWrite("smoke_paused_" + keyType + "_" +
                                        keyQuality + "_*",
+=======
+                if (pType != "" && pQuality != "" && pStrain != "" && pRem > 0)
+                {
+                    llLinksetDataWrite("smoke_paused_" + pType + "_" +
+                                       pQuality + "_" + pStrain,
+                                       (string)pRem);
+                    // Fallback key (strain-agnostic) so resume still works
+                    // if strain context was lost between scripts.
+                    llLinksetDataWrite("smoke_paused_" + pType + "_" +
+                                       pQuality + "_*",
+>>>>>>> Hud
                                        (string)pRem);
                 }
                 forceSmokeCleanup();
