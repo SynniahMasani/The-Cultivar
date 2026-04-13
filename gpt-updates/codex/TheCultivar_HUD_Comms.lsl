@@ -36,6 +36,7 @@ string  g_smokingItemType = "";
 string  g_smokingQuality  = "";
 string  g_smokingStrain   = "";
 integer g_smokingResumeSecs = 0;
+integer g_smokeActive = FALSE;
 
 integer g_waitingForSessionRez = FALSE;
 integer g_sessionRezArmedAt    = 0;
@@ -104,6 +105,7 @@ clearSmokeState()
     g_smokingQuality  = "";
     g_smokingStrain   = "";
     g_smokingResumeSecs = 0;
+    g_smokeActive = FALSE;
 }
 
 forceSmokeCleanup()
@@ -244,7 +246,7 @@ default
         }
         else if (cmd == "TC_SMOKE_START")
         {
-            if (g_smokingItemType != "")
+            if (g_smokeActive)
             {
                 integer activeDur = getSmokeDuration(g_smokingItemType, g_smokingQuality);
                 llMessageLinked(LINK_SET, CHAN_UI,
@@ -334,6 +336,7 @@ default
                 else
                     duration = getSmokeDuration(g_smokingItemType, g_smokingQuality);
                 g_smokingResumeSecs = 0;
+                g_smokeActive = TRUE;
                 llMessageLinked(LINK_SET, CHAN_ANIMATION,
                     "START_SMOKE_ANIM|" + g_smokingStrain + "|" +
                     g_smokingQuality + "|" + g_smokingItemType, NULL_KEY);
@@ -464,6 +467,16 @@ default
                 llMessageLinked(LINK_SET, CHAN_ANIMATION, "PLAY_PASS_RECEIVE", NULL_KEY);
                 llMessageLinked(LINK_SET, CHAN_IDENTITY,
                     "UPDATE_SMOKED|" + strain, NULL_KEY);
+                if (!g_smokeActive)
+                {
+                    string passType = g_smokingItemType;
+                    string passQual = g_smokingQuality;
+                    if (passType == "") passType = "joint";
+                    if (passQual == "") passQual = "reggie";
+                    llMessageLinked(LINK_SET, CHAN_COMMS,
+                        "TC_SMOKE_START|" + passType + "|" + passQual + "|" + strain + "|0",
+                        NULL_KEY);
+                }
             }
             else if (cmd == "TC_PASS_GIVEN")
             {

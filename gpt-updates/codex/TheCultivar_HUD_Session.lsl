@@ -37,6 +37,9 @@ key     g_inviteSessKey  = NULL_KEY;
 string  g_inviteHostName = "";
 string  g_inviteStrain   = "";
 string  g_inviteQuality  = "";
+key     g_lastInviteSessKey = NULL_KEY;
+integer g_lastInviteAt = 0;
+integer INVITE_COOLDOWN_SEC = 20;
 
 list    g_availableItems;
 integer ITEM_STRIDE = 5;
@@ -376,6 +379,14 @@ default
             g_inviteSessKey  = (key)llList2String(parts, 2);
             g_inviteStrain   = llList2String(parts, 3);
             g_inviteQuality  = llList2String(parts, 4);
+            integer now = llGetUnixTime();
+            if (g_inviteSessKey == g_lastInviteSessKey &&
+                (now - g_lastInviteAt) < INVITE_COOLDOWN_SEC)
+            {
+                return;
+            }
+            g_lastInviteSessKey = g_inviteSessKey;
+            g_lastInviteAt      = now;
             string inviteBrand = llList2String(parts, 5);
 
             if (g_lisSessionInvite) llListenRemove(g_lisSessionInvite);
