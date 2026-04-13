@@ -218,15 +218,23 @@ parseItems(string rawData, string filterPrefix)
     list slots = llParseString2List(rawData, ["^"], []);
     integer n   = llGetListLength(slots);
     integer all = (filterPrefix == "" || filterPrefix == "all");
+    list passableTypes = ["joint","blunt","spliff","flower_raw",
+                          "concentrate","edible_brownie",
+                          "edible_gummy","edible_drink"];
+    integer passableOnly = (filterPrefix == "passable");
     integer i;
     for (i = 0; i < n; i++)
     {
+        if (llGetListLength(g_availableItems) >= (9 * ITEM_STRIDE))
+            return;
         string slot = llList2String(slots, i);
         integer t1 = llSubStringIndex(slot, "~");
         if (t1 < 0) jump skip;
         string iType = llGetSubString(slot, 0, t1 - 1);
         integer match = all;
-        if (!match)
+        if (passableOnly)
+            match = (llListFindList(passableTypes, [iType]) != -1);
+        else if (!match)
             match = (iType == filterPrefix || llSubStringIndex(iType, filterPrefix) == 0);
         if (!match) jump skip;
         slot = llDeleteSubString(slot, 0, t1);
@@ -620,7 +628,8 @@ default
                     line += " - " + (string)(rem / 60) + "m left";
                 if (need != "" && need != "none")
                     line += " - needs " + need;
-                g_growStatusLines += [line];
+                if (llGetListLength(g_growStatusLines) < 20)
+                    g_growStatusLines += [line];
             }
             return;
         }
@@ -912,7 +921,10 @@ default
         {
             if (llSubStringIndex(msg, "UPDATE_INVENTORY_DISPLAY|") == 0)
             {
-                g_inventoryDisplay  = llDeleteSubString(msg, 0, 24);
+                string newDisplay = llDeleteSubString(msg, 0, 24);
+                if (llStringLength(newDisplay) > 1260)
+                    newDisplay = llGetSubString(newDisplay, 0, 1259) + "\n[...truncated]";
+                g_inventoryDisplay  = newDisplay;
                 g_inventoryPage     = 0;
                 g_hydratedInventory = TRUE;
                 return;
@@ -1073,23 +1085,7 @@ default
             }
             else if (reqKey == "ui_pass")
             {
-                parseItems(rawData, "");
-                list passable;
-                list ok = ["joint","blunt","spliff","flower_raw",
-                           "concentrate","edible_brownie",
-                           "edible_gummy","edible_drink"];
-                integer len = llGetListLength(g_availableItems) / ITEM_STRIDE;
-                integer i;
-                for (i = 0; i < len; i++)
-                {
-                    string iType = llList2String(g_availableItems,
-                                                 i * ITEM_STRIDE);
-                    if (llListFindList(ok, [iType]) != -1)
-                        passable += llList2List(g_availableItems,
-                            i * ITEM_STRIDE,
-                            i * ITEM_STRIDE + ITEM_STRIDE - 1);
-                }
-                g_availableItems = passable;
+                parseItems(rawData, "passable");
                 if (llGetListLength(g_availableItems) > 0)
                     g_pendingItemType = llList2String(g_availableItems, 0);
                 showItemPickMenu();
