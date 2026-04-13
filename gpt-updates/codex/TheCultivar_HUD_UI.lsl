@@ -57,6 +57,7 @@ string  g_favoriteStrain   = "";
 string  g_brandName        = "";
 string  g_playerTitle      = "Seedling";
 string  g_inventoryDisplay = "Loading...";
+integer g_inventoryPage    = 0;
 
 integer g_isSmoking          = FALSE;
 string  g_smokeStrain        = "";
@@ -84,6 +85,12 @@ integer g_hydratedInventory        = FALSE;
 integer g_hydrationFallbackPending = FALSE;
 float   HYDRATION_FALLBACK_SEC     = 3.0;
 
+integer g_growStatusChan   = 0;
+integer g_lisGrowStatus    = 0;
+integer g_growScanPending  = FALSE;
+integer g_growScanDeadline = 0;
+list    g_growStatusLines  = [];
+
 closeAllListens()
 {
     if (g_lisMain)          { llListenRemove(g_lisMain);          g_lisMain          = 0; }
@@ -96,6 +103,7 @@ closeAllListens()
     if (g_lisBrandName)     { llListenRemove(g_lisBrandName);     g_lisBrandName     = 0; }
     if (g_lisSmokeActive)   { llListenRemove(g_lisSmokeActive);   g_lisSmokeActive   = 0; }
     if (g_lisSmokeResume)   { llListenRemove(g_lisSmokeResume);   g_lisSmokeResume   = 0; }
+    if (g_lisGrowStatus)    { llListenRemove(g_lisGrowStatus);    g_lisGrowStatus    = 0; }
 }
 
 refreshAllGlows()
@@ -119,6 +127,73 @@ string qualLabel(string q)
     if (q == "loud")   return "Loud Pack";
     if (q == "exotic") return "Exotic";
     return "Reggie";
+}
+
+integer deriveHUDChannel(key ownerID)
+{
+    string h = llGetSubString((string)ownerID, 0, 6);
+    h = llDumpList2String(llParseString2List(h,["-"],[]),"");
+    return (integer)("0x" + h) * -1;
+}
+
+string stageLabel(integer stage)
+{
+    if (stage == 1) return "Seedling";
+    if (stage == 2) return "Vegetative";
+    if (stage == 3) return "Flowering";
+    if (stage == 4) return "Harvest Ready";
+    return "Empty";
+}
+
+integer inventoryPageCount()
+{
+    integer maxLen = 420;
+    integer len = llStringLength(g_inventoryDisplay);
+    if (len <= 0) return 1;
+    integer pages = len / maxLen;
+    if ((len % maxLen) != 0) pages++;
+    if (pages < 1) pages = 1;
+    return pages;
+}
+
+string inventoryPageText(integer page)
+{
+    integer maxLen = 420;
+    integer len = llStringLength(g_inventoryDisplay);
+    if (len <= maxLen) return g_inventoryDisplay;
+    integer start = page * maxLen;
+    if (start < 0) start = 0;
+    if (start > len - 1) start = len - 1;
+    integer end = start + maxLen - 1;
+    if (end > len - 1) end = len - 1;
+    return llGetSubString(g_inventoryDisplay, start, end);
+}
+
+showGrowOverview()
+{
+    g_growScanPending = FALSE;
+    if (g_lisGrowStatus) { llListenRemove(g_lisGrowStatus); g_lisGrowStatus = 0; }
+    integer count = llGetListLength(g_growStatusLines);
+    if (count == 0)
+    {
+        llOwnerSay("No active plants reported nearby. Touch a pot/plant directly if needed.");
+        return;
+    }
+    llOwnerSay("=== Grow Overview ===");
+    integer i;
+    for (i = 0; i < count; ++i)
+        llOwnerSay(llList2String(g_growStatusLines, i));
+}
+
+requestGrowOverview()
+{
+    g_growStatusLines = [];
+    g_growScanPending = TRUE;
+    g_growScanDeadline = llGetUnixTime() + 2;
+    if (g_lisGrowStatus) llListenRemove(g_lisGrowStatus);
+    g_lisGrowStatus = llListen(g_growStatusChan, "", NULL_KEY, "");
+    llRegionSay(0, "TC_GROW_STATUS_REQUEST|" + (string)g_ownerKey + "|" + (string)g_growStatusChan);
+    llSetTimerEvent(2.2);
 }
 
 string menuToItemType(string sel)
@@ -324,10 +399,20 @@ showInventoryMenu()
     closeAllListens();
     llMessageLinked(LINK_SET, CHAN_INVENTORY, "REQUEST_INVENTORY", NULL_KEY);
     g_lisInv = llListen(DCHAN_INVENTORY, "", g_ownerKey, "");
-    string invMsg = "=== INVENTORY ===\n" + g_inventoryDisplay;
+    integer pages = inventoryPageCount();
+    if (g_inventoryPage >= pages) g_inventoryPage = pages - 1;
+    if (g_inventoryPage < 0) g_inventoryPage = 0;
+    string invMsg = "=== INVENTORY ===\n" +
+                    "(Page " + (string)(g_inventoryPage + 1) + "/" + (string)pages + ")\n" +
+                    inventoryPageText(g_inventoryPage);
     if (llStringLength(invMsg) > 480)
         invMsg = llGetSubString(invMsg, 0, 477) + "...";
-    llDialog(g_ownerKey, invMsg, ["Load Jar", "Fill Bag", "Back"], DCHAN_INVENTORY);
+    list buttons = ["Load Jar", "Fill Bag", "Back"];
+    if (pages > 1)
+    {
+        buttons += ["Prev Page", "Next Page"];
+    }
+    llDialog(g_ownerKey, invMsg, buttons, DCHAN_INVENTORY);
     llSetTimerEvent(30.0);
 }
 
@@ -444,6 +529,7 @@ default
     {
         g_ownerKey  = llGetOwner();
         g_ownerName = llGetDisplayName(g_ownerKey);
+        g_growStatusChan = deriveHUDChannel(g_ownerKey);
         g_hydratedIdentity         = FALSE;
         g_hydratedInventory        = FALSE;
         g_hydrationFallbackPending = TRUE;
@@ -459,6 +545,11 @@ default
         if (g_hydrationFallbackPending)
         {
             runHydrationFallback();
+            return;
+        }
+        if (g_growScanPending)
+        {
+            showGrowOverview();
             return;
         }
         closeAllListens();
@@ -479,7 +570,7 @@ default
         }
         else if (primName == "btn_inventory") showInventoryMenu();
         else if (primName == "btn_grow")
-            llOwnerSay("Touch any plant or pot on your land to check its status.");
+            requestGrowOverview();
         else if (primName == "btn_session")
             llMessageLinked(LINK_SET, CHAN_SESSION, "OPEN_SESSION_MENU", NULL_KEY);
         else if (primName == "btn_pass")
@@ -493,6 +584,25 @@ default
 
     listen(integer channel, string name, key id, string msg)
     {
+        if (channel == g_growStatusChan)
+        {
+            list p = llParseString2List(msg, ["|"], []);
+            if (llList2String(p, 0) == "TC_GROW_STATUS")
+            {
+                string strain = llList2String(p, 2);
+                integer stage = (integer)llList2String(p, 3);
+                integer rem   = (integer)llList2String(p, 4);
+                string need   = llList2String(p, 5);
+                string line = strain + " - " + stageLabel(stage);
+                if (stage > 0 && stage < 4)
+                    line += " - " + (string)(rem / 60) + "m left";
+                if (need != "" && need != "none")
+                    line += " - needs " + need;
+                g_growStatusLines += [line];
+            }
+            return;
+        }
+
         if (id != g_ownerKey) return;
         closeAllListens();
         llSetTimerEvent(0.0);
@@ -506,7 +616,7 @@ default
             }
             else if (msg == "Inventory") showInventoryMenu();
             else if (msg == "Grow")
-                llOwnerSay("Touch a plant to check its grow status.");
+                requestGrowOverview();
             else if (msg == "Session")
                 llMessageLinked(LINK_SET, CHAN_SESSION, "OPEN_SESSION_MENU", NULL_KEY);
             else if (msg == "Pass")    { g_flowContext = "pass"; showPassPlayerMenu(); }
@@ -676,7 +786,20 @@ default
         }
         else if (channel == DCHAN_INVENTORY)
         {
-            if (msg == "Back") showMainMenu();
+            if (msg == "Prev Page")
+            {
+                g_inventoryPage--;
+                if (g_inventoryPage < 0) g_inventoryPage = 0;
+                showInventoryMenu();
+            }
+            else if (msg == "Next Page")
+            {
+                g_inventoryPage++;
+                integer pages = inventoryPageCount();
+                if (g_inventoryPage >= pages) g_inventoryPage = pages - 1;
+                showInventoryMenu();
+            }
+            else if (msg == "Back") showMainMenu();
             else if (msg == "Load Jar")
                 llOwnerSay("Touch your weed jar to load flower from your inventory.");
             else if (msg == "Fill Bag")
@@ -735,6 +858,7 @@ default
             if (llSubStringIndex(msg, "UPDATE_INVENTORY_DISPLAY|") == 0)
             {
                 g_inventoryDisplay  = llDeleteSubString(msg, 0, 24);
+                g_inventoryPage     = 0;
                 g_hydratedInventory = TRUE;
                 return;
             }

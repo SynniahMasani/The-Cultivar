@@ -154,7 +154,10 @@ default
         }
         if (msg == "END_SMOKE_EARLY")
         {
-            forceSmokeCleanup();
+            // Keep smoke state until TC_SMOKE_PAUSED/TC_SMOKE_FINISHED arrives
+            // so resume data can be written before cleanup.
+            llSay(g_privateChannel, "TC_END_SMOKE");
+            llMessageLinked(LINK_SET, CHAN_ANIMATION, "STOP_SMOKE_ANIM", NULL_KEY);
             return;
         }
         if (msg == "LEAVE_SESSION")
@@ -169,7 +172,10 @@ default
             g_sessionHost      = "";
             llMessageLinked(LINK_SET, CHAN_SESSION,
                 "SYNC_SESSION_STATE|0||", NULL_KEY);
-            forceSmokeCleanup();
+            // Request end, then wait for paused/finished callback to preserve resume.
+            llSay(g_privateChannel, "TC_END_SMOKE");
+            llMessageLinked(LINK_SET, CHAN_ANIMATION, "STOP_SMOKE_ANIM", NULL_KEY);
+            llMessageLinked(LINK_SET, CHAN_UI, "SESSION_OVERHEAD|", NULL_KEY);
             return;
         }
         if (msg == "MYSTORY_TRIGGER")
@@ -238,6 +244,16 @@ default
         }
         else if (cmd == "TC_SMOKE_START")
         {
+            if (g_smokingItemType != "")
+            {
+                integer activeDur = getSmokeDuration(g_smokingItemType, g_smokingQuality);
+                llMessageLinked(LINK_SET, CHAN_UI,
+                    "SMOKE_STARTED|" + g_smokingStrain + "|" +
+                    g_smokingQuality + "|" + (string)activeDur, NULL_KEY);
+                llOwnerSay("You're already smoking. Put it out first.");
+                return;
+            }
+
             g_smokingItemType = llList2String(parts, 1);
             g_smokingQuality  = llList2String(parts, 2);
             g_smokingStrain   = llList2String(parts, 3);
@@ -318,6 +334,9 @@ default
                 else
                     duration = getSmokeDuration(g_smokingItemType, g_smokingQuality);
                 g_smokingResumeSecs = 0;
+                llMessageLinked(LINK_SET, CHAN_ANIMATION,
+                    "START_SMOKE_ANIM|" + g_smokingStrain + "|" +
+                    g_smokingQuality + "|" + g_smokingItemType, NULL_KEY);
                 llMessageLinked(LINK_SET, CHAN_UI,
                     "SMOKE_STARTED|" + g_smokingStrain + "|" + g_smokingQuality +
                     "|" + (string)duration, NULL_KEY);
@@ -362,6 +381,8 @@ default
                 llMessageLinked(LINK_SET, CHAN_INVENTORY,
                     "ADD_ITEM|flower_raw|" + strain + "|" + quality + "|" +
                     (string)qty + "|" + owner, NULL_KEY);
+                // Force immediate HUD-side refresh in case inventory UI is open.
+                llMessageLinked(LINK_SET, CHAN_INVENTORY, "REQUEST_INVENTORY", NULL_KEY);
 
                 llMessageLinked(LINK_SET, CHAN_IDENTITY, "UPDATE_GROWN", NULL_KEY);
                 llMessageLinked(LINK_SET, CHAN_IDENTITY, "UPDATE_XP|grower|5", NULL_KEY);
