@@ -27,25 +27,21 @@ integer DCHAN_MAIN           = -11000;
 integer DCHAN_SMOKE_TYPE     = -11001;
 integer DCHAN_ITEM_PICK      = -11002;
 integer DCHAN_EDIBLE_TYPE    = -11003;
-integer DCHAN_PASS_PLAYER    = -11004;
 integer DCHAN_INVENTORY      = -11009;
 integer DCHAN_STATS_MENU     = -11010;
 integer DCHAN_BRAND_NAME     = -11011;
 integer DCHAN_SMOKE_ACTIVE   = -11020;
 integer DCHAN_SMOKE_RESUME   = -11021;
-integer DCHAN_PASS_MODE      = -11022;
 
 integer g_lisMain;
 integer g_lisSmokeType;
 integer g_lisItemPick;
 integer g_lisEdibleType;
-integer g_lisPassPlayer;
 integer g_lisInv;
 integer g_lisStatsMenu;
 integer g_lisBrandName;
 integer g_lisSmokeActive;
 integer g_lisSmokeResume;
-integer g_lisPassMode;
 
 integer g_pendingResumeSecs = 0;
 
@@ -76,9 +72,6 @@ string  g_pendingStrain   = "";
 string  g_pendingQuality  = "";
 string  g_pendingPackager = "";
 
-key     g_passTarget     = NULL_KEY;
-string  g_passTargetName = "";
-
 list    g_availableItems;
 integer ITEM_STRIDE = 5;
 
@@ -99,13 +92,11 @@ closeAllListens()
     if (g_lisSmokeType)     { llListenRemove(g_lisSmokeType);     g_lisSmokeType     = 0; }
     if (g_lisItemPick)      { llListenRemove(g_lisItemPick);      g_lisItemPick      = 0; }
     if (g_lisEdibleType)    { llListenRemove(g_lisEdibleType);    g_lisEdibleType    = 0; }
-    if (g_lisPassPlayer)    { llListenRemove(g_lisPassPlayer);    g_lisPassPlayer    = 0; }
     if (g_lisInv)           { llListenRemove(g_lisInv);           g_lisInv           = 0; }
     if (g_lisStatsMenu)     { llListenRemove(g_lisStatsMenu);     g_lisStatsMenu     = 0; }
     if (g_lisBrandName)     { llListenRemove(g_lisBrandName);     g_lisBrandName     = 0; }
     if (g_lisSmokeActive)   { llListenRemove(g_lisSmokeActive);   g_lisSmokeActive   = 0; }
     if (g_lisSmokeResume)   { llListenRemove(g_lisSmokeResume);   g_lisSmokeResume   = 0; }
-    if (g_lisPassMode)      { llListenRemove(g_lisPassMode);      g_lisPassMode      = 0; }
     if (g_lisGrowStatus)    { llListenRemove(g_lisGrowStatus);    g_lisGrowStatus    = 0; }
 }
 
@@ -378,42 +369,14 @@ showItemPickMenu()
 
 showPassPlayerMenu()
 {
-    closeAllListens();
-    list   agents  = llGetAgentList(AGENT_LIST_PARCEL, []);
-    list   buttons;
-    string menuText = "=== PASS ===\nChoose a nearby player:";
-    integer i;
-    for (i = 0; i < llGetListLength(agents) &&
-                llGetListLength(buttons) < 9; i++)
-    {
-        key    a = llList2Key(agents, i);
-        if (a == g_ownerKey) jump skip_self;
-        string n = llGetDisplayName(a);
-        buttons  += [llGetSubString(n, 0, 11)];
-        menuText += n + "\n";
-        @skip_self;
-    }
-    if (llGetListLength(buttons) == 0)
-    {
-        llOwnerSay("Nobody else nearby to pass to.");
-        g_flowContext = "none";
-        return;
-    }
-    buttons += ["Back"];
-    g_lisPassPlayer = llListen(DCHAN_PASS_PLAYER, "", g_ownerKey, "");
-    llDialog(g_ownerKey, menuText, buttons, DCHAN_PASS_PLAYER);
-    llSetTimerEvent(30.0);
+    // Nearby/session pass flow moved to HUD_Pass script.
+    llMessageLinked(LINK_SET, CHAN_SESSION, "OPEN_PASS_MENU", NULL_KEY);
 }
 
 showPassModeMenu()
 {
-    closeAllListens();
-    g_lisPassMode = llListen(DCHAN_PASS_MODE, "", g_ownerKey, "");
-    llDialog(g_ownerKey,
-        "=== PASS ===\nChoose pass mode:",
-        ["Session Turn", "Nearby Pass", "Back"],
-        DCHAN_PASS_MODE);
-    llSetTimerEvent(30.0);
+    // Nearby/session pass flow moved to HUD_Pass script.
+    llMessageLinked(LINK_SET, CHAN_SESSION, "OPEN_PASS_MENU", NULL_KEY);
 }
 
 showInventoryMenu()
@@ -486,8 +449,6 @@ resetPendingFlow()
     g_pendingStrain   = "";
     g_pendingQuality  = "";
     g_pendingPackager = "";
-    g_passTarget      = NULL_KEY;
-    g_passTargetName  = "";
     g_availableItems  = [];
 }
 
@@ -520,19 +481,6 @@ onRemoveSuccess()
                 g_pendingQuality + "|" + g_pendingItemType, NULL_KEY);
         }
     }
-    else if (g_flowContext == "pass")
-    {
-        llMessageLinked(LINK_SET, CHAN_COMMS,
-            "PASS_TO_PLAYER|" + (string)g_passTarget + "|" +
-            g_pendingItemType + "|" + g_pendingStrain + "|" +
-            g_pendingQuality  + "|1|" + g_pendingPackager, NULL_KEY);
-
-        llMessageLinked(LINK_SET, CHAN_ANIMATION, "PLAY_PASS_GIVE", NULL_KEY);
-
-        llOwnerSay("Slid that " + qualLabel(g_pendingQuality) + " " +
-                   g_pendingStrain + " to " + g_passTargetName + ". Pass it real.");
-    }
-
     resetPendingFlow();
 }
 
@@ -596,15 +544,7 @@ default
         else if (primName == "btn_session")
             llMessageLinked(LINK_SET, CHAN_SESSION, "OPEN_SESSION_MENU", NULL_KEY);
         else if (primName == "btn_pass")
-            {
-                if (g_inSession)
-                    showPassModeMenu();
-                else
-                {
-                    g_flowContext = "pass";
-                    showPassPlayerMenu();
-                }
-            }
+            showPassModeMenu();
         else if (primName == "btn_stats")     showStats();
         else if (primName == "btn_store")
             llLoadURL(g_ownerKey, "The Cultivar Store",
@@ -651,15 +591,7 @@ default
             else if (msg == "Session")
                 llMessageLinked(LINK_SET, CHAN_SESSION, "OPEN_SESSION_MENU", NULL_KEY);
             else if (msg == "Pass")
-            {
-                if (g_inSession)
-                    showPassModeMenu();
-                else
-                {
-                    g_flowContext = "pass";
-                    showPassPlayerMenu();
-                }
-            }
+                showPassModeMenu();
             else if (msg == "Stats")   showStats();
             else if (msg == "Store")
                 llLoadURL(g_ownerKey, "The Cultivar Store",
@@ -773,49 +705,6 @@ default
                 return;
             }
         }
-        else if (channel == DCHAN_PASS_MODE)
-        {
-            if (msg == "Back")
-            {
-                showMainMenu();
-                return;
-            }
-            if (msg == "Session Turn")
-            {
-                llMessageLinked(LINK_SET, CHAN_SESSION, "OPEN_SESSION_MENU", NULL_KEY);
-                return;
-            }
-            if (msg == "Nearby Pass")
-            {
-                g_flowContext = "pass";
-                showPassPlayerMenu();
-                return;
-            }
-        }
-        else if (channel == DCHAN_PASS_PLAYER)
-        {
-            if (msg == "Back") { g_flowContext = "none"; showMainMenu(); return; }
-            list agents = llGetAgentList(AGENT_LIST_PARCEL, []);
-            integer i;
-            for (i = 0; i < llGetListLength(agents); i++)
-            {
-                key    a = llList2Key(agents, i);
-                string n = llGetDisplayName(a);
-                if (llGetSubString(n, 0, 11) == msg)
-                {
-                    g_passTarget     = a;
-                    g_passTargetName = n;
-                    jump found_target;
-                }
-            }
-            llOwnerSay("Couldn't find that player. They may have moved.");
-            g_flowContext = "none";
-            return;
-            @found_target;
-
-            llMessageLinked(LINK_SET, CHAN_INVENTORY,
-                "REQUEST_RAW_INVENTORY|all|ui_pass", NULL_KEY);
-        }
         else if (channel == DCHAN_SMOKE_ACTIVE)
         {
             if (msg == "Put It Out")
@@ -838,15 +727,7 @@ default
                 llOwnerSay("You take a puff. Stay elevated.");
             }
             else if (msg == "Pass It")
-            {
-                if (g_inSession)
-                    showPassModeMenu();
-                else
-                {
-                    g_flowContext = "pass";
-                    showPassPlayerMenu();
-                }
-            }
+                showPassModeMenu();
         }
         else if (channel == DCHAN_INVENTORY)
         {
@@ -1085,10 +966,8 @@ default
             }
             else if (reqKey == "ui_pass")
             {
-                parseItems(rawData, "passable");
-                if (llGetListLength(g_availableItems) > 0)
-                    g_pendingItemType = llList2String(g_availableItems, 0);
-                showItemPickMenu();
+                llMessageLinked(LINK_SET, CHAN_SESSION,
+                    "PASS_RAW_INVENTORY|" + rawData, NULL_KEY);
             }
             else if (reqKey == "ui_session")
             {
