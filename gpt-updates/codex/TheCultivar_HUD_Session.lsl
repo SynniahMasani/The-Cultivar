@@ -300,16 +300,6 @@ default
                 if (g_pendingSessionObjKey != NULL_KEY)
                     llRegionSayTo(g_pendingSessionObjKey, 0, "TC_SESSION_CANCEL");
                 clearPendingSessionStartState();
-                if (g_pendingSessionObjKey != NULL_KEY)
-                    llRegionSayTo(g_pendingSessionObjKey, 0, "TC_SESSION_CANCEL");
-                g_pendingSessionObjKey = NULL_KEY;
-                g_pendingResumeSecs = 0;
-                g_pendingItemType   = "";
-                g_pendingStrain     = "";
-                g_pendingQuality    = "";
-                g_pendingPackager   = "";
-                g_availableItems    = [];
-                g_sessionButtonMap  = [];
                 return;
             }
             if (msg == "Resume")

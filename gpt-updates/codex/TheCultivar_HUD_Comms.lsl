@@ -109,7 +109,6 @@ clearSmokeState()
 forceSmokeCleanup()
 {
     llSay(g_privateChannel, "TC_END_SMOKE");
-    llRegionSay(g_privateChannel, "TC_END_SMOKE");
     llMessageLinked(LINK_SET, CHAN_ANIMATION, "STOP_SMOKE_ANIM", NULL_KEY);
     llMessageLinked(LINK_SET, CHAN_UI, "SMOKE_STOPPED", NULL_KEY);
     llMessageLinked(LINK_SET, CHAN_UI, "SESSION_OVERHEAD|", NULL_KEY);
@@ -155,13 +154,7 @@ default
         }
         if (msg == "END_SMOKE_EARLY")
         {
-            // IMPORTANT: do not clear smoke state yet.
-            // We need g_smokingItemType/g_smokingQuality/g_smokingStrain
-            // intact until the prop replies TC_SMOKE_PAUSED so resume
-            // data can be written correctly.
-            llSay(g_privateChannel, "TC_END_SMOKE");
-            llRegionSay(g_privateChannel, "TC_END_SMOKE");
-            llMessageLinked(LINK_SET, CHAN_ANIMATION, "STOP_SMOKE_ANIM", NULL_KEY);
+            forceSmokeCleanup();
             return;
         }
         if (msg == "LEAVE_SESSION")
@@ -176,12 +169,7 @@ default
             g_sessionHost      = "";
             llMessageLinked(LINK_SET, CHAN_SESSION,
                 "SYNC_SESSION_STATE|0||", NULL_KEY);
-            // End active smoke but wait for TC_SMOKE_PAUSED/FINISHED so
-            // resume state can be captured for early-ended sessions.
-            llSay(g_privateChannel, "TC_END_SMOKE");
-            llRegionSay(g_privateChannel, "TC_END_SMOKE");
-            llMessageLinked(LINK_SET, CHAN_ANIMATION, "STOP_SMOKE_ANIM", NULL_KEY);
-            llMessageLinked(LINK_SET, CHAN_UI, "SESSION_OVERHEAD|", NULL_KEY);
+            forceSmokeCleanup();
             return;
         }
         if (msg == "MYSTORY_TRIGGER")
@@ -250,16 +238,6 @@ default
         }
         else if (cmd == "TC_SMOKE_START")
         {
-            if (g_smokingItemType != "")
-            {
-                integer activeDur = getSmokeDuration(g_smokingItemType, g_smokingQuality);
-                llMessageLinked(LINK_SET, CHAN_UI,
-                    "SMOKE_STARTED|" + g_smokingStrain + "|" +
-                    g_smokingQuality + "|" + (string)activeDur, NULL_KEY);
-                llOwnerSay("You're already smoking. Put it out first.");
-                return;
-            }
-
             g_smokingItemType = llList2String(parts, 1);
             g_smokingQuality  = llList2String(parts, 2);
             g_smokingStrain   = llList2String(parts, 3);
@@ -276,11 +254,7 @@ default
             string propName = "TC_Smoke_" + capitalize(g_smokingItemType) +
                               "_" + capitalize(g_smokingQuality);
             if (llGetInventoryType(propName) != INVENTORY_OBJECT)
-            {
-                llOwnerSay("[TC] Missing smoke prop '" + propName +
-                           "'. Using fallback TC_Smoke_Joint_Reggie.");
                 propName = "TC_Smoke_Joint_Reggie";
-            }
 
             if (llGetInventoryType(propName) == INVENTORY_OBJECT)
             {
@@ -344,9 +318,6 @@ default
                 else
                     duration = getSmokeDuration(g_smokingItemType, g_smokingQuality);
                 g_smokingResumeSecs = 0;
-                llMessageLinked(LINK_SET, CHAN_ANIMATION,
-                    "START_SMOKE_ANIM|" + g_smokingStrain + "|" +
-                    g_smokingQuality + "|" + g_smokingItemType, NULL_KEY);
                 llMessageLinked(LINK_SET, CHAN_UI,
                     "SMOKE_STARTED|" + g_smokingStrain + "|" + g_smokingQuality +
                     "|" + (string)duration, NULL_KEY);
@@ -367,23 +338,10 @@ default
                 string pQuality = llList2String(parts, 2);
                 integer pRem    = (integer)llList2String(parts, 3);
                 string pStrain  = g_smokingStrain;
-                // Use HUD-side canonical smoke state for pause keys so
-                // resume remains consistent even if the rezzed prop had to
-                // fall back to a different internal type asset.
-                string keyType    = g_smokingItemType;
-                string keyQuality = g_smokingQuality;
-                if (keyType == "")    keyType    = pType;
-                if (keyQuality == "") keyQuality = pQuality;
-
-                if (keyType != "" && keyQuality != "" && pStrain != "" && pRem > 0)
+                if (pType != "" && pQuality != "" && pStrain != "" && pRem > 0)
                 {
-                    llLinksetDataWrite("smoke_paused_" + keyType + "_" +
-                                       keyQuality + "_" + pStrain,
-                                       (string)pRem);
-                    // Fallback key (strain-agnostic) so resume still works
-                    // if strain context was lost between scripts.
-                    llLinksetDataWrite("smoke_paused_" + keyType + "_" +
-                                       keyQuality + "_*",
+                    llLinksetDataWrite("smoke_paused_" + pType + "_" +
+                                       pQuality + "_" + pStrain,
                                        (string)pRem);
                 }
                 forceSmokeCleanup();
