@@ -33,6 +33,7 @@ integer DCHAN_STATS_MENU     = -11010;
 integer DCHAN_BRAND_NAME     = -11011;
 integer DCHAN_SMOKE_ACTIVE   = -11020;
 integer DCHAN_SMOKE_RESUME   = -11021;
+integer DCHAN_PASS_MODE      = -11022;
 
 integer g_lisMain;
 integer g_lisSmokeType;
@@ -44,6 +45,7 @@ integer g_lisStatsMenu;
 integer g_lisBrandName;
 integer g_lisSmokeActive;
 integer g_lisSmokeResume;
+integer g_lisPassMode;
 
 integer g_pendingResumeSecs = 0;
 
@@ -103,6 +105,7 @@ closeAllListens()
     if (g_lisBrandName)     { llListenRemove(g_lisBrandName);     g_lisBrandName     = 0; }
     if (g_lisSmokeActive)   { llListenRemove(g_lisSmokeActive);   g_lisSmokeActive   = 0; }
     if (g_lisSmokeResume)   { llListenRemove(g_lisSmokeResume);   g_lisSmokeResume   = 0; }
+    if (g_lisPassMode)      { llListenRemove(g_lisPassMode);      g_lisPassMode      = 0; }
     if (g_lisGrowStatus)    { llListenRemove(g_lisGrowStatus);    g_lisGrowStatus    = 0; }
 }
 
@@ -367,13 +370,6 @@ showItemPickMenu()
 
 showPassPlayerMenu()
 {
-    if (g_inSession)
-    {
-        // Session passing is handled by HUD_Session/Session_Core pass flow.
-        llMessageLinked(LINK_SET, CHAN_SESSION, "OPEN_SESSION_MENU", NULL_KEY);
-        return;
-    }
-
     closeAllListens();
     list   agents  = llGetAgentList(AGENT_LIST_PARCEL, []);
     list   buttons;
@@ -398,6 +394,17 @@ showPassPlayerMenu()
     buttons += ["Back"];
     g_lisPassPlayer = llListen(DCHAN_PASS_PLAYER, "", g_ownerKey, "");
     llDialog(g_ownerKey, menuText, buttons, DCHAN_PASS_PLAYER);
+    llSetTimerEvent(30.0);
+}
+
+showPassModeMenu()
+{
+    closeAllListens();
+    g_lisPassMode = llListen(DCHAN_PASS_MODE, "", g_ownerKey, "");
+    llDialog(g_ownerKey,
+        "=== PASS ===\nChoose pass mode:",
+        ["Session Turn", "Nearby Pass", "Back"],
+        DCHAN_PASS_MODE);
     llSetTimerEvent(30.0);
 }
 
@@ -583,7 +590,7 @@ default
         else if (primName == "btn_pass")
             {
                 if (g_inSession)
-                    llMessageLinked(LINK_SET, CHAN_SESSION, "OPEN_SESSION_MENU", NULL_KEY);
+                    showPassModeMenu();
                 else
                 {
                     g_flowContext = "pass";
@@ -637,7 +644,7 @@ default
             else if (msg == "Pass")
             {
                 if (g_inSession)
-                    llMessageLinked(LINK_SET, CHAN_SESSION, "OPEN_SESSION_MENU", NULL_KEY);
+                    showPassModeMenu();
                 else
                 {
                     g_flowContext = "pass";
@@ -757,6 +764,25 @@ default
                 return;
             }
         }
+        else if (channel == DCHAN_PASS_MODE)
+        {
+            if (msg == "Back")
+            {
+                showMainMenu();
+                return;
+            }
+            if (msg == "Session Turn")
+            {
+                llMessageLinked(LINK_SET, CHAN_SESSION, "OPEN_SESSION_MENU", NULL_KEY);
+                return;
+            }
+            if (msg == "Nearby Pass")
+            {
+                g_flowContext = "pass";
+                showPassPlayerMenu();
+                return;
+            }
+        }
         else if (channel == DCHAN_PASS_PLAYER)
         {
             if (msg == "Back") { g_flowContext = "none"; showMainMenu(); return; }
@@ -805,7 +831,7 @@ default
             else if (msg == "Pass It")
             {
                 if (g_inSession)
-                    llMessageLinked(LINK_SET, CHAN_SESSION, "OPEN_SESSION_MENU", NULL_KEY);
+                    showPassModeMenu();
                 else
                 {
                     g_flowContext = "pass";
