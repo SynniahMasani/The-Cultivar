@@ -84,6 +84,7 @@ integer g_potUsesLeft     = 5;   // basic = 5, premium = -1 (unlimited)
 string  g_ownerName       = "";
 key     g_ownerKey        = NULL_KEY;
 integer g_hudChannel      = 0;
+integer g_lisStatusScan   = 0;
 // Timer tick rate
 float TIMER_INTERVAL = 30.0;
 integer HOVER_FADE_SECS = 60;
@@ -469,6 +470,8 @@ default
         g_hudChannel = deriveHUDChannel(g_ownerKey);
         g_potType    = derivePotType();
         llListen(GROW_LIGHT_CHAN, "", NULL_KEY, "");
+        if (g_lisStatusScan) llListenRemove(g_lisStatusScan);
+        g_lisStatusScan = llListen(0, "", NULL_KEY, "TC_GROW_STATUS_REQUEST");
         llMessageLinked(LINK_SET, PCHAN_PERSIST, "LOAD_STATE", NULL_KEY);
         llSetTimerEvent(HOVER_FADE_SECS);
     }
@@ -504,7 +507,7 @@ default
         integer elapsed = now - g_stageStartTime;
         if (elapsed >= g_stageDuration)
         {
-            if (g_isWatered || g_stage == 1)
+            if (g_isWatered || g_stage == 1 || g_stage == 3)
             {
                 advanceStage();
             }
@@ -675,6 +678,35 @@ default
     }
     listen(integer channel, string name, key id, string msg)
     {
+        if (channel == 0)
+        {
+            list p0 = llParseString2List(msg, ["|"], []);
+            if (llList2String(p0, 0) == "TC_GROW_STATUS_REQUEST")
+            {
+                key reqOwner = (key)llList2String(p0, 1);
+                integer replyChan = (integer)llList2String(p0, 2);
+                if (reqOwner == g_ownerKey && replyChan != 0 && g_stage > 0)
+                {
+                    integer rem = 0;
+                    if (g_stage > 0 && g_stage < 4)
+                    {
+                        rem = g_stageDuration - (llGetUnixTime() - g_stageStartTime);
+                        if (rem < 0) rem = 0;
+                    }
+                    string need = "none";
+                    if (g_stage > 0 && g_stage < 4)
+                    {
+                        if (!g_isWatered && g_stage != 1) need = "water";
+                        else if (g_stage == 2 && !g_fertApplied) need = "fertilizer";
+                    }
+                    llRegionSayTo(g_ownerKey, replyChan,
+                        "TC_GROW_STATUS|" + (string)llGetKey() + "|" + g_strainName + "|" +
+                        (string)g_stage + "|" + (string)rem + "|" + need);
+                }
+            }
+            return;
+        }
+
         if (channel != GROW_LIGHT_CHAN) return;
         list   parts = llParseString2List(msg, ["|"], []);
         string cmd   = llList2String(parts, 0);
