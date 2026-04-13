@@ -367,10 +367,17 @@ showItemPickMenu()
 
 showPassPlayerMenu()
 {
+    if (g_inSession)
+    {
+        // Session passing is handled by HUD_Session/Session_Core pass flow.
+        llMessageLinked(LINK_SET, CHAN_SESSION, "OPEN_SESSION_MENU", NULL_KEY);
+        return;
+    }
+
     closeAllListens();
     list   agents  = llGetAgentList(AGENT_LIST_PARCEL, []);
     list   buttons;
-    string menuText = "=== PASS ===\nWho are you passing to?\n\n";
+    string menuText = "=== PASS ===\nChoose a nearby player:";
     integer i;
     for (i = 0; i < llGetListLength(agents) &&
                 llGetListLength(buttons) < 9; i++)
@@ -574,7 +581,15 @@ default
         else if (primName == "btn_session")
             llMessageLinked(LINK_SET, CHAN_SESSION, "OPEN_SESSION_MENU", NULL_KEY);
         else if (primName == "btn_pass")
-            { g_flowContext = "pass"; showPassPlayerMenu(); }
+            {
+                if (g_inSession)
+                    llMessageLinked(LINK_SET, CHAN_SESSION, "OPEN_SESSION_MENU", NULL_KEY);
+                else
+                {
+                    g_flowContext = "pass";
+                    showPassPlayerMenu();
+                }
+            }
         else if (primName == "btn_stats")     showStats();
         else if (primName == "btn_store")
             llLoadURL(g_ownerKey, "The Cultivar Store",
@@ -619,7 +634,16 @@ default
                 requestGrowOverview();
             else if (msg == "Session")
                 llMessageLinked(LINK_SET, CHAN_SESSION, "OPEN_SESSION_MENU", NULL_KEY);
-            else if (msg == "Pass")    { g_flowContext = "pass"; showPassPlayerMenu(); }
+            else if (msg == "Pass")
+            {
+                if (g_inSession)
+                    llMessageLinked(LINK_SET, CHAN_SESSION, "OPEN_SESSION_MENU", NULL_KEY);
+                else
+                {
+                    g_flowContext = "pass";
+                    showPassPlayerMenu();
+                }
+            }
             else if (msg == "Stats")   showStats();
             else if (msg == "Store")
                 llLoadURL(g_ownerKey, "The Cultivar Store",
@@ -780,8 +804,13 @@ default
             }
             else if (msg == "Pass It")
             {
-                g_flowContext = "pass";
-                showPassPlayerMenu();
+                if (g_inSession)
+                    llMessageLinked(LINK_SET, CHAN_SESSION, "OPEN_SESSION_MENU", NULL_KEY);
+                else
+                {
+                    g_flowContext = "pass";
+                    showPassPlayerMenu();
+                }
             }
         }
         else if (channel == DCHAN_INVENTORY)
