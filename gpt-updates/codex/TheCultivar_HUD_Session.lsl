@@ -305,11 +305,22 @@ default
         {
             if (msg == "Cancel")
             {
+<<<<<<< codex/audit-and-refine-hud-script-5tgfyu
+                if (g_pendingSessionObjKey != NULL_KEY)
+                    llRegionSayTo(g_pendingSessionObjKey, 0, "TC_SESSION_CANCEL");
+                g_pendingSessionObjKey = NULL_KEY;
+=======
+>>>>>>> Hud
                 g_pendingResumeSecs = 0;
                 g_pendingItemType   = "";
                 g_pendingStrain     = "";
                 g_pendingQuality    = "";
                 g_pendingPackager   = "";
+<<<<<<< codex/audit-and-refine-hud-script-5tgfyu
+                g_availableItems    = [];
+                g_sessionButtonMap  = [];
+=======
+>>>>>>> Hud
                 return;
             }
             if (msg == "Resume")
