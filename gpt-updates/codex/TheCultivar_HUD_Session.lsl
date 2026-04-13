@@ -73,6 +73,18 @@ closeSessionListens()
     if (g_lisSessionResume) { llListenRemove(g_lisSessionResume); g_lisSessionResume = 0; }
 }
 
+clearPendingSessionStartState()
+{
+    g_pendingSessionObjKey = NULL_KEY;
+    g_pendingResumeSecs = 0;
+    g_pendingItemType   = "";
+    g_pendingStrain     = "";
+    g_pendingQuality    = "";
+    g_pendingPackager   = "";
+    g_availableItems    = [];
+    g_sessionButtonMap  = [];
+}
+
 showSessionResumeMenu(integer remainingSecs)
 {
     closeSessionListens();
@@ -130,14 +142,7 @@ startSessionSpark(integer resumeSecs)
         g_pendingQuality + "|" + g_pendingStrain + "|" +
         (string)resumeSecs, NULL_KEY);
 
-    g_pendingSessionObjKey = NULL_KEY;
-    g_pendingResumeSecs    = 0;
-    g_pendingItemType      = "";
-    g_pendingStrain        = "";
-    g_pendingQuality       = "";
-    g_pendingPackager      = "";
-    g_availableItems       = [];
-    g_sessionButtonMap     = [];
+    clearPendingSessionStartState();
 }
 
 showSessionMenu()
@@ -175,9 +180,8 @@ showSessionItemMenu()
         if (g_pendingSessionObjKey != NULL_KEY)
         {
             llRegionSayTo(g_pendingSessionObjKey, 0, "TC_SESSION_CANCEL");
-            g_pendingSessionObjKey = NULL_KEY;
         }
-        g_availableItems = [];
+        clearPendingSessionStartState();
         return;
     }
 
@@ -221,16 +225,11 @@ default
     {
         closeSessionListens();
         llSetTimerEvent(0.0);
-        g_pendingResumeSecs = 0;
-        g_pendingItemType   = "";
-        g_pendingStrain     = "";
-        g_pendingQuality    = "";
-        g_pendingPackager   = "";
         if (g_pendingSessionObjKey != NULL_KEY)
         {
             llRegionSayTo(g_pendingSessionObjKey, 0, "TC_SESSION_CANCEL");
-            g_pendingSessionObjKey = NULL_KEY;
         }
+        clearPendingSessionStartState();
     }
 
     listen(integer channel, string name, key id, string msg)
@@ -262,14 +261,7 @@ default
             {
                 if (g_pendingSessionObjKey != NULL_KEY)
                     llRegionSayTo(g_pendingSessionObjKey, 0, "TC_SESSION_CANCEL");
-                g_pendingSessionObjKey = NULL_KEY;
-                g_pendingResumeSecs = 0;
-                g_pendingItemType   = "";
-                g_pendingStrain     = "";
-                g_pendingQuality    = "";
-                g_pendingPackager   = "";
-                g_availableItems = [];
-                g_sessionButtonMap = [];
+                clearPendingSessionStartState();
                 return;
             }
 
@@ -305,22 +297,19 @@ default
         {
             if (msg == "Cancel")
             {
-<<<<<<< codex/audit-and-refine-hud-script-5tgfyu
+                if (g_pendingSessionObjKey != NULL_KEY)
+                    llRegionSayTo(g_pendingSessionObjKey, 0, "TC_SESSION_CANCEL");
+                clearPendingSessionStartState();
                 if (g_pendingSessionObjKey != NULL_KEY)
                     llRegionSayTo(g_pendingSessionObjKey, 0, "TC_SESSION_CANCEL");
                 g_pendingSessionObjKey = NULL_KEY;
-=======
->>>>>>> Hud
                 g_pendingResumeSecs = 0;
                 g_pendingItemType   = "";
                 g_pendingStrain     = "";
                 g_pendingQuality    = "";
                 g_pendingPackager   = "";
-<<<<<<< codex/audit-and-refine-hud-script-5tgfyu
                 g_availableItems    = [];
                 g_sessionButtonMap  = [];
-=======
->>>>>>> Hud
                 return;
             }
             if (msg == "Resume")
