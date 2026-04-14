@@ -54,6 +54,8 @@ integer g_sessionChannel;
 integer g_birthTime          = 0;
 integer g_activationDeadline = 0;
 integer PENDING_TIMEOUT_SEC  = 20;
+integer g_lastHostPing       = 0;
+integer HOST_PING_TIMEOUT_SEC = 70;
 
 integer deriveSessionChannel()
 {
@@ -397,6 +399,13 @@ default
             return;
         }
 
+        integer nowActive = llGetUnixTime();
+        if (g_lastHostPing > 0 && (nowActive - g_lastHostPing) > HOST_PING_TIMEOUT_SEC)
+        {
+            hardEndSession("Host HUD heartbeat timed out.", FALSE);
+            return;
+        }
+
         if (g_cypherMode)
         {
             g_turnTimeRemaining -= 5;
@@ -454,6 +463,7 @@ default
             g_sessionActive = TRUE;
             g_startTime     = llGetUnixTime();
             g_activationDeadline = 0;
+            g_lastHostPing = g_startTime;
 
             addParticipant(g_hostKey, g_hostName);
             g_currentHolder = 0;
@@ -588,6 +598,12 @@ default
             llRegionSayTo(g_hostKey, 0,
                 leaverName + " left the session. " +
                 (string)participantCount() + " remaining.");
+        }
+        else if (channel == 0 && cmd == "TC_SESSION_PING")
+        {
+            key pinger = (key)llList2String(parts, 1);
+            if (g_sessionActive && pinger == g_hostKey)
+                g_lastHostPing = llGetUnixTime();
         }
         else if (channel == g_sessionChannel)
         {

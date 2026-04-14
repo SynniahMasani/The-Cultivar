@@ -41,6 +41,7 @@ integer g_smokeActive = FALSE;
 integer g_waitingForSessionRez = FALSE;
 integer g_sessionRezArmedAt    = 0;
 integer SESSION_REZ_WINDOW_SEC = 15;
+float   SESSION_HEARTBEAT_SEC  = 20.0;
 
 integer getSmokeDuration(string itemType, string quality)
 {
@@ -126,6 +127,7 @@ default
         g_privateChannel = derivePrivateChannel(g_ownerKey);
         llLinksetDataWrite("hud_private_chan", (string)g_privateChannel);
         startListening();
+        llSetTimerEvent(SESSION_HEARTBEAT_SEC);
     }
 
     on_rez(integer start_param)
@@ -136,6 +138,16 @@ default
     changed(integer change)
     {
         if (change & CHANGED_OWNER) llResetScript();
+    }
+
+    timer()
+    {
+        if (g_inSession && g_sessionObjectKey != NULL_KEY)
+        {
+            llRegionSayTo(g_sessionObjectKey, 0,
+                "TC_SESSION_PING|" + (string)g_ownerKey);
+        }
+        llSetTimerEvent(SESSION_HEARTBEAT_SEC);
     }
 
     link_message(integer sender_num, integer num, string msg, key id)
@@ -722,10 +734,6 @@ default
                 if (g_inSession) return;
 
                 string brandName = llList2String(parts, 7);
-                llMessageLinked(LINK_SET, CHAN_UI,
-                    "SHOW_SESSION_INVITE|" + hostName + "|" +
-                    (string)sessKey + "|" + strain + "|" + quality + "|" +
-                    brandName, NULL_KEY);
                 llMessageLinked(LINK_SET, CHAN_SESSION,
                     "SESSION_INVITE|" + hostName + "|" +
                     (string)sessKey + "|" + strain + "|" + quality + "|" +
