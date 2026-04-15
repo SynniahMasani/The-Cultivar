@@ -107,52 +107,54 @@ startSmokeParticles()
     vector startCol = qualColor(g_quality);
     vector endCol   = qualColorEnd(g_quality);
 
-    float startScale = 0.05;
-    float endScale   = 0.18;
-    integer burstCount = 4;
-    float burstRate = 0.18;
-    float startAlpha = 0.55;
-    float maxAge = 7.0;
-    float accelZ = 0.018;
-    float angleEnd = 0.24;
-    vector omega = <0.0, 0.0, 0.25>;
+    // Default profile aims for thin, swirly trails (not dense puffs).
+    float startScale = 0.04;
+    float endScale   = 0.15;
+    integer burstCount = 3;
+    float burstRate = 0.24;
+    float startAlpha = 0.42;
+    float maxAge = 8.5;
+    float accelZ = 0.012;
+    float angleEnd = 0.32;
+    vector omega = <0.0, 0.0, 0.34>;
 
     if (g_itemType == "joint")
     {
-        startScale = 0.05;
-        endScale   = 0.18;
-        burstCount = 4;
-        burstRate  = 0.18;
-        startAlpha = 0.55;
-        maxAge     = 7.0;
-        accelZ     = 0.018;
-        angleEnd   = 0.24;
-        omega      = <0.0, 0.0, 0.25>;
+        startScale = 0.04;
+        endScale   = 0.15;
+        burstCount = 3;
+        burstRate  = 0.24;
+        startAlpha = 0.42;
+        maxAge     = 8.5;
+        accelZ     = 0.012;
+        angleEnd   = 0.32;
+        omega      = <0.0, 0.0, 0.34>;
     }
     else if (g_itemType == "spliff")
     {
-        startScale = 0.06;
-        endScale   = 0.20;
-        burstCount = 5;
-        burstRate  = 0.16;
-        startAlpha = 0.58;
-        maxAge     = 7.8;
-        accelZ     = 0.021;
-        angleEnd   = 0.26;
-        omega      = <0.0, 0.0, 0.32>;
+        // Spliffs should still look swirly, just a touch fuller than joint.
+        startScale = 0.045;
+        endScale   = 0.165;
+        burstCount = 3;
+        burstRate  = 0.22;
+        startAlpha = 0.46;
+        maxAge     = 8.8;
+        accelZ     = 0.013;
+        angleEnd   = 0.34;
+        omega      = <0.0, 0.0, 0.38>;
     }
     else if (g_itemType == "blunt")
     {
-        // Blunts need an intentionally heavier plume to read clearly.
-        startScale = 0.09;
-        endScale   = 0.34;
-        burstCount = 12;
-        burstRate  = 0.08;
-        startAlpha = 0.88;
-        maxAge     = 11.0;
-        accelZ     = 0.030;
-        angleEnd   = 0.34;
-        omega      = <0.0, 0.0, 0.55>;
+        // Blunts keep the same ribbon/smoke aesthetic (not chunky puffs).
+        startScale = 0.05;
+        endScale   = 0.18;
+        burstCount = 4;
+        burstRate  = 0.20;
+        startAlpha = 0.50;
+        maxAge     = 9.5;
+        accelZ     = 0.014;
+        angleEnd   = 0.36;
+        omega      = <0.0, 0.0, 0.44>;
     }
 
     if (g_quality == "loud")
@@ -170,7 +172,7 @@ startSmokeParticles()
         startAlpha += 0.10;
         omega       = <0.0, 0.0, 0.55>;
     }
-    if (startAlpha > 0.90) startAlpha = 0.90;
+    if (startAlpha > 0.75) startAlpha = 0.75;
 
     llParticleSystem([
         PSYS_PART_FLAGS,
@@ -310,6 +312,13 @@ default
         {
             stopSmokeParticles();
             llDie();
+            return;
+        }
+
+        // Enforce hand attachment for all smokeables (pass recipients too).
+        if (llGetAttached() != ATTACH_RHAND)
+        {
+            llAttachToAvatarTemp(ATTACH_RHAND);
             return;
         }
 

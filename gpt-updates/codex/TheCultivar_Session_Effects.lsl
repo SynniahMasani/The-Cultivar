@@ -21,6 +21,7 @@
 
 integer SCHAN_CORE    = 3000;
 integer SCHAN_EFFECTS = 3100;
+integer USE_AMBIENT_SESSION_SMOKE = FALSE;
 
 // Current quality for color decisions
 string  g_quality  = "reggie";
@@ -208,7 +209,8 @@ onSessionStart(string quality)
     g_active  = TRUE;
     g_pulseVal = PULSE_MIN;
 
-    startAmbientSmoke();
+    if (USE_AMBIENT_SESSION_SMOKE)
+        startAmbientSmoke();
     updateGlowRing();
     llSetTimerEvent(0.15); // fast pulse tick
 }

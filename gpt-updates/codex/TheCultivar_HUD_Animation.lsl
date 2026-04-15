@@ -59,42 +59,51 @@ fxStartHigh(string quality)
     float blur     = 0.10;
     float distMin  = 5.0;
     float distMax  = 25.0;
-    string tintCol = "1.0;0.92;0.80;0.10";
+    string tintColLegacy = "1.0;0.92;0.80;0.10";
+    string tintColRLVa   = "1.0/0.92/0.80";
 
     if (quality == "mids")
     {
         blur = 0.18;
-        tintCol = "1.0;0.90;0.75;0.14";
+        tintColLegacy = "1.0;0.90;0.75;0.14";
+        tintColRLVa   = "1.0/0.90/0.75";
     }
     else if (quality == "loud")
     {
         blur = 0.28;
-        tintCol = "1.0;0.85;0.70;0.18";
+        tintColLegacy = "1.0;0.85;0.70;0.18";
+        tintColRLVa   = "1.0/0.85/0.70";
         distMax = 30.0;
     }
     else if (quality == "exotic")
     {
         blur = 0.40;
-        tintCol = "0.95;0.78;0.95;0.22";
+        tintColLegacy = "0.95;0.78;0.95;0.22";
+        tintColRLVa   = "0.95/0.78/0.95";
         distMax = 40.0;
     }
 
-    string rlvMode      = "@setsphere_mode:2=force";
+    string rlvMode1     = "@setsphere_mode:1=force";
+    string rlvMode2     = "@setsphere_mode:2=force";
     string rlvOrigin    = "@setsphere_origin:0=force";
     string rlvDistMin   = "@setsphere_distmin:"  + (string)distMin + "=force";
     string rlvDistMax   = "@setsphere_distmax:"  + (string)distMax + "=force";
     string rlvExtend    = "@setsphere_distextend:1=force";
     string rlvParam     = "@setsphere_param:"    + (string)blur    + "=force";
-    string rlvTint      = "@setsphere_tint:"     + tintCol         + "=force";
+    string rlvTintRLVa  = "@setsphere_tint:"     + tintColRLVa     + "=force";
+    string rlvTintOld   = "@setsphere_tint:"     + tintColLegacy   + "=force";
     string rlvActivate  = "@setsphere=force";
 
-    llOwnerSay(rlvMode);
+    // Emit both RLVa variants for maximum viewer compatibility.
+    llOwnerSay(rlvMode1);
+    llOwnerSay(rlvMode2);
     llOwnerSay(rlvOrigin);
     llOwnerSay(rlvDistMin);
     llOwnerSay(rlvDistMax);
     llOwnerSay(rlvExtend);
     llOwnerSay(rlvParam);
-    llOwnerSay(rlvTint);
+    llOwnerSay(rlvTintRLVa);
+    llOwnerSay(rlvTintOld);
     llOwnerSay(rlvActivate);
 
     g_fxActive = TRUE;

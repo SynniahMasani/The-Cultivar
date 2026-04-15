@@ -500,6 +500,8 @@ default
         g_ownerKey  = llGetOwner();
         g_ownerName = llGetDisplayName(g_ownerKey);
         g_growStatusChan = deriveHUDChannel(g_ownerKey);
+        if (llLinksetDataRead("hud_fx_enabled") == "")
+            llLinksetDataWrite("hud_fx_enabled", "1");
         g_hydratedIdentity         = FALSE;
         g_hydratedInventory        = FALSE;
         g_hydrationFallbackPending = TRUE;
