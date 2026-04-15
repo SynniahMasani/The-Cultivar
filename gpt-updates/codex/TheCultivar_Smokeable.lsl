@@ -104,6 +104,14 @@ vector qualColorEnd(string quality)
 
 startSmokeParticles()
 {
+    // Joint rainbow smoke is baked into the item texture itself.
+    // Do not add particle smoke on top of it.
+    if (g_itemType == "joint")
+    {
+        llParticleSystem([]);
+        return;
+    }
+
     vector startCol = qualColor(g_quality);
     vector endCol   = qualColorEnd(g_quality);
 
@@ -118,19 +126,7 @@ startSmokeParticles()
     float angleEnd = 0.32;
     vector omega = <0.0, 0.0, 0.34>;
 
-    if (g_itemType == "joint")
-    {
-        startScale = 0.04;
-        endScale   = 0.15;
-        burstCount = 3;
-        burstRate  = 0.24;
-        startAlpha = 0.42;
-        maxAge     = 8.5;
-        accelZ     = 0.012;
-        angleEnd   = 0.32;
-        omega      = <0.0, 0.0, 0.34>;
-    }
-    else if (g_itemType == "spliff")
+    if (g_itemType == "spliff")
     {
         // Spliffs should still look swirly, just a touch fuller than joint.
         startScale = 0.045;
@@ -155,6 +151,19 @@ startSmokeParticles()
         accelZ     = 0.014;
         angleEnd   = 0.36;
         omega      = <0.0, 0.0, 0.44>;
+    }
+    else if (g_itemType == "bong" || g_itemType == "bowl" || g_itemType == "pipe")
+    {
+        // Bong/bowl/pipe smoke should be visible and flavorful, but still swirly.
+        startScale = 0.055;
+        endScale   = 0.19;
+        burstCount = 4;
+        burstRate  = 0.20;
+        startAlpha = 0.52;
+        maxAge     = 9.2;
+        accelZ     = 0.014;
+        angleEnd   = 0.34;
+        omega      = <0.0, 0.0, 0.40>;
     }
 
     if (g_quality == "loud")
