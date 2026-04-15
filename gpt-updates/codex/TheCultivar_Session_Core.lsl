@@ -260,7 +260,7 @@ passToNext()
         ". Dont be scared lil nigga. Smoke that shit.");
 
     llRegionSayTo(nextKey, participantHUDChan(nextIdx),
-        "TC_PASS_RECEIVED|" + g_strain + "|" + g_quality);
+        "TC_PASS_RECEIVED|" + g_itemType + "|" + g_strain + "|" + g_quality);
 
     if (g_cypherMode)
         llRegionSayTo(nextKey, participantHUDChan(nextIdx),
@@ -303,7 +303,7 @@ passToNamed(string targetName, key requester)
                 g_quality + " " + g_strain + ". Dont be scared lil nigga. Smoke that shit.");
 
             llRegionSayTo(targetKey, participantHUDChan(i),
-                "TC_PASS_RECEIVED|" + g_strain + "|" + g_quality);
+                "TC_PASS_RECEIVED|" + g_itemType + "|" + g_strain + "|" + g_quality);
 
             if (g_cypherMode)
                 llRegionSayTo(targetKey, participantHUDChan(i),

@@ -475,23 +475,27 @@ default
             }
             else if (cmd == "TC_PASS_RECEIVED")
             {
-                string strain  = llList2String(parts, 1);
+                string passType = llList2String(parts, 1);
+                string strain   = llList2String(parts, 2);
+                string quality  = llList2String(parts, 3);
                 llMessageLinked(LINK_SET, CHAN_ANIMATION, "PLAY_PASS_RECEIVE", NULL_KEY);
                 llMessageLinked(LINK_SET, CHAN_IDENTITY,
                     "UPDATE_SMOKED|" + strain, NULL_KEY);
                 if (!g_smokeActive)
                 {
-                    string passType = g_smokingItemType;
-                    string passQual = g_smokingQuality;
+                    if (passType == "") passType = g_smokingItemType;
+                    if (quality == "") quality = g_smokingQuality;
                     if (passType == "") passType = "joint";
-                    if (passQual == "") passQual = "reggie";
+                    if (quality == "") quality = "reggie";
                     llMessageLinked(LINK_SET, CHAN_COMMS,
-                        "TC_SMOKE_START|" + passType + "|" + passQual + "|" + strain + "|0",
+                        "TC_SMOKE_START|" + passType + "|" + quality + "|" + strain + "|0",
                         NULL_KEY);
                 }
             }
             else if (cmd == "TC_PASS_GIVEN")
             {
+                // Stop local smoke prop/idle before the pass-give one-shot.
+                forceSmokeCleanup();
                 llMessageLinked(LINK_SET, CHAN_ANIMATION, "PLAY_PASS_GIVE", NULL_KEY);
             }
             else if (cmd == "TC_SESSION_MEMBER_JOIN")
